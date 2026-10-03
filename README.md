@@ -77,6 +77,8 @@ The wizard:
 
 Run `/guyb:setup git`, `/guyb:setup cloud`, or similar to redo one area later.
 
+`/guyb:setup` also ships a read-only check (`check.ps1` on Windows, `check.sh` on macOS/Linux). It reports claude, git, git identity, launcher, root, `gh` login, terminal, and plugin version as JSON with no secrets. `/guyb:launch` runs it at the start of every session (no cache) and stops on blocking failures such as a missing `git` or launcher.
+
 ## Usage guide (terminal)
 
 > **guyb is built and tested for the terminal** (Windows Terminal, or tmux on macOS/Linux). Claude Desktop (Code tab) and Cowork can load parts of the plugin, but they aren't documented or tested yet. See [Roadmap](#roadmap).
@@ -92,7 +94,17 @@ guyb myapp -Here   # (PowerShell) run in the current terminal instead of a new t
 
 Each tab is one project with its own orchestrator. Open as many tabs as you have projects in flight. Without the launcher, `cd` into the project and run `claude`, then `/guyb:start`.
 
-If you start `claude` in the projects root itself, that session acts as a **launcher**: pick or name a project and it opens it in a new tab with `guyb <name>` instead of working on it there (say "here" to override). Portfolio-wide requests like `/guyb:status` stay in the root session.
+```powershell
+guyb -List         # (bash: guyb --list) non-interactive, one project per line, tab-separated, most recent first:
+                   # name, path, last activity (ISO UTC), git y/n, dirty count, has STATE.md y/n
+```
+
+**Natural-language activation at the projects root.** Start `claude` in the projects root itself and say "activate guyb", "let's start myapp", or "I want to work on project myapp". That session acts as a **launcher** (`/guyb:launch`):
+1. runs the setup check (every session) and stops on blocking failures, offering the fix with your consent,
+2. shows a project picker (skipped when you named a project),
+3. opens the project in a new tab with `guyb <name>` instead of working on it there (say "here" to override).
+
+"guyb" alone means the plugin, not the guyb repo; say "project guyb" or "the guyb repo" for that. Inside a project, "activate guyb" just says it's already active. Portfolio-wide requests like `/guyb:status` stay in the root session.
 
 ### 2. Start the session
 
@@ -123,6 +135,7 @@ Or use a command to run a full workflow:
 | `/guyb:ship` | review -> commit -> push -> PR -> CI status |
 | `/guyb:status` | status table across all projects |
 | `/guyb:end` | record the session in `.claude/STATE.md` |
+| `/guyb:launch [project]` | at the projects root: setup check, project picker, open the project in a new tab |
 | `/guyb:setup [area]` | one-time global setup: git host, cloud, DB clients, other services |
 | `/guyb:creds [what]` | add credentials for this project only (see [Credentials](#credentials)) |
 
@@ -173,15 +186,15 @@ Run `/guyb:end`. `session-tracker` appends what changed, the decisions made, ope
 ### Tips
 
 - **Several projects at once:** one tab per project. To see all sessions on one screen, try Claude Code's built-in agent view: `claude agents`.
-- **Small tasks** ("rename this function") skip the pipeline; the orchestrator just does them.
-- **Usage:** subagents use extra tokens, and a full `/guyb:build` costs noticeably more than a single chat. `architect`, `code-reviewer`, and `data-modeler` run on Opus; switch them to `sonnet` (see [The team](#the-team)) to save usage.
+- **Small tasks** (up to 3 files and at most 20 changed lines in total, no new tests) skip the pipeline; the orchestrator just does them.
+- **Usage:** subagents use extra tokens, and a full `/guyb:build` costs noticeably more than a single chat. See [Cost rules](#cost-rules).
 - **Cloud:** `cloud-ops` always prints the provider, account/project/subscription, and region before doing anything, and passes the profile explicitly instead of relying on whichever account is active.
 
 ## The team
 
 | Agent | Model | Role |
 |---|---|---|
-| `architect` | opus | assesses every non-trivial request into a plan with tasks and questions; never edits code |
+| `architect` | opus | assesses every non-small request into a plan with tasks and questions; never edits code |
 | `implementer` | sonnet | implements the plan + tests; flags plan deviations |
 | `code-reviewer` | opus | 🔴 critical / 🟡 should fix / 💡 consider; mandatory security pass |
 | `data-modeler` | opus | schemas, DB choice, indexes, zero-downtime migrations, warehouse models |
@@ -194,7 +207,16 @@ Run `/guyb:end`. `session-tracker` appends what changed, the decisions made, ope
 | `repo-steward` | sonnet | portfolio status and hygiene across all repos |
 | `session-tracker` | haiku | `.claude/STATE.md` briefings, change log, docs drift |
 
-To use cheaper models, change `model:` in `plugins/guyb/agents/*.md`.
+These are the defaults; the orchestrator can pick another model per run (see below). To change the defaults, edit `model:` in `plugins/guyb/agents/*.md`.
+
+## Cost rules
+
+A spawned agent starts with a fresh context (~15-50k tokens), so the orchestrator spends them deliberately:
+- **Small changes inline:** up to 3 files and at most 20 changed lines in total with no new tests (config, docs tweaks, small fixes) are done by the orchestrator itself.
+- **No architect for small work:** well-understood changes of ~3 files or fewer with a clear spec go straight to an implementer.
+- **Model per run:** `haiku` for mechanical runs (briefings, simple commit/push/PR, status sweeps, renames), `sonnet` for normal implementation, docs, deploys, and analysis, `opus` only for planning large or ambiguous work, hard debugging, and security or critical reviews. The choice is recorded in the `Model` column of `.claude/pipeline/runs.md`.
+- **Lighter review:** small or docs-only diffs get one review round on `sonnet` (none for small inline changes); big changes keep up to 2 rounds.
+- **Continue, don't respawn:** follow-up fixes to an agent's own work go to the same agent.
 
 ## Credentials
 
