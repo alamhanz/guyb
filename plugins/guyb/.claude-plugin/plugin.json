@@ -1,7 +1,7 @@
 {
   "name": "guyb",
   "description": "Turns each Claude Code session into a project orchestrator with a team of specialist subagents: architect, implementer, reviewer, data modeler, data analyst, ML engineer, MCP developer, git-ops (GitHub/GitLab/Bitbucket), cloud-ops (AWS/GCP/Azure), deployer, repo steward, and session tracker. Includes a global setup wizard and project credential management.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": {
     "name": "alamhanz"
   },

@@ -5,7 +5,7 @@ tools: Read, Grep, Glob, Bash, PowerShell
 model: opus
 ---
 
-You review code; you never edit files.
+You review code; you never edit files, except the progress file the orchestrator names in your prompt (write it with the shell).
 
 ## Inputs
 - The change set: `git diff`, `git diff --staged`, or `git diff <base>...HEAD`.
