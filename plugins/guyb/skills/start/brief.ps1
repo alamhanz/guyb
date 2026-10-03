@@ -16,6 +16,38 @@ foreach ($c in @(@((Join-Path $Dir '.claude/CLAUDE.md'), 'project'), @((Join-Pat
 }
 Add-Line "max parallel: $maxPar ($maxSrc)"
 
+# Outdated plugin flag: installed guyb@guyb vs the local marketplace source. Silent on any gap.
+$cfg = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
+$instF = Join-Path $cfg 'plugins/installed_plugins.json'
+$mkF = Join-Path $cfg 'plugins/known_marketplaces.json'
+if ((Test-Path -LiteralPath $instF) -and (Test-Path -LiteralPath $mkF)) {
+  try {
+    $instJ = Get-Content -Raw -Encoding UTF8 -LiteralPath $instF | ConvertFrom-Json
+    $mkJ = Get-Content -Raw -Encoding UTF8 -LiteralPath $mkF | ConvertFrom-Json
+    $inst = [string]@($instJ.plugins.'guyb@guyb')[0].version
+    $srcDir = [string]$mkJ.guyb.source.path
+    $pj = Join-Path $srcDir 'plugins/guyb/.claude-plugin/plugin.json'
+    if ($inst -and $srcDir -and (Test-Path -LiteralPath $pj)) {
+      $avail = [string](Get-Content -Raw -Encoding UTF8 -LiteralPath $pj | ConvertFrom-Json).version
+      $a = $inst -replace '[-+].*$', ''
+      $b = $avail -replace '[-+].*$', ''
+      if ($a -match '^\d+(\.\d+)*$' -and $b -match '^\d+(\.\d+)*$') {
+        $x = @($a -split '\.'); $y = @($b -split '\.')
+        $behind = $false
+        $n = [Math]::Max($x.Count, $y.Count)
+        for ($k = 0; $k -lt $n; $k++) {
+          $xi = 0; $yi = 0
+          if ($k -lt $x.Count) { $xi = [decimal]$x[$k] }
+          if ($k -lt $y.Count) { $yi = [decimal]$y[$k] }
+          if ($xi -lt $yi) { $behind = $true; break }
+          if ($xi -gt $yi) { break }
+        }
+        if ($behind) { Add-Line "plugin: $inst installed, $avail available - run: claude plugin marketplace update guyb; claude plugin update guyb@guyb" }
+      }
+    }
+  } catch { }
+}
+
 $isGit = (git -C $Dir rev-parse --is-inside-work-tree 2>$null) -eq 'true'
 if ($isGit) {
   $branch = git -C $Dir rev-parse --abbrev-ref HEAD 2>$null
@@ -62,6 +94,18 @@ if (Test-Path -LiteralPath $state) {
         if ($lines[$j] -match '^#') { break }
         if ($lines[$j].Trim()) { Add-Line "  $($lines[$j].Trim())"; $n++ }
       }
+    }
+  }
+  # Drift: PRs named in live-state sections of STATE.md (Current Status, Open Issues, Next Up, In progress, Open PRs) that are already merged or closed (max 3 gh calls, silent on failure).
+  if ($isGit -and (Get-Command gh -ErrorAction SilentlyContinue)) {
+    $live = $false; $liveText = @(foreach ($ln in $lines) { if ($ln -match '^#') { $live = $ln -match '(?i)^#+\s*(current status|open issues|next up|in progress|open prs)' } elseif ($live) { $ln } })
+    $nums = @([regex]::Matches(($liveText -join "`n"), '(?i)(?:^|[^A-Za-z0-9])(?:#|pull/|pr[ \t]+#?)(\d+)') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique | Select-Object -First 3)
+    foreach ($num in $nums) {
+      Push-Location -LiteralPath $Dir
+      $st = [string](gh pr view $num --json state -q .state 2>$null)
+      Pop-Location
+      $st = $st.Trim()
+      if ($st -eq 'MERGED' -or $st -eq 'CLOSED') { Add-Line "STATE.md drift: PR #$num is $st - update STATE.md" }
     }
   }
 } else {
