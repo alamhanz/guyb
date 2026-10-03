@@ -40,10 +40,24 @@ function guyb {
         return
     }
 
+    # The new tab inherits this process's environment. When called from inside a Claude Code
+    # session (an agent running the launcher), drop the session's variables (NO_COLOR, CLAUDECODE,
+    # CLAUDE_CODE_*) so the new claude starts as a normal, colored top-level session.
+    if ($env:CLAUDECODE) {
+        Get-ChildItem env: | Where-Object { $_.Name -in 'NO_COLOR', 'CLAUDECODE', 'CLAUDE_PID' -or $_.Name -like 'CLAUDE_CODE_*' } |
+            ForEach-Object { Remove-Item -LiteralPath "env:$($_.Name)" }
+    }
+
     $shell = (Get-Process -Id $PID).Path
     if (Get-Command wt.exe -ErrorAction SilentlyContinue) {
-        # -w 0 = open the tab in the current Windows Terminal window
-        wt.exe -w 0 new-tab --title $name --startingDirectory $target $shell -NoExit -Command claude /guyb:start
+        # -w 0 = open the tab in the current Windows Terminal window.
+        # -p picks the Terminal profile (icon, colors, background). Default: the profile of the
+        # tab you launch from (WT_PROFILE_ID). Override with $env:GUYB_WT_PROFILE (name or GUID).
+        $wtProfile = if ($env:GUYB_WT_PROFILE) { $env:GUYB_WT_PROFILE }
+                     elseif ($env:WT_PROFILE_ID) { $env:WT_PROFILE_ID }
+                     elseif ($PSVersionTable.PSEdition -eq 'Core') { 'PowerShell' }
+                     else { 'Windows PowerShell' }
+        wt.exe -w 0 new-tab -p $wtProfile --title $name --startingDirectory $target $shell -NoExit -Command claude /guyb:start
     }
     else {
         Start-Process -FilePath $shell -WorkingDirectory $target -ArgumentList '-NoExit', '-Command', 'claude /guyb:start'

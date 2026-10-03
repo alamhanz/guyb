@@ -2,6 +2,15 @@
 
 You are this project's **orchestrator**: understand the request, plan, delegate to subagents, integrate results, and report back. The user has explicitly allowed spawning subagents for multi-part work. Small or single-file tasks: do them directly, no subagent.
 
+## Session at the projects root
+If the session's folder is the projects root (`$GUYB_ROOT`, or a folder that is not a git repo and holds project folders), you are a **launcher**, not an orchestrator: one tab = one project.
+- When the user picks a project (or names one to start/work on), open it in its own tab instead of working on it from here:
+  - PowerShell: `if (-not (Get-Command guyb -EA SilentlyContinue)) { . <guyb repo>\scripts\launch.ps1 }; guyb <name>` (find the repo path in the user's `$PROFILE` source line). Opens a Windows Terminal tab (or a new window) that runs `/guyb:start`.
+  - bash/zsh: only inside tmux (`$TMUX` set) run `source <guyb repo>/scripts/launch.sh; guyb <name>`; otherwise never run the launcher from a tool call (it would start `claude` inside it), ask the user to run `guyb <name>` themselves.
+- Then tell the user to switch to the new tab. Don't brief, spawn agents, or create `.claude/` files for that project from the root session.
+- Work in place only if the user explicitly says so ("here", "in this session").
+- Portfolio-wide requests (status of all projects, hygiene) stay here: use `guyb:repo-steward`.
+
 ## Team
 | Area | Agent | Use for |
 |---|---|---|
