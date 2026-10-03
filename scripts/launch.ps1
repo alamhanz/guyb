@@ -5,14 +5,42 @@
 #   guyb myapp         -> open <root>\myapp in a new tab
 #   guyb D:\code\x     -> open an absolute path in a new tab
 #   guyb myapp -Here   -> run in the current terminal instead of a new tab
+#   guyb -List         -> print the projects (tab-separated, most recent first) and return; never prompts
 
 function guyb {
     param(
         [string]$Path,
-        [switch]$Here
+        [switch]$Here,
+        [switch]$List
     )
 
     $root = if ($env:GUYB_ROOT) { $env:GUYB_ROOT } else { (Get-Location).Path }
+
+    if ($List) {
+        # Non-interactive: one tab-separated line per project, most recent activity first:
+        # name, abs path, last activity (ISO 8601 UTC), is git (y/n), dirty count, has .claude/STATE.md (y/n)
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) { Write-Error "Root not found: $root"; return }
+        $hasGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
+        Get-ChildItem -LiteralPath $root -Directory | Where-Object { -not $_.Name.StartsWith('.') } | ForEach-Object {
+            $when = $_.LastWriteTimeUtc
+            $isGit = $hasGit -and (Test-Path -LiteralPath (Join-Path $_.FullName '.git'))
+            $dirty = 0
+            if ($isGit) {
+                $ct = git -C $_.FullName log -1 --format=%ct 2>$null
+                if ($ct -as [long]) {
+                    $commit = [DateTimeOffset]::FromUnixTimeSeconds([long]$ct).UtcDateTime
+                    if ($commit -gt $when) { $when = $commit }
+                }
+                $dirty = @(git -C $_.FullName status --porcelain 2>$null).Count
+            }
+            [pscustomobject]@{
+                When = $when
+                Line = (@($_.Name, $_.FullName, $when.ToString('yyyy-MM-ddTHH:mm:ssZ'), $(if ($isGit) { 'y' } else { 'n' }), $dirty,
+                    $(if (Test-Path -LiteralPath (Join-Path $_.FullName '.claude\STATE.md')) { 'y' } else { 'n' })) -join "`t")
+            }
+        } | Sort-Object When -Descending | ForEach-Object { $_.Line }
+        return
+    }
 
     if (-not $Path) {
         $dirs = @(Get-ChildItem -LiteralPath $root -Directory | Where-Object { -not $_.Name.StartsWith('.') } | Sort-Object Name)

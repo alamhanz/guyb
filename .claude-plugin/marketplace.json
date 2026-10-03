@@ -8,7 +8,7 @@
     {
       "name": "guyb",
       "source": "./plugins/guyb",
-      "description": "Orchestrator playbook, 12 specialist subagents, and /guyb:start|build|ship|status|end commands."
+      "description": "Orchestrator playbook, 12 specialist subagents, and /guyb:start|build|ship|status|end|launch|setup commands."
     }
   ]
 }
