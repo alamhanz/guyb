@@ -8,11 +8,11 @@
 - **Owner**: @alamhanz
 
 ## Current Status
-- **Branch**: feat/configurable-max-parallel (PR #7, merging)
-- **Version**: 0.6.0 (plugins/guyb/.claude-plugin/plugin.json)
-- **PR #7** carries: configurable max parallel agents (default 5) + cross-platform script fixes from this session
+- **Branch**: feat/safety-ci-0.7.0 (PR open, awaiting user merge)
+- **Version**: 0.7.0 (plugins/guyb/.claude-plugin/plugin.json)
 
 ## Versions
+- **0.7.0**: GitHub Actions CI (ubuntu/macos/windows; lint, smoke, permission tests, optional plugin validate), PowerShell secrets guard, read-only agent guard hook + prompt rules, brief flags outdated plugin and STATE.md PR drift, agent reports in .claude/pipeline/reports/, merge is the user's step, option D brand (g> monogram, black + phosphor green)
 - **0.6.0** (PR #7): `max_parallel: N` in project `.claude/CLAUDE.md` or `~/.claude/guyb/profile.md`; cross-platform script fixes
 - **0.5.0** (PR #5): natural-language activation, setup check, cost rules
 - **0.4.0** (PR #4): root launcher tabs, delegation by default, intake via architect, question log
@@ -31,14 +31,14 @@
 - **STATE.md** is committed; `.claude/pipeline/` is gitignored.
 
 ## Open Issues
-- macOS/BSD fixes (A2, A3, A9) verified statically only; no real Mac test
+- Secrets guard fires only on plain `git commit ...` (not `git -C dir commit` or chained commands)
+- CI actions pinned to tags not SHAs; claude-code npm install unpinned; brief.sh gh calls have no timeout on macOS; no-jq paths not exercised in CI
+- macOS behavior verified only by CI (first run pending)
 - install.ps1 settings merge not executed in a test; tmux launch path untested
-- guard-secrets hook covers Bash only; no PowerShell guard (A16)
 - Deferred consider items: A13 (PS 5.1 encoding), A14 (culture colon), A15 (docs note), A18 (sh/ps1 cosmetic parity)
 
 ## Next Up
-- Test install/launch/brief/check on a real Mac (bash 3.2 + zsh)
-- PowerShell guard-secrets hook (A16)
+- Merge 0.7.0 PR, watch first CI run (esp. macOS and validate job), then update installed plugin (installed is 0.5.0)
 - Remaining consider items A13, A14, A18
 - Gather feedback on 0.6.0, then pick next features
 
