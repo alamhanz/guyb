@@ -2,7 +2,7 @@
 # guyb PreToolUse guard: block `git commit` when secret-looking files are staged.
 # Exit 2 blocks the tool call and feeds stderr back to Claude; any other exit lets it run.
 
-files=$(git diff --cached --name-only 2>/dev/null) || exit 0
+files=$(git -c core.quotepath=off diff --cached --name-only 2>/dev/null) || exit 0
 [ -z "$files" ] && exit 0
 
 bad=$(printf '%s\n' "$files" \
@@ -12,7 +12,7 @@ bad=$(printf '%s\n' "$files" \
 if [ -n "$bad" ]; then
   {
     echo "guyb: blocked git commit - secret-looking files are staged:"
-    printf '  %s\n' $bad
+    printf '%s\n' "$bad" | sed 's/^/  /'
     echo "Unstage them (git restore --staged <file>), add them to .gitignore, and commit again."
     echo "If a file is definitely not a secret, ask the user to confirm, then commit it manually."
   } >&2

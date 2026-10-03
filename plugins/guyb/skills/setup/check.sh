@@ -17,9 +17,16 @@ add() { # id status blocking detail fix fixBy
 }
 
 claude_dir="$HOME/.claude"
-rcs=""; for f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.zprofile"; do [ -f "$f" ] && rcs="$rcs $f"; done
-rctext=""; for f in $rcs; do rctext="$rctext
-$(cat "$f" 2>/dev/null)"; done
+rctext=""
+for f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.zprofile"; do
+  [ -f "$f" ] && rctext="$rctext
+$(cat "$f" 2>/dev/null)"
+done
+# rc file to suggest in fix hints: zsh -> .zshrc; macOS bash reads .bash_profile (login shells); else .bashrc
+case "$(basename "${SHELL:-}")" in
+  zsh) rcfile="~/.zshrc" ;;
+  *) if [ "$(uname -s 2>/dev/null)" = Darwin ]; then rcfile="~/.bash_profile"; else rcfile="~/.bashrc"; fi ;;
+esac
 
 # GUYB_ROOT: process env -> rc line
 root=""; rootsrc=""
@@ -68,12 +75,12 @@ fi
 if [ -n "$root" ]; then add root ok false "GUYB_ROOT=$root ($rootsrc)"
 else
   fb=""; tgt="<projects folder>"; [ -n "$start_dir" ] && fb="; session start folder $start_dir is used" && tgt="$start_dir"
-  add root warn false "GUYB_ROOT not set$fb" "echo 'export GUYB_ROOT=\"$tgt\"' >> ~/.bashrc" claude-after-consent
+  add root warn false "GUYB_ROOT not set$fb" "echo 'export GUYB_ROOT=\"$tgt\"' >> $rcfile" claude-after-consent
 fi
 
 if printf '%s\n' "$rctext" | grep -q 'scripts/launch\.sh'; then add launcher-profile ok false "launcher source line present in shell rc"
 else
-  fx="Run scripts/install.sh"; [ -n "$repo" ] && fx="echo 'source \"$repo/scripts/launch.sh\"' >> ~/.bashrc"
+  fx="Run scripts/install.sh"; [ -n "$repo" ] && fx="echo 'source \"$repo/scripts/launch.sh\"' >> $rcfile"
   add launcher-profile warn false "no launcher source line in shell rc (the guyb command is unavailable in your terminals)" "$fx" claude-after-consent
 fi
 
@@ -81,7 +88,7 @@ profile_md="$claude_dir/guyb/profile.md"
 if has gh; then
   gout=$(gh auth status 2>/dev/null); gcode=$?
   if [ $gcode -eq 0 ]; then
-    acct=$(printf '%s' "$gout" | sed -n 's/.*account \([^ ]*\).*/\1/p; t; s/.* as \([^ ]*\).*/\1/p' | head -n1); acct="${acct:-unknown}"
+    acct=$(printf '%s' "$gout" | sed -n -e 's/.*account \([^ ]*\).*/\1/p' -e t -e 's/.* as \([^ ]*\).*/\1/p' | head -n1); acct="${acct:-unknown}"
     add gh-auth ok false "logged in: yes, account $acct"
     if git config --global --get-all credential.https://github.com.helper 2>/dev/null | grep -Eq "gh(\.exe)?['\"]?[[:space:]]+auth[[:space:]]+git-credential"; then
       add git-cred ok false "HTTPS credential helper: gh"
@@ -100,8 +107,7 @@ fi
 
 case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) onwin=1 ;; *) onwin=0 ;; esac
 if [ $onwin -eq 1 ]; then
-  if has wt.exe; then add terminal ok false "wt.exe found (new tabs)"
-  else add terminal warn false "wt.exe not found; launcher opens a new window instead" "winget install Microsoft.WindowsTerminal" claude-after-consent; fi
+  add terminal ok false "bash launcher runs claude in the current terminal; use the PowerShell launcher (launch.ps1) for new tabs"
 elif [ -n "${TMUX:-}" ]; then add terminal ok false "inside tmux"
 elif has tmux; then add terminal warn false "tmux installed but not inside a tmux session" "Run guyb <name> yourself, or start tmux first" user
 else add terminal warn false "tmux not installed" "Install tmux" user; fi

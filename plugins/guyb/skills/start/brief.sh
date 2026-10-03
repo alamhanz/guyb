@@ -39,7 +39,7 @@ if [ "$(git -C "$dir" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ]; 
   git -C "$dir" log --oneline -5 2>/dev/null | sed 's/^/  /'
 
   if command -v gh >/dev/null 2>&1; then
-    prs=$(cd "$dir" 2>/dev/null && gh pr list --limit 5 2>/dev/null | cut -f1-3 | sed 's/\t/ | /g')
+    prs=$(cd "$dir" 2>/dev/null && gh pr list --limit 5 2>/dev/null | cut -f1-3 | awk -F'\t' '{ print $1 " | " $2 " | " $3 }')
     if [ -n "$prs" ]; then
       echo "open PRs:"
       printf '%s\n' "$prs" | sed 's/^/  /'
@@ -53,6 +53,7 @@ state="$dir/.claude/STATE.md"
 if [ -f "$state" ]; then
   for h in "Next up" "Open issues"; do
     sec=$(awk -v h="$h" '
+      { sub(/\r$/, "") }
       found && /^#/ { exit }
       found && NF { gsub(/^[ \t]+|[ \t]+$/, ""); print "  " $0; if (++c >= 5) exit }
       !found && tolower($0) ~ "^#+[ \t]*" tolower(h) { found = 1 }
