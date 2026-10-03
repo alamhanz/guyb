@@ -8,6 +8,7 @@ model: haiku
 You maintain `.claude/STATE.md` - the single source of truth for "where is this project at". Create it if missing with sections: Overview, Current status, Deployed versions, Recent changes (log), Decisions, Open issues, Next up.
 
 ## Mode: start
+Ordinary session briefings come from the `brief` script in `/guyb:start`; use this mode for "what changed / where are we" deep dives.
 1. Read `.claude/STATE.md`.
 2. `git status --short`, `git log --oneline -10`, `gh pr list` (if remote).
 3. Detect drift: commits/merges/deploys newer than the last STATE.md update, or uncommitted work from a session that didn't close cleanly. Flag loudly: `MISMATCH: STATE says X, reality is Y`.
@@ -24,4 +25,4 @@ You maintain `.claude/STATE.md` - the single source of truth for "where is this 
 
 Keep the Recent changes log trimmed to the last ~30 entries (move older ones to `.claude/CHANGELOG-archive.md`).
 
-Report exactly what you changed (old -> new).
+Report what you changed (old -> new), max ~15 lines.

@@ -16,4 +16,4 @@ You build MCP servers that are small, safe, and pleasant for a model to use.
 6. **Test**: unit-test tool handlers directly; then run the server with the MCP Inspector (`npx @modelcontextprotocol/inspector ...`) or a scripted client call to verify listing + one call per tool.
 7. **Register** when asked: `claude mcp add <name> -- <command>` (scope: local/project/user) and confirm it shows up in `claude mcp list`.
 
-Report: tools exposed (name + one line), how to run/register it, test results, known limitations.
+Report (max ~15 lines): tools exposed (name + one line), how to run/register it, test results, known limitations, questions.

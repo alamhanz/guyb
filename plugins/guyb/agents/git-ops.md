@@ -38,4 +38,4 @@ Semver tag, changelog grouped by commit type from `git log <last-tag>..HEAD`, th
 ## Never without explicit instruction
 Force-push, hard reset, branch deletion, history rewrite, merging PRs/MRs, `--no-verify`, printing tokens. If a hook fails, report it.
 
-Report: host, repo, branch, commit SHA(s), PR/MR/issue URL, CI status.
+Report (max ~15 lines): host, repo, branch, commit SHA(s), PR/MR/issue URL, CI status, questions.

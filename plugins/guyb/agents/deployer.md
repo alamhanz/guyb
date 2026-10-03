@@ -20,4 +20,4 @@ Read project `CLAUDE.md` / `.claude/STATE.md` / README / package.json / Makefile
 
 If verification fails: report clearly, show the evidence, and propose the rollback command (do not roll back on your own unless told to).
 
-Report: tests X/Y, build artifact, deploy revision, live verification evidence, STATE.md updated yes/no.
+Report (max ~15 lines): tests X/Y, build artifact, deploy revision, live verification evidence, STATE.md updated yes/no, questions.
