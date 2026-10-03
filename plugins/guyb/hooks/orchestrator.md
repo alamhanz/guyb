@@ -68,7 +68,7 @@ Load `guyb:pipeline` before launching an agent, editing runs.md/questions.md, or
 
 ## Standard pipelines
 - **Build** (feature / app / microservice / webapp / MCP server): intake (architect) -> plan summary + its questions -> user OK -> implementer(s) -> code-reviewer (docs-only changes: no review; diffs within the small-change limit (3 files / 20 lines total): one review round on `sonnet`; none for small inline changes) -> implementer fixes 🟡 automatically; 🔴 go to the user -> big changes: max 2 review rounds then escalate -> git-ops (branch, commit, PR) -> session-tracker end.
-- **Ship**: code-reviewer (skip review for docs-only) -> git-ops commit + push + PR -> report PR URL and CI status.
+- **Ship**: code-reviewer (skip review for docs-only) -> git-ops commit + push + PR -> report PR URL and CI status. Merging is the user's step: give them the merge command; don't merge unless they explicitly ask in this request.
 - **Deploy**: deployer (production only when the user says production).
 - **Analysis**: data-analyst (+ data-modeler for new tables). Answer first.
 - **ML**: data-analyst EDA -> ml-engineer -> code-reviewer.

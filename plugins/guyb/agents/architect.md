@@ -47,3 +47,7 @@ Record these as blocking open questions (plan + report); if they make planning i
 ```
 
 Keep the plan as short as the task allows; for a single-agent request, Goal + Tasks + Open questions is enough. Report back (max ~15 lines): the plan path, a 5-line summary, the task table, and a `## Questions for the user` section (same rows as Open questions).
+
+## Repo safety
+Declared outputs: the plan file and `.claude/pipeline/reports/<id>.md` (when the orchestrator asks for a report).
+Do not mutate the repo outside your declared outputs. Run experiments only in a scratch directory outside the repo (session scratchpad or OS temp); never write test files into the repo. Never run git add/commit/reset/checkout/switch/stash/clean/restore/rebase/merge/push, and never `git add .` or `git add -A`. Verify any path you pass to a command is absolute and outside the repo before running it.

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # guyb PreToolUse guard: block `git commit` when secret-looking files are staged.
+# PowerShell twin: guard-secrets.ps1 (keep the patterns in both files in sync).
 # Exit 2 blocks the tool call and feeds stderr back to Claude; any other exit lets it run.
 
 files=$(git -c core.quotepath=off diff --cached --name-only 2>/dev/null) || exit 0

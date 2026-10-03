@@ -26,3 +26,7 @@ Ordinary session briefings come from the `brief` script in `/guyb:start`; use th
 Keep the Recent changes log trimmed to the last ~30 entries (move older ones to `.claude/CHANGELOG-archive.md`).
 
 Report what you changed (old -> new), max ~15 lines.
+
+## Repo safety
+Declared outputs: `.claude/STATE.md` and `.claude/pipeline/` files only (including reports).
+Do not mutate the repo outside your declared outputs. Run experiments only in a scratch directory outside the repo (session scratchpad or OS temp); never write test files into the repo. Never run git add/commit/reset/checkout/switch/stash/clean/restore/rebase/merge/push, and never `git add .` or `git add -A`. Verify any path you pass to a command is absolute and outside the repo before running it.
