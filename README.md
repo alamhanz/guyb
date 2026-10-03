@@ -128,7 +128,18 @@ For anything with several steps, the orchestrator shows the plan as a **todo lis
 
 ### 4. Watch the subagents (optional)
 
-Subagents run in the background. Keep chatting with the orchestrator; it relays their results when they finish. A panel under the prompt shows one row per running agent:
+Subagents run in the background. Keep chatting with the orchestrator; it relays their results when they finish.
+
+**Run IDs and waves.** Every subagent run gets an ID like `myapp-3` (project folder name + a counter that keeps going across sessions). The todo list shows each run with its wave, e.g. `[myapp-3] implementer: API routes (wave 2, after myapp-1)`. Runs in the same wave go in parallel (at most 4 at once, the rest queue); a wave waits for the runs it depends on.
+
+**Ask the orchestrator mid-run.** Each subagent keeps a short progress file (`.claude/pipeline/progress/<id>.md`: done / doing / next / blockers) and the orchestrator keeps a registry of all runs (`.claude/pipeline/runs.md`). So you can ask:
+
+```
+> how's myapp-3 doing?
+> what's running right now?
+```
+
+and the orchestrator answers from those files, with how fresh they are. It can't see more than the agent has written, so for the live transcript use the panel under the prompt, which shows one row per running agent:
 
 | Key | Action |
 |---|---|
@@ -153,6 +164,8 @@ Run `/guyb:end`. `session-tracker` appends what changed, the decisions made, ope
 | `.env.example` | the same names with placeholder values | yes |
 | `.claude/STATE.md` | status, change log, decisions, next steps | yes (it's useful history) |
 | `.claude/pipeline/plan.md` | the architect's current plan | optional; add `.claude/pipeline/` to `.gitignore` if you prefer |
+| `.claude/pipeline/runs.md` | registry of subagent runs: ID, agent, task, wave, status | optional, same as above |
+| `.claude/pipeline/progress/<id>.md` | each run's live progress | no (scratch; `/guyb:end` cleans up finished ones) |
 
 ### Tips
 
