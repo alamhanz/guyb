@@ -31,6 +31,7 @@ Ask with multiple-choice questions (multi-select where it makes sense), skipping
 - Cloud(s): AWS / Google Cloud / Azure / none. Default region for each.
 - Databases: PostgreSQL / MySQL / MongoDB / Redis / other / none. Here guyb only installs the **clients**; connection credentials are per project (`/guyb:creds`).
 - Other services with their own CLI login (e.g. Docker Hub, Vercel, Netlify, Stripe, Neon, Supabase, Cloudflare), or global API keys the user wants available in every project.
+- Max parallel agents (1-20, default 5): higher is faster but uses more tokens and risks rate limits. Ask once.
 
 ## 2. Install missing tools (confirm each)
 Look up the exact package id first (`winget search <name>` / `brew search <name>`), show the command, and install only after the user says yes. Typical packages: GitHub CLI, GitLab CLI (glab), AWS CLI v2, Google Cloud SDK, Azure CLI, PostgreSQL client (macOS: `libpq`), MySQL client, mongosh. After installing on Windows, tell the user that a new terminal may be needed for PATH changes.
@@ -69,6 +70,8 @@ Updated: <date>
 - psql <ver>, mongosh <ver>
 ## Other services / global env var names
 - vercel (logged in as <user>); OPENAI_API_KEY (user env var)
+## Orchestrator
+- max_parallel: 5
 ```
 
 Finish with the table from step 0 updated (all green or what's left), and remind the user that project-specific credentials are added with `/guyb:creds` inside that project.

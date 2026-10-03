@@ -14,14 +14,14 @@ function Add-Check($id, $status, $blocking, $detail, $fix = '', $fixBy = 'none')
 }
 function Has-Cmd($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
 function Run($exe, [string[]]$a) { $o = & $exe @a 2>$null | Out-String; [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o.Trim() } }
-function Read-Json($p) { if (Test-Path $p) { try { Get-Content $p -Raw | ConvertFrom-Json } catch { $null } } }
+function Read-Json($p) { if (Test-Path -LiteralPath $p) { try { Get-Content -LiteralPath $p -Raw | ConvertFrom-Json } catch { $null } } }
 
 # Profile files that may hold the guyb lines (PowerShell 7 and Windows PowerShell)
 $docs = [Environment]::GetFolderPath('MyDocuments')
 $profiles = @($PROFILE.CurrentUserCurrentHost, (Join-Path $docs 'PowerShell\Microsoft.PowerShell_profile.ps1'),
     (Join-Path $docs 'WindowsPowerShell\Microsoft.PowerShell_profile.ps1')) | Where-Object { $_ } | Select-Object -Unique
 $profileText = ''
-foreach ($p in $profiles) { if (Test-Path $p) { $profileText += (Get-Content $p -Raw) + "`n" } }
+foreach ($p in $profiles) { if (Test-Path -LiteralPath $p) { $profileText += (Get-Content -LiteralPath $p -Raw) + "`n" } }
 
 # GUYB_ROOT: process env -> user env -> $PROFILE line
 $root = ''; $rootSrc = ''
@@ -55,7 +55,7 @@ if (Has-Cmd git) {
     else { Add-Check 'git-identity' 'ok' $true 'global user.name and user.email set' }
 } else { Add-Check 'git-identity' 'skip' $true 'git missing' }
 
-if ($launcher -and (Test-Path $launcher)) { Add-Check 'launcher' 'ok' $true "launcher found ($repoSrc)" }
+if ($launcher -and (Test-Path -LiteralPath $launcher)) { Add-Check 'launcher' 'ok' $true "launcher found ($repoSrc)" }
 else { Add-Check 'launcher' 'fail' $true $(if ($repo) { "repo $repo has no scripts\launch.ps1" } else { 'guyb repo not found' }) 'Run scripts\install.ps1 from the guyb repo; without it, cd into the project and run claude manually' 'user' }
 
 # --- warnings ---
@@ -82,7 +82,7 @@ if (Has-Cmd gh) {
         Add-Check 'gh-auth' 'warn' $false 'logged in: no' '! gh auth login' 'user'
         Add-Check 'git-cred' 'skip' $false 'gh not logged in'
     }
-} elseif ((Test-Path $profileMd) -and ((Get-Content $profileMd -Raw) -match 'GitHub')) {
+} elseif ((Test-Path -LiteralPath $profileMd) -and ((Get-Content -LiteralPath $profileMd -Raw) -match 'GitHub')) {
     Add-Check 'gh-auth' 'warn' $false 'gh not installed but profile.md lists GitHub' 'winget install GitHub.cli, then ! gh auth login' 'user'
     Add-Check 'git-cred' 'skip' $false 'gh missing'
 } else {
@@ -116,7 +116,7 @@ else {
     } else { Add-Check 'plugin' 'ok' $false "up to date: $iv ($(& $short $isha))" }
 }
 
-if (Test-Path $profileMd) { Add-Check 'profile' 'ok' $false 'profile.md exists' }
+if (Test-Path -LiteralPath $profileMd) { Add-Check 'profile' 'ok' $false 'profile.md exists' }
 else { Add-Check 'profile' 'warn' $false 'no ~/.claude/guyb/profile.md' '/guyb:setup' 'user' }
 
 $blockFail = @($checks | Where-Object { $_.blocking -and $_.status -eq 'fail' }).Count

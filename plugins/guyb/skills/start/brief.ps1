@@ -8,6 +8,14 @@ function Add-Line($s) { $out.Add([string]$s) }
 
 Add-Line "project: $(Split-Path -Leaf $Dir)"
 
+$maxPar = 5; $maxSrc = 'default'
+foreach ($c in @(@((Join-Path $Dir '.claude/CLAUDE.md'), 'project'), @((Join-Path $HOME '.claude/guyb/profile.md'), 'profile'))) {
+  if (-not (Test-Path -LiteralPath $c[0])) { continue }
+  $m = @(Get-Content -Encoding UTF8 -LiteralPath $c[0] | ForEach-Object { if ($_ -match '^\s*(?:[-*]\s+)?[`*]*max_parallel[`*]*\s*:[`*\s]*(\d{1,2})[`*\s]*$' -and [int]$Matches[1] -ge 1 -and [int]$Matches[1] -le 20) { [int]$Matches[1] } })
+  if ($m.Count -gt 0) { $maxPar = $m[0]; $maxSrc = $c[1]; break }
+}
+Add-Line "max parallel: $maxPar ($maxSrc)"
+
 $isGit = (git -C $Dir rev-parse --is-inside-work-tree 2>$null) -eq 'true'
 if ($isGit) {
   $branch = git -C $Dir rev-parse --abbrev-ref HEAD 2>$null
@@ -21,7 +29,7 @@ if ($isGit) {
   if ($dirty.Count -gt 10) { Add-Line "  ... +$($dirty.Count - 10) more" }
 
   $gi = Join-Path $Dir '.gitignore'
-  if (-not ((Test-Path $gi) -and (Select-String -Path $gi -Pattern '^/?\.claude/?(pipeline/?)?\s*$' -Quiet))) {
+  if (-not ((Test-Path -LiteralPath $gi) -and (Select-String -LiteralPath $gi -Pattern '^/?\.claude/?(pipeline/?)?\s*$' -Quiet))) {
     Add-Line 'gitignore: .claude/pipeline/ not ignored'
   }
 
@@ -42,8 +50,8 @@ if ($isGit) {
 }
 
 $state = Join-Path $Dir '.claude/STATE.md'
-if (Test-Path $state) {
-  $lines = Get-Content -Encoding UTF8 $state
+if (Test-Path -LiteralPath $state) {
+  $lines = Get-Content -Encoding UTF8 -LiteralPath $state
   foreach ($h in 'Next up', 'Open issues') {
     $i = 0
     for (; $i -lt $lines.Count; $i++) { if ($lines[$i] -match "(?i)^#+\s*$h") { break } }
@@ -61,8 +69,8 @@ if (Test-Path $state) {
 }
 
 $runs = Join-Path $Dir '.claude/pipeline/runs.md'
-if (Test-Path $runs) {
-  $unf = @(Get-Content -Encoding UTF8 $runs | Where-Object { $_ -match '^\|' -and $_ -match '\|\s*(running|queued)\s*\|' })
+if (Test-Path -LiteralPath $runs) {
+  $unf = @(Get-Content -Encoding UTF8 -LiteralPath $runs | Where-Object { $_ -match '^\|' -and $_ -match '\|\s*(running|queued)\s*\|' })
   if ($unf.Count -gt 0) {
     Add-Line "unfinished runs ($($unf.Count)):"
     $unf | Select-Object -First 5 | ForEach-Object { Add-Line "  $(($_ -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ' | ')" }
@@ -70,8 +78,8 @@ if (Test-Path $runs) {
 }
 
 $qs = Join-Path $Dir '.claude/pipeline/questions.md'
-if (Test-Path $qs) {
-  $open = @(Get-Content -Encoding UTF8 $qs | Where-Object { $_ -match '^\|\s*Q\d+' -and $_ -match '\|\s*open\s*\|' })
+if (Test-Path -LiteralPath $qs) {
+  $open = @(Get-Content -Encoding UTF8 -LiteralPath $qs | Where-Object { $_ -match '^\|\s*Q\d+' -and $_ -match '\|\s*open\s*\|' })
   if ($open.Count -gt 0) {
     Add-Line "open questions ($($open.Count)):"
     $open | Select-Object -First 5 | ForEach-Object { Add-Line "  $(($_ -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -First 4) -join ' | ')" }
