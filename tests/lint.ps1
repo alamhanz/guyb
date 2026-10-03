@@ -10,7 +10,7 @@ function Bad($msg) { Write-Host "FAIL: $msg"; $script:fail++ }
 
 function Get-Files($dirs, $pattern) {
   foreach ($d in $dirs) {
-    if (Test-Path -LiteralPath $d) { Get-ChildItem -LiteralPath $d -Recurse -File -Filter $pattern }
+    if (Test-Path -LiteralPath $d) { Get-ChildItem -LiteralPath $d -Recurse -File -Force -Filter $pattern }
   }
 }
 function Rel($f) { $f.FullName.Substring($root.Length + 1).Replace('\', '/') }
@@ -21,7 +21,7 @@ $sh = @(Get-Files $code '*.sh')
 $json = @(Get-Files @('plugins', 'scripts', 'tests', 'settings', '.claude-plugin') '*.json')
 $svg = @(Get-Files @('docs') '*.svg')
 $text = @($ps1) + @($sh) + @($json) + @($svg) + @(Get-Files @('.github') '*.yml')
-try { if (Test-Path -LiteralPath '.gitattributes') { $text += @(Get-Item -LiteralPath '.gitattributes' -ErrorAction Stop) } } catch { }
+if (Test-Path -LiteralPath '.gitattributes') { $text += Get-Item -LiteralPath '.gitattributes' -Force }
 
 Write-Host 'parse ps1'
 foreach ($f in $ps1) {
@@ -71,4 +71,3 @@ foreach ($f in $ps1) {
 
 if ($script:fail -gt 0) { Write-Host "lint: $($script:fail) problem(s)"; exit 1 }
 Write-Host 'lint: ok'
-
