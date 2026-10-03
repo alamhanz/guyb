@@ -43,11 +43,13 @@ else { Write-Host '2/3 Skipped permissions.' }
 if (-not $SkipLauncher) {
     Write-Host '3/3 Adding `guyb` launcher to your PowerShell profile...' -ForegroundColor Cyan
     if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Force $PROFILE | Out-Null }
+    # An empty profile reads as $null, which breaks string checks below
     $profileText = Get-Content $PROFILE -Raw
+    if ($null -eq $profileText) { $profileText = '' }
     $lines = @()
     $sourceLine = ". '$(Join-Path $repo 'scripts/launch.ps1')'"
-    if ($profileText -notmatch [regex]::Escape($sourceLine)) { $lines += $sourceLine }
-    if ($ProjectsRoot -and $profileText -notmatch 'GUYB_ROOT') { $lines += "`$env:GUYB_ROOT = '$ProjectsRoot'" }
+    if (-not $profileText.Contains($sourceLine)) { $lines += $sourceLine }
+    if ($ProjectsRoot -and -not $profileText.Contains('GUYB_ROOT')) { $lines += "`$env:GUYB_ROOT = '$ProjectsRoot'" }
     if ($lines) { Add-Content -Path $PROFILE -Value ("`n# guyb`n" + ($lines -join "`n")) }
     Write-Host "   updated $PROFILE"
 }
