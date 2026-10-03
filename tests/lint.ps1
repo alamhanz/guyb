@@ -21,7 +21,7 @@ $sh = @(Get-Files $code '*.sh')
 $json = @(Get-Files @('plugins', 'scripts', 'tests', 'settings', '.claude-plugin') '*.json')
 $svg = @(Get-Files @('docs') '*.svg')
 $text = @($ps1) + @($sh) + @($json) + @($svg) + @(Get-Files @('.github') '*.yml')
-if (Test-Path -LiteralPath '.gitattributes') { $text += Get-Item -LiteralPath '.gitattributes' }
+try { if (Test-Path -LiteralPath '.gitattributes') { $text += @(Get-Item -LiteralPath '.gitattributes' -ErrorAction Stop) } } catch { }
 
 Write-Host 'parse ps1'
 foreach ($f in $ps1) {
@@ -71,3 +71,4 @@ foreach ($f in $ps1) {
 
 if ($script:fail -gt 0) { Write-Host "lint: $($script:fail) problem(s)"; exit 1 }
 Write-Host 'lint: ok'
+
