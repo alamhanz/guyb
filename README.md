@@ -92,6 +92,8 @@ guyb myapp -Here   # (PowerShell) run in the current terminal instead of a new t
 
 Each tab is one project with its own orchestrator. Open as many tabs as you have projects in flight. Without the launcher, `cd` into the project and run `claude`, then `/guyb:start`.
 
+If you start `claude` in the projects root itself, that session acts as a **launcher**: pick or name a project and it opens it in a new tab with `guyb <name>` instead of working on it there (say "here" to override). Portfolio-wide requests like `/guyb:status` stay in the root session.
+
 ### 2. Start the session
 
 The tab runs `/guyb:start` for you. The orchestrator:

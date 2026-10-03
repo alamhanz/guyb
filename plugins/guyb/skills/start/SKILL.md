@@ -7,6 +7,8 @@ argument-hint: "[optional: what you want to work on]"
 
 Start a guyb session for the project in the current directory.
 
+0. If the current directory is the projects root rather than a project (see "Session at the projects root" in the playbook): list its project folders, ask which one (use "$ARGUMENTS" if it names one), open it in a new tab with the launcher as the playbook describes, tell the user to switch tabs, and stop. Skip this step if the user said to work here.
+
 1. In parallel:
    - Run the `guyb:session-tracker` agent in **start** mode for a briefing.
    - Check that `~/.claude/guyb/profile.md` exists. If not, mention once that `/guyb:setup` configures git hosting and cloud logins (don't block on it).
