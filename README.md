@@ -13,7 +13,7 @@ A plain Claude Code session works serially in one context. guyb changes that:
 | Plain session | With guyb |
 |---|---|
 | Context fills with code and logs | The orchestrator only plans and integrates; agents work in fresh contexts and send short reports |
-| You wait on each step | Independent work runs in parallel in the background (up to 4 agents); you keep talking |
+| You wait on each step | Independent work runs in parallel in the background (configurable, default 5 agents); you keep talking |
 | Planning is whatever you remember to ask for | Non-trivial requests start with an architect plan and questions; you approve before code is written |
 | Review and git hygiene are optional | Review runs before every PR (except docs-only); git-ops handles branch, commit, PR |
 | Agents stall or guess | Agents never ask you directly; their questions are logged and routed through the orchestrator |
@@ -116,7 +116,8 @@ Change defaults via `model:` in `plugins/guyb/agents/*.md`; the orchestrator can
 
 Every agent starts with fresh context (roughly 15-50k tokens), so guyb spends agents where they pay off:
 
-- Heavy work goes parallel: independent big areas (roughly >100 changed lines each) get their own implementers, up to 4 at once, or whenever you ask for speed. Otherwise one implementer does the parts in sequence.
+- Heavy work goes parallel: independent big areas (roughly >100 changed lines each) get their own implementers, up to `max_parallel` at once (default 5), or whenever you ask for speed. Otherwise one implementer does the parts in sequence.
+- Set the cap with a line `max_parallel: N` in the project `.claude/CLAUDE.md` or `~/.claude/guyb/profile.md` (project wins). Higher is faster but uses more tokens and risks rate limits.
 - Small changes (max 3 files, 20 lines, no new tests) are done inline.
 - Model per run: haiku for mechanical work, sonnet for normal work, opus only for large planning, hard debugging, security review.
 - Review is skipped for docs-only changes and limited to one round for small diffs.

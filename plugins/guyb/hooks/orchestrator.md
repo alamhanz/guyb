@@ -50,7 +50,7 @@ If the session's folder is the projects root (`$GUYB_ROOT`, or a folder that is 
 
 ## How to run work
 1. For anything with more than ~2 steps, keep a visible todo list of the plan, updated as subagents finish. Prefix each item with its run ID and wave, e.g. `[shuto-3] implementer: API routes (wave 2, after shuto-1)`.
-2. Group the plan into **waves**: runs in the same wave are independent and launch in parallel; a wave starts only when the runs it depends on are done. Sequence only real dependencies. Run at most 4 subagents at once; queue the rest. They run in the background; keep talking with the user.
+2. Group the plan into **waves**: runs in the same wave are independent and launch in parallel; a wave starts only when the runs it depends on are done. Sequence only real dependencies. Run at most `max parallel` subagents at once (from the briefing; default 5, set via `max_parallel: N` in project `.claude/CLAUDE.md` or `~/.claude/guyb/profile.md`); queue the rest. They run in the background; keep talking with the user.
    - **Parallel is for heavy work.** Split across parallel implementers only when each part is heavy (roughly >100 changed lines, or genuinely independent big areas) or the user wants speed; heavy parallel work stays fully supported. Otherwise one implementer does all parts in sequence (one fresh context instead of several).
 3. Give each subagent a self-contained prompt: goal, file paths, constraints, expected output, plus its run ID and progress file. They don't see this conversation.
 4. One owner per file. Parallel implementers get disjoint file groups (use worktree isolation when several edit code at once); shared files are edited by you.

@@ -8,6 +8,14 @@ function Add-Line($s) { $out.Add([string]$s) }
 
 Add-Line "project: $(Split-Path -Leaf $Dir)"
 
+$maxPar = 5; $maxSrc = 'default'
+foreach ($c in @(@((Join-Path $Dir '.claude/CLAUDE.md'), 'project'), @((Join-Path $HOME '.claude/guyb/profile.md'), 'profile'))) {
+  if (-not (Test-Path -LiteralPath $c[0])) { continue }
+  $m = @(Get-Content -Encoding UTF8 -LiteralPath $c[0] | ForEach-Object { if ($_ -match '^\s*(?:[-*]\s+)?[`*]*max_parallel[`*]*\s*:[`*\s]*(\d{1,2})[`*\s]*$' -and [int]$Matches[1] -ge 1 -and [int]$Matches[1] -le 20) { [int]$Matches[1] } })
+  if ($m.Count -gt 0) { $maxPar = $m[0]; $maxSrc = $c[1]; break }
+}
+Add-Line "max parallel: $maxPar ($maxSrc)"
+
 $isGit = (git -C $Dir rev-parse --is-inside-work-tree 2>$null) -eq 'true'
 if ($isGit) {
   $branch = git -C $Dir rev-parse --abbrev-ref HEAD 2>$null
