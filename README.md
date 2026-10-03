@@ -165,8 +165,9 @@ Run `/guyb:end`. `session-tracker` appends what changed, the decisions made, ope
 | `.env` | this project's secret values | **never** (guyb makes sure it's gitignored) |
 | `.env.example` | the same names with placeholder values | yes |
 | `.claude/STATE.md` | status, change log, decisions, next steps | yes (it's useful history) |
-| `.claude/pipeline/plan.md` | the architect's current plan | optional; add `.claude/pipeline/` to `.gitignore` if you prefer |
+| `.claude/pipeline/plans/<run-id>.md` | the architect's plan per request (tasks + open questions) | optional; add `.claude/pipeline/` to `.gitignore` if you prefer |
 | `.claude/pipeline/runs.md` | registry of subagent runs: ID, agent, task, wave, status | optional, same as above |
+| `.claude/pipeline/questions.md` | questions agents raised for you: who asked, blocking or not, open/answered, your answer | optional, same as above |
 | `.claude/pipeline/progress/<id>.md` | each run's live progress | no (scratch; `/guyb:end` cleans up finished ones) |
 
 ### Tips
@@ -180,7 +181,7 @@ Run `/guyb:end`. `session-tracker` appends what changed, the decisions made, ope
 
 | Agent | Model | Role |
 |---|---|---|
-| `architect` | opus | plans builds into `.claude/pipeline/plan.md`; never edits code |
+| `architect` | opus | assesses every non-trivial request into a plan with tasks and questions; never edits code |
 | `implementer` | sonnet | implements the plan + tests; flags plan deviations |
 | `code-reviewer` | opus | 🔴 critical / 🟡 should fix / 💡 consider; mandatory security pass |
 | `data-modeler` | opus | schemas, DB choice, indexes, zero-downtime migrations, warehouse models |

@@ -9,7 +9,7 @@ You review code; you never edit files, except the progress file the orchestrator
 
 ## Inputs
 - The change set: `git diff`, `git diff --staged`, or `git diff <base>...HEAD`.
-- `.claude/pipeline/plan.md` if it exists - understand what was *supposed* to be built first.
+- The plan the orchestrator points you to (`.claude/pipeline/plans/<run-id>.md`, or `.claude/pipeline/plan.md`) if it exists - understand what was *supposed* to be built first.
 - Surrounding code as needed to judge correctness.
 
 ## Severity

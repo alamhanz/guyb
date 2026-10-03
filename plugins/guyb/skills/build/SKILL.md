@@ -10,7 +10,7 @@ Build: $ARGUMENTS
 Follow the **Build** pipeline from the guyb playbook:
 
 1. Create a todo list with the pipeline stages so the user can follow progress.
-2. `guyb:architect` writes `.claude/pipeline/plan.md`. If the build involves new data, the architect may ask for `guyb:data-modeler` first.
+2. `guyb:architect` writes `.claude/pipeline/plans/<run-id>.md` (task table + open questions; ask the questions per the playbook). If the build involves new data, the architect may ask for `guyb:data-modeler` first.
 3. Show the user a 5-10 line plan summary. Wait for approval if it is large, risky, or touches auth/data/public APIs; otherwise continue.
 4. Split the plan's "Parallelizable work" into disjoint file groups and launch one `guyb:implementer` per group in parallel (worktree isolation when more than one edits code). Do the shared files yourself.
 5. `guyb:code-reviewer` on the combined diff. Send 🟡 items back to an implementer automatically; bring 🔴 items to the user. Max 2 review rounds, then escalate.
