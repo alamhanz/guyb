@@ -10,9 +10,12 @@ plugins/guyb/
   .claude-plugin/plugin.json      plugin name, version, description
   agents/*.md                     one subagent per file
   skills/<name>/SKILL.md          slash commands (/guyb:<name>); helper scripts live beside them
-  hooks/                          hooks.json, orchestrator.md (playbook), guard-secrets.sh
+  hooks/                          hooks.json, orchestrator.md (playbook), guard-secrets.*, guard-readonly.*
 scripts/                          install.ps1/.sh, launch.ps1/.sh (the `guyb` command)
 settings/                         recommended-permissions.json
+tests/                            lint.*, smoke.*, permissions.ps1 + permission-cases.json
+.github/workflows/ci.yml          CI: runs the tests/ scripts on ubuntu, macOS, and Windows
+docs/                             README images (logo, icon, how-guyb-works.svg)
 ```
 
 ## Develop and test locally
@@ -28,11 +31,30 @@ settings/                         recommended-permissions.json
 4. Run helper scripts directly: `skills/setup/check.ps1` / `check.sh` (setup check JSON), `skills/start/brief.ps1` / `brief.sh` (briefing), and the launchers with `guyb -List` / `guyb --list`.
 5. Test scripts on every shell you touched: PowerShell 7, Windows PowerShell 5.1, and bash (macOS/Linux or Git Bash).
 
+## Run the checks locally
+
+CI runs these same scripts. They write nothing in the repo (smoke tests use a temp dir and a stubbed `gh`) and need no network.
+
+```
+bash tests/lint.sh                 # bash -n, JSON/SVG validity, ASCII, line endings (sh LF, ps1 CRLF)
+bash tests/smoke.sh                # brief.sh, check.sh, guard hooks on throwaway repos
+pwsh -File tests/lint.ps1          # ps1 parse, same file rules
+pwsh -File tests/smoke.ps1         # brief.ps1, check.ps1, guard hooks
+pwsh -File tests/permissions.ps1   # settings/recommended-permissions.json vs tests/permission-cases.json
+```
+
+Run the `.ps1` scripts with `powershell -File` as well to cover Windows PowerShell 5.1. macOS bash 3.2 and BSD tools are only covered by CI.
+
+Changing `settings/recommended-permissions.json`? Update `tests/permission-cases.json` in the same PR. The matcher in `permissions.ps1` is an approximation of Claude Code's rule matching, so a pass is evidence, not proof; check surprising cases in a live session.
+
+The `claude plugin validate` CI job is not required yet; run it locally (step 3 above).
+
 ## Conventions
 
 - **Agents** (`agents/*.md`) have frontmatter with `name`, `description` (when to use it), `tools`, and `model`. Keep the body focused on role, approach, and report format.
 - **Skills** (`skills/<name>/SKILL.md`) have frontmatter with `name`, `description`, and `argument-hint` where it takes input. Put step-by-step mechanics here.
 - **Keep the playbook short.** `hooks/orchestrator.md` is loaded into every session, so it costs tokens every time. Mechanics belong in skills, not the playbook.
+- **Line endings and encoding.** Scripts are ASCII. `.sh` files use LF, `.ps1` files use CRLF (`.gitattributes` enforces this on checkout). Keep bash scripts bash 3.2 compatible (macOS) and PowerShell scripts working on 5.1 and 7.
 - **Scripts** never prompt, never print secret values, and never change the caller's working directory or config without consent. Read-only scripts stay read-only.
 - Match the existing tone: terse, concrete, no marketing language. No emoji in new prose.
 - Don't add features to the README that don't exist; keep it short and point to the SKILL.md or script header for detail.

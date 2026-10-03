@@ -1,17 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" width="800" height="300" role="img" aria-label="guyb: you send a request, the orchestrator gets a plan from the architect, runs agents in parallel in the background while you keep chatting, then review and a pull request.">
 <style>
-text{font-family:ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:12px;fill:#e2e8f0}
-.m{font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;font-size:11px;fill:#94a3b8}
-.h{font-size:11px;font-weight:600;fill:#2dd4bf;letter-spacing:.04em}
+text{font-family:ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:12px;fill:#E8E6E3}
+.m{font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;font-size:11px;fill:#A3A3A3}
+.h{font-size:11px;font-weight:600;fill:#4ADE80;letter-spacing:.04em}
 .t{font-weight:600}
-.box{fill:#1e293b;stroke:#334155}
-.ln{stroke:#475569;stroke-width:1.5;fill:none}
-.trk{fill:#334155}
-.bar{fill:#2dd4bf;transform-box:fill-box;transform-origin:left center}
-.pr{fill:#2dd4bf;stroke:#2dd4bf}
-.pr text{fill:#0f172a}
-.ok{stroke:#0f172a;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.dot{fill:#2dd4bf}
+.box{fill:#161616;stroke:#262626}
+.ln{stroke:#525252;stroke-width:1.5;fill:none}
+.trk{fill:#262626}
+.bar{fill:#4ADE80;transform-box:fill-box;transform-origin:left center}
+.pr{fill:#4ADE80;stroke:#4ADE80}
+.pr text{fill:#0A0A0A}
+.ok{stroke:#0A0A0A;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.dot{fill:#4ADE80}
 .s1{animation:s1 12s infinite}
 .s2{animation:s2 12s infinite}
 .s3{animation:s3 12s infinite}
@@ -40,7 +40,7 @@ text{font-family:ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-ser
 @keyframes f5{0%,82%{transform:scaleX(0)}87%,99.9%{transform:scaleX(1)}100%{transform:scaleX(0)}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}.pk{display:none}}
 </style>
-<rect width="800" height="300" rx="14" fill="#0f172a"/>
+<rect width="800" height="300" rx="14" fill="#0A0A0A"/>
 
 <rect class="box" x="20" y="40" width="120" height="50" rx="8"/>
 <text class="t" x="80" y="70" text-anchor="middle">You</text>
@@ -53,13 +53,13 @@ text{font-family:ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-ser
 
 <g class="u">
 <rect class="box" x="20" y="150" width="150" height="40" rx="8"/>
-<text x="30" y="167" style="font-size:11px;fill:#94a3b8">while agents work:</text>
+<text x="30" y="167" style="font-size:11px;fill:#A3A3A3">while agents work:</text>
 <text x="30" y="182">"what's running?"</text>
 </g>
 <g class="o">
 <rect class="box" x="20" y="205" width="150" height="40" rx="8"/>
-<text x="30" y="222" style="font-size:11px;fill:#94a3b8">you keep chatting</text>
-<text class="m" x="30" y="237" style="fill:#e2e8f0">app-2, 3, 4 running</text>
+<text x="30" y="222" style="font-size:11px;fill:#A3A3A3">you keep chatting</text>
+<text class="m" x="30" y="237" style="fill:#E8E6E3">app-2, 3, 4 running</text>
 </g>
 
 <g class="s1">
@@ -109,7 +109,7 @@ text{font-family:ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-ser
 <g class="s5">
 <rect class="pr box" x="620" y="220" width="160" height="44" rx="8"/>
 <path class="ok" d="M634 242l5 5 9-10"/>
-<text class="t" x="658" y="247" style="fill:#0f172a">PR opened</text>
+<text class="t" x="658" y="247" style="fill:#0A0A0A">PR opened</text>
 </g>
 
 <text class="m" x="400" y="288" text-anchor="middle">plan once, run independent work in parallel, review, open the PR</text>

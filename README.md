@@ -1,4 +1,11 @@
-# guyb
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo-light.svg" alt="guyb" width="264">
+  </picture>
+</h1>
+
+<p align="center"><a href="https://github.com/alamhanz/guyb/actions/workflows/ci.yml"><img src="https://github.com/alamhanz/guyb/actions/workflows/ci.yml/badge.svg" alt="CI"></a></p>
 
 > From *guyub* (Javanese/Indonesian): a tight, harmonious collective where members work in sync.
 
@@ -80,7 +87,7 @@ guyb myapp        # open GUYB_ROOT/myapp in a new tab
 
 Launcher flags and the `-List` / `--list` output format are documented in the headers of `scripts/launch.ps1` and `scripts/launch.sh`; the check JSON is described in `plugins/guyb/skills/launch/SKILL.md`.
 
-**In a project.** `/guyb:start` gives a briefing (branch, open PRs, next steps from `.claude/STATE.md`), drafts `.claude/CLAUDE.md` on first use, and asks what to work on. Then just talk: "add rate limiting to the API and ship it".
+**In a project.** `/guyb:start` gives a briefing (branch, open PRs, next steps from `.claude/STATE.md`; it also flags an outdated plugin and `STATE.md` entries about PRs that are already merged or closed), drafts `.claude/CLAUDE.md` on first use, and asks what to work on. Then just talk: "add rate limiting to the API and ship it".
 
 | Command | What it does |
 |---|---|
@@ -135,7 +142,7 @@ Every agent starts with fresh context (roughly 15-50k tokens), so guyb spends ag
 
 ## Security
 
-guyb manages where credentials live but never stores or sees their values. A commit guard hook blocks staging `.env`, keys, and credential files. Hooks only print the playbook at session start and check staged file names. Plugins run with your permissions, so read the agents and hooks before installing.
+guyb manages where credentials live but never stores or sees their values. A commit guard hook blocks `git commit` when `.env`, keys, or credential files are staged; it covers both Bash and PowerShell commits, but only plain `git commit ...` (not `git -C dir commit` or chained commands). A second hook stops the read-only subagents (`architect`, `code-reviewer`, `data-modeler`, `data-analyst`) from running git write commands (a best-effort text match; the agents' prompt rules are the main control). Hooks only print the playbook at session start and check staged file names and subagent git commands. Plugins run with your permissions, so read the agents and hooks before installing.
 
 ## More
 
