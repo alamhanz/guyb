@@ -28,9 +28,11 @@ if (-not $SkipPermissions) {
     if (Test-Path $settingsPath) { Copy-Item $settingsPath "$settingsPath.bak-$(Get-Date -Format yyyyMMddHHmmss)" }
     $recommended = Get-Content (Join-Path $repo 'settings/recommended-permissions.json') -Raw | ConvertFrom-Json -AsHashtable
     if (-not $settings.ContainsKey('permissions')) { $settings['permissions'] = @{} }
+    $obsolete = @($recommended['obsolete'])
     foreach ($key in 'allow', 'ask', 'deny') {
         if ($recommended.permissions.ContainsKey($key)) {
-            $existing = @($settings.permissions[$key] | Where-Object { $_ })
+            # drop rules that older guyb versions added but no longer recommends, then add the current ones
+            $existing = @($settings.permissions[$key] | Where-Object { $_ -and $_ -notin $obsolete })
             $settings.permissions[$key] = @($existing + $recommended.permissions[$key] | Select-Object -Unique)
         }
     }

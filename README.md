@@ -12,7 +12,7 @@ guyb myapp
              ├─ delegates in the background, you keep chatting:
              │    architect -> implementer(s) -> code-reviewer -> git-ops
              │    data-modeler · data-analyst · ml-engineer · mcp-developer
-             │    aws-ops · deployer · repo-steward · session-tracker
+             │    cloud-ops · deployer · repo-steward · session-tracker
              └─ relays results, asks you only for real decisions
 ```
 
@@ -22,10 +22,11 @@ guyb myapp
 - **The orchestrator plans and delegates.** A `SessionStart` hook loads the orchestrator playbook into every session. It keeps a visible todo list and hands steps to subagents.
 - **Subagents run in the background.** You keep talking to the orchestrator while they work; results come back to it and it summarizes them for you. Subagents never talk to you directly, and permission prompts still surface in your tab.
 - **State survives sessions.** `session-tracker` keeps `.claude/STATE.md` per project: status, change log, decisions, open issues, next steps.
+- **Accounts are set up once, credentials per project.** `/guyb:setup` connects your git host and cloud once for all projects; `/guyb:creds` adds what a single project needs. guyb never stores secret values.
 
 ## Install
 
-Requirements: [Claude Code](https://code.claude.com/docs) v2.1.280+, `git`. Optional: `gh` (GitHub CLI, logged in) for PR/issue work, `aws` CLI v2 for AWS work.
+Requirements: [Claude Code](https://code.claude.com/docs) v2.1.280+ and `git` (on Windows, Git for Windows, whose Git Bash runs guyb's hooks). Everything else (`gh`, `glab`, `aws`, `gcloud`, `az`, database clients) is optional; `/guyb:setup` offers to install what you choose.
 
 ### Option A: full setup (plugin + permissions + launcher)
 
@@ -43,7 +44,12 @@ git clone https://github.com/alamhanz/guyb.git
 
 The installer:
 1. adds this repo as a plugin marketplace and installs the `guyb` plugin (user scope),
-2. merges [`settings/recommended-permissions.json`](settings/recommended-permissions.json) into `~/.claude/settings.json` (backup kept). Read-only git/gh/aws commands are allowed, normal commits and pushes are allowed, and destructive operations (force-push, hard reset, PR merge, AWS delete/terminate, IAM) always ask. Skip with `-SkipPermissions` / `--skip-permissions`,
+2. merges [`settings/recommended-permissions.json`](settings/recommended-permissions.json) into `~/.claude/settings.json` (backup kept):
+   - **allow**: read-only git, gh, and glab commands, explicit read-only cloud commands per service (e.g. `aws ec2 describe-*`, `gcloud run services list`, `az vm show`), plus normal commits and pushes. Commands that print secrets (`aws secretsmanager get-secret-value`, `gcloud secrets versions access`, …) always ask,
+   - **ask**: destructive operations (force-push, hard reset, PR/MR merge, cloud delete/terminate, IAM and role changes),
+   - **deny**: reading secret files (`.env`, `*.pem`, `*.key`, cloud credential files).
+
+   Skip this step with `-SkipPermissions` / `--skip-permissions`.
 3. adds the `guyb` command to your shell profile.
 
 ### Option B: plugin only
@@ -53,9 +59,27 @@ claude plugin marketplace add alamhanz/guyb
 claude plugin install guyb@guyb
 ```
 
+### Then: one-time global setup
+
+Open any project (`guyb myapp`) and run:
+
+```
+/guyb:setup
+```
+
+The wizard:
+1. **Detects** what's installed and logged in: git identity, gh / glab / Bitbucket, aws / gcloud / az, and database clients.
+2. **Asks** which git host (GitHub, GitLab, Bitbucket), which cloud (AWS, GCP, Azure), which databases, and any other services you use.
+3. **Installs** missing CLIs with winget / brew / apt, showing each command and asking first.
+4. **Guides logins.** You run them yourself with the `!` prefix (e.g. `! gh auth login`, `! aws configure sso`, `! gcloud auth login`, `! az login`), because they open a browser or ask for a password.
+5. **Verifies** each login with a read-only identity check.
+6. **Records** a no-secrets profile in `~/.claude/guyb/profile.md`: which accounts, profiles, and regions you use.
+
+Run `/guyb:setup git`, `/guyb:setup cloud`, or similar to redo one area later.
+
 ## Usage guide (terminal)
 
-> **v0.1 is built and tested for the terminal** (Windows Terminal, or tmux on macOS/Linux). Claude Desktop (Code tab) and Cowork can load parts of the plugin, but they aren't documented or tested yet. See [Roadmap](#roadmap).
+> **guyb is built and tested for the terminal** (Windows Terminal, or tmux on macOS/Linux). Claude Desktop (Code tab) and Cowork can load parts of the plugin, but they aren't documented or tested yet. See [Roadmap](#roadmap).
 
 ### 1. Open a project
 
@@ -72,7 +96,8 @@ Each tab is one project with its own orchestrator. Open as many tabs as you have
 
 The tab runs `/guyb:start` for you. The orchestrator:
 - gives a **briefing**: branch, uncommitted work, open PRs, and "next up" from `.claude/STATE.md`,
-- on first use, **drafts `.claude/CLAUDE.md`** for the project (stack, run/test/build/deploy commands, AWS profile and region) and asks before saving it,
+- on first use, **drafts `.claude/CLAUDE.md`** for the project (stack, git host, run/test/build/deploy commands, cloud account and region, credential names) and asks before saving it,
+- checks that the env vars the code uses exist in `.env` (by name only) and offers `/guyb:creds` for anything missing,
 - asks what you want to work on.
 
 ### 3. Give it work
@@ -96,6 +121,8 @@ Or use a command to run a full workflow:
 | `/guyb:ship` | review -> commit -> push -> PR -> CI status |
 | `/guyb:status` | status table across all projects |
 | `/guyb:end` | record the session in `.claude/STATE.md` |
+| `/guyb:setup [area]` | one-time global setup: git host, cloud, DB clients, other services |
+| `/guyb:creds [what]` | add credentials for this project only (see [Credentials](#credentials)) |
 
 For anything with several steps, the orchestrator shows the plan as a **todo list** that updates as agents finish. For big or risky plans it shows a summary and waits for your OK before writing code.
 
@@ -121,7 +148,9 @@ Run `/guyb:end`. `session-tracker` appends what changed, the decisions made, ope
 
 | File | Purpose | Commit it? |
 |---|---|---|
-| `.claude/CLAUDE.md` | project facts: stack, commands, AWS profile/region | yes |
+| `.claude/CLAUDE.md` | project facts: stack, commands, cloud account/region, credential *names* | yes |
+| `.env` | this project's secret values | **never** (guyb makes sure it's gitignored) |
+| `.env.example` | the same names with placeholder values | yes |
 | `.claude/STATE.md` | status, change log, decisions, next steps | yes (it's useful history) |
 | `.claude/pipeline/plan.md` | the architect's current plan | optional; add `.claude/pipeline/` to `.gitignore` if you prefer |
 
@@ -130,7 +159,7 @@ Run `/guyb:end`. `session-tracker` appends what changed, the decisions made, ope
 - **Several projects at once:** one tab per project. To see all sessions on one screen, try Claude Code's built-in agent view: `claude agents`.
 - **Small tasks** ("rename this function") skip the pipeline; the orchestrator just does them.
 - **Usage:** subagents use extra tokens, and a full `/guyb:build` costs noticeably more than a single chat. `architect`, `code-reviewer`, and `data-modeler` run on Opus; switch them to `sonnet` (see [The team](#the-team)) to save usage.
-- **AWS:** log in first (`aws configure sso` or `aws configure`). `aws-ops` always prints the account and region before doing anything.
+- **Cloud:** `cloud-ops` always prints the provider, account/project/subscription, and region before doing anything, and passes the profile explicitly instead of relying on whichever account is active.
 
 ## The team
 
@@ -143,17 +172,34 @@ Run `/guyb:end`. `session-tracker` appends what changed, the decisions made, ope
 | `data-analyst` | sonnet | EDA, data quality, stats with effect sizes, reproducible notebooks |
 | `ml-engineer` | sonnet | baseline-first ML, leakage checks, experiment tracking, serving |
 | `mcp-developer` | sonnet | MCP servers/clients with the official SDKs, tested with the Inspector |
-| `git-ops` | sonnet | branches, conventional commits, PRs, CI logs, issues, releases |
-| `aws-ops` | sonnet | identity-first AWS inspect / troubleshoot / cost / IaC-first changes |
+| `git-ops` | sonnet | branches, conventional commits, PRs/MRs, CI logs, issues, releases on GitHub (`gh`), GitLab (`glab`), Bitbucket (REST API) |
+| `cloud-ops` | sonnet | identity-first AWS / GCP / Azure inspect, troubleshoot, cost, IaC-first changes |
 | `deployer` | sonnet | test -> build -> deploy -> **verify live** -> record |
 | `repo-steward` | sonnet | portfolio status and hygiene across all repos |
 | `session-tracker` | haiku | `.claude/STATE.md` briefings, change log, docs drift |
 
 To use cheaper models, change `model:` in `plugins/guyb/agents/*.md`.
 
-## Per-project configuration
+## Credentials
 
-`/guyb:start` offers to create `.claude/CLAUDE.md` in each project, with its stack, run/test/build/deploy commands, and **AWS profile + region**. Agents read it, so each project can target a different AWS account.
+guyb has one rule: **it manages where credentials live and checks that they work, but never stores or sees the values.**
+
+| Level | What | Where the secret lives | What guyb records |
+|---|---|---|---|
+| Global (`/guyb:setup`) | git host, cloud accounts, other service logins | each CLI's own credential store (`gh`, `glab`, `aws`, `gcloud`, `az`); Bitbucket and global API keys in user-level env vars | `~/.claude/guyb/profile.md`: account names, profiles, regions |
+| Project (`/guyb:creds`) | database URLs, API keys, a different cloud account | the project's gitignored `.env`; cloud accounts as named CLI profiles (`aws --profile myapp-staging`, a gcloud configuration, an Azure subscription) | `.claude/CLAUDE.md` `## Credentials`: names and locations, with the date last verified |
+
+When a task needs a credential that isn't set up, the orchestrator pauses that step and runs `/guyb:creds`:
+1. It finds the env vars the code uses and compares them, by name only, with `.env`.
+2. It makes sure `.env` is gitignored and `.env.example` lists every name.
+3. It tells you which lines to add. **You open `.env` in your editor and paste the values there**, never into the chat: the transcript is saved, and so are `!` commands.
+4. It verifies each credential without printing it (e.g. `select 1` against the database, or a whoami API call).
+5. It records the names in `.claude/CLAUDE.md`.
+
+### Safety nets
+- **Commit guard:** a hook blocks `git commit` when `.env`, `*.pem`, `*.key`, private SSH keys, `credentials*`, or service-account JSON files are staged. `.example`/`.sample`/`.template` files and `.pub` keys are allowed.
+- **Deny rules** stop Claude from reading `.env`, key files, and cloud credential files with its file tools or `cat`. This is a guardrail, not a sandbox: a determined shell command could still read them. Keep real production secrets in a cloud secret manager.
+- If a real `.env` is already tracked by git, `/guyb:creds` stops and tells you to remove it from git **and rotate the leaked values**.
 
 ## Customize
 
@@ -161,7 +207,7 @@ Fork the repo, edit `plugins/guyb/agents/*.md`, `skills/*/SKILL.md`, or `hooks/o
 
 ## Security notes
 
-Plugins run with your user permissions. Read the agents and the hook before installing. The hook only prints `hooks/orchestrator.md`. Nothing here sends data anywhere except through tools you already use (`git`, `gh`, `aws`).
+Plugins run with your user permissions. Read the agents and the hooks before installing. The hooks do two things only: print `hooks/orchestrator.md` at session start, and check staged file *names* before a commit (`hooks/guard-secrets.sh`). Nothing here sends data anywhere except through tools you already use (`git`, `gh`, `glab`, `aws`, `gcloud`, `az`).
 
 ## Roadmap
 

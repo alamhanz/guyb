@@ -24,9 +24,11 @@ if [ $skip_perms -eq 0 ]; then
   if command -v jq >/dev/null; then
     s="$HOME/.claude/settings.json"; mkdir -p "$HOME/.claude"; [ -f "$s" ] || echo '{}' > "$s"
     cp "$s" "$s.bak-$(date +%Y%m%d%H%M%S)"
-    jq -s '.[0] as $cur | .[1] as $rec | $cur
-      | .permissions.allow = (($cur.permissions.allow // []) + $rec.permissions.allow | unique)
-      | .permissions.ask   = (($cur.permissions.ask   // []) + $rec.permissions.ask   | unique)' \
+    # drop rules older guyb versions added but no longer recommends ("obsolete"), then add the current ones
+    jq -s '.[0] as $cur | .[1] as $rec | ($rec.obsolete // []) as $old | $cur
+      | .permissions.allow = ((($cur.permissions.allow // []) - $old) + $rec.permissions.allow | unique)
+      | .permissions.ask   = ((($cur.permissions.ask   // []) - $old) + $rec.permissions.ask   | unique)
+      | .permissions.deny  = ((($cur.permissions.deny  // []) - $old) + $rec.permissions.deny  | unique)' \
       "$s" "$repo/settings/recommended-permissions.json" > "$s.tmp" && mv "$s.tmp" "$s"
   else
     echo "   jq not found - merge settings/recommended-permissions.json into ~/.claude/settings.json by hand"

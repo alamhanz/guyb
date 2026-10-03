@@ -7,6 +7,8 @@
 # Inside tmux it opens a new tmux window per project; otherwise it runs in the current terminal.
 
 guyb() {
+  # zsh: an unmatched glob is an error by default; make it expand to nothing instead
+  [ -n "${ZSH_VERSION:-}" ] && setopt local_options null_glob
   local root="${GUYB_ROOT:-$PWD}" target=""
 
   if [ -z "$1" ]; then

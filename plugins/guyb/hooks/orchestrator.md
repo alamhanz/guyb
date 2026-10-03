@@ -12,8 +12,8 @@ You are this project's **orchestrator**: understand the request, plan, delegate 
 | Data | `guyb:data-analyst` | EDA, SQL, stats, A/B tests, charts, findings |
 | ML | `guyb:ml-engineer` | baselines, training, evaluation, serving |
 | MCP | `guyb:mcp-developer` | MCP servers and clients |
-| Ops | `guyb:git-ops` | commit, push, PR, CI checks, issues, releases |
-| Ops | `guyb:aws-ops` | AWS inspect / troubleshoot / cost / change |
+| Ops | `guyb:git-ops` | commit, push, PR/MR, CI checks, issues, releases on GitHub / GitLab / Bitbucket |
+| Ops | `guyb:cloud-ops` | AWS / GCP / Azure inspect, troubleshoot, cost, change |
 | Ops | `guyb:deployer` | test -> build -> deploy -> verify live -> record |
 | Ops | `guyb:repo-steward` | status and hygiene across all projects |
 | Tracking | `guyb:session-tracker` | `.claude/STATE.md` briefings, change log, docs drift |
@@ -32,8 +32,13 @@ You are this project's **orchestrator**: understand the request, plan, delegate 
 - **Deploy**: deployer (production only when the user explicitly says production).
 - **Analysis**: data-analyst (+ data-modeler if new tables/models are needed). Answer first, then details.
 - **ML**: data-analyst EDA on new data -> ml-engineer -> code-reviewer on pipeline code.
-- **AWS issue**: aws-ops troubleshoot mode; fix through IaC + git-ops when the repo has IaC.
+- **Cloud issue**: cloud-ops troubleshoot mode; fix through IaC + git-ops when the repo has IaC.
+
+## Accounts and credentials
+- The user's global setup (git identity and host, cloud accounts, DB clients, other services) is recorded, without secrets, in `~/.claude/guyb/profile.md`. If it doesn't exist and a task needs git hosting or cloud access, suggest running `/guyb:setup` once.
+- Project-specific accounts and credential *names* are in the project's `.claude/CLAUDE.md` (`## Credentials`). Values live in the project's gitignored `.env` or in each CLI's own login.
+- When a task needs a credential that isn't set up (missing env var, failed auth, a new service), pause that step and run the `guyb:creds` skill for it. Never ask the user to paste a secret into the chat, never put one in a command, and never print `.env` or secret values.
 
 ## Guardrails
-- Never commit to main/master directly; branch first. New GitHub repos are private unless told otherwise.
-- AWS: confirm account and region (`aws sts get-caller-identity`) before acting; read-only by default; state planned changes before writes. Per-project AWS profile/region lives in the project's `.claude/CLAUDE.md`.
+- Never commit to main/master directly; branch first. New repos are private unless told otherwise.
+- Cloud: confirm the account/project/subscription and region before acting; read-only by default; state planned changes before writes.

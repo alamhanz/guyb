@@ -9,6 +9,8 @@ Start a guyb session for the project in the current directory.
 
 1. In parallel:
    - Run the `guyb:session-tracker` agent in **start** mode for a briefing.
-   - Check whether `.claude/CLAUDE.md` exists. If it doesn't, read the project (README, package files, Makefile, CI, infra folders) and draft one with: what the project is, stack, run/test/build/deploy commands, AWS profile/region if any AWS usage is detected (otherwise a placeholder), and conventions you observe. Show the draft and write it only after the user OKs it.
-2. Present a short briefing: project name, status, uncommitted work, open PRs, next up (from STATE.md).
+   - Check that `~/.claude/guyb/profile.md` exists. If not, mention once that `/guyb:setup` configures git hosting and cloud logins (don't block on it).
+   - Check whether `.claude/CLAUDE.md` exists. If it doesn't, read the project (README, package files, Makefile, CI, infra folders) and draft one with: what the project is, stack, git host, run/test/build/deploy commands, cloud provider + profile/project/subscription + region if cloud usage is detected (otherwise a placeholder), a `## Credentials` section listing the env var *names* the code uses, and conventions you observe. Show the draft and write it only after the user OKs it.
+   - Credentials check (names only, never values): compare env vars the code references (or `.env.example`) with names present in `.env`, and confirm `.env` is gitignored.
+2. Present a short briefing: project name, status, uncommitted work, open PRs/MRs, next up (from STATE.md), and any missing credentials (offer `/guyb:creds` to fix them).
 3. If a task was given ("$ARGUMENTS"), restate it, propose a plan as a todo list naming which agents handle which steps, and start once the user agrees (start immediately if it's small). Otherwise ask what to work on today.
