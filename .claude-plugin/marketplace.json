@@ -1,0 +1,14 @@
+{
+  "name": "guyb",
+  "description": "An orchestrator + specialist subagent team for Claude Code: build, data, ML, MCP, GitHub, AWS, and change tracking.",
+  "owner": {
+    "name": "alamhanz"
+  },
+  "plugins": [
+    {
+      "name": "guyb",
+      "source": "./plugins/guyb",
+      "description": "Orchestrator playbook, 12 specialist subagents, and /guyb:start|build|ship|status|end commands."
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+---
+name: start
+description: Start a work session on this project as the orchestrator - briefing of current state, bootstrap project config if missing, then ask what to work on.
+disable-model-invocation: true
+argument-hint: "[optional: what you want to work on]"
+---
+
+Start a guyb session for the project in the current directory.
+
+1. In parallel:
+   - Run the `guyb:session-tracker` agent in **start** mode for a briefing.
+   - Check whether `.claude/CLAUDE.md` exists. If it doesn't, read the project (README, package files, Makefile, CI, infra folders) and draft one with: what the project is, stack, run/test/build/deploy commands, AWS profile/region if any AWS usage is detected (otherwise a placeholder), and conventions you observe. Show the draft and write it only after the user OKs it.
+2. Present a short briefing: project name, status, uncommitted work, open PRs, next up (from STATE.md).
+3. If a task was given ("$ARGUMENTS"), restate it, propose a plan as a todo list naming which agents handle which steps, and start once the user agrees (start immediately if it's small). Otherwise ask what to work on today.
