@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # bash scripts on real bash: ubuntu (bash 5), macOS (/bin/bash 3.2, BSD tools), Windows (Git Bash)
+  bash:
+    name: bash (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: /bin/bash tests/lint.sh
+      - name: Smoke
+        run: /bin/bash tests/smoke.sh
+
+  # PowerShell 7 on all three OSes
+  pwsh:
+    name: pwsh 7 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: ./tests/lint.ps1
+      - name: Smoke
+        run: ./tests/smoke.ps1
+      - name: Permission rules
+        run: ./tests/permissions.ps1
+
+  # Windows PowerShell 5.1 (the shell older Windows machines still use)
+  winps51:
+    name: Windows PowerShell 5.1
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/lint.ps1
+      - name: Smoke
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/smoke.ps1
+      - name: Permission rules
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/permissions.ps1
+
+  # Plugin manifest validation. Not part of ci-ok yet: it installs Claude Code from npm and may need
+  # network or auth. Make it required by adding it to ci-ok's needs once it has been green for a while.
+  validate:
+    name: claude plugin validate (non-required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate plugin
+        run: claude plugin validate ./plugins/guyb
+
+  # Single check to require in branch protection.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [bash, pwsh, winps51]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs passed
+        run: |
+          echo "bash=${{ needs.bash.result }} pwsh=${{ needs.pwsh.result }} winps51=${{ needs.winps51.result }}"
+          test "${{ needs.bash.result }}" = success
+          test "${{ needs.pwsh.result }}" = success
+          test "${{ needs.winps51.result }}" = success
