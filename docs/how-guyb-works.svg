@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" width="800" height="300" role="img" aria-label="guyb: you send a request, the orchestrator gets a plan from the architect, runs agents in parallel in the background while you keep chatting, then review and a pull request.">
+<style>
+text{font-family:ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:12px;fill:#e2e8f0}
+.m{font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;font-size:11px;fill:#94a3b8}
+.h{font-size:11px;font-weight:600;fill:#2dd4bf;letter-spacing:.04em}
+.t{font-weight:600}
+.box{fill:#1e293b;stroke:#334155}
+.ln{stroke:#475569;stroke-width:1.5;fill:none}
+.trk{fill:#334155}
+.bar{fill:#2dd4bf;transform-box:fill-box;transform-origin:left center}
+.pr{fill:#2dd4bf;stroke:#2dd4bf}
+.pr text{fill:#0f172a}
+.ok{stroke:#0f172a;stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.dot{fill:#2dd4bf}
+.s1{animation:s1 12s infinite}
+.s2{animation:s2 12s infinite}
+.s3{animation:s3 12s infinite}
+.s4{animation:s4 12s infinite}
+.s5{animation:s5 12s infinite}
+.u{animation:u 12s infinite}
+.o{animation:o 12s infinite}
+.pk{animation:pk 12s infinite}
+.f1{animation:f1 12s infinite}
+.f2{animation:f2 12s infinite}
+.f3{animation:f3 12s infinite}
+.f4{animation:f4 12s infinite}
+.f5{animation:f5 12s infinite}
+@keyframes s1{0%,7%{opacity:0}10%,95%{opacity:1}99%,100%{opacity:0}}
+@keyframes s2{0%,20%{opacity:0}23%,95%{opacity:1}99%,100%{opacity:0}}
+@keyframes s3{0%,70%{opacity:0}73%,95%{opacity:1}99%,100%{opacity:0}}
+@keyframes s4{0%,79%{opacity:0}82%,95%{opacity:1}99%,100%{opacity:0}}
+@keyframes s5{0%,88%{opacity:0}91%,95%{opacity:1}99%,100%{opacity:0}}
+@keyframes u{0%,25%{opacity:0}28%,95%{opacity:1}99%,100%{opacity:0}}
+@keyframes o{0%,34%{opacity:0}37%,95%{opacity:1}99%,100%{opacity:0}}
+@keyframes pk{0%{opacity:0;transform:translateX(0)}2%{opacity:1;transform:translateX(0)}7%{opacity:1;transform:translateX(50px)}8%,100%{opacity:0;transform:translateX(50px)}}
+@keyframes f1{0%,23%{transform:scaleX(0)}48%,99.9%{transform:scaleX(1)}100%{transform:scaleX(0)}}
+@keyframes f2{0%,23%{transform:scaleX(0)}60%,99.9%{transform:scaleX(1)}100%{transform:scaleX(0)}}
+@keyframes f3{0%,23%{transform:scaleX(0)}68%,99.9%{transform:scaleX(1)}100%{transform:scaleX(0)}}
+@keyframes f4{0%,73%{transform:scaleX(0)}79%,99.9%{transform:scaleX(1)}100%{transform:scaleX(0)}}
+@keyframes f5{0%,82%{transform:scaleX(0)}87%,99.9%{transform:scaleX(1)}100%{transform:scaleX(0)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}.pk{display:none}}
+</style>
+<rect width="800" height="300" rx="14" fill="#0f172a"/>
+
+<rect class="box" x="20" y="40" width="120" height="50" rx="8"/>
+<text class="t" x="80" y="70" text-anchor="middle">You</text>
+<line class="ln" x1="140" y1="65" x2="190" y2="65"/>
+<circle class="dot pk" cx="140" cy="65" r="4"/>
+
+<rect class="box" x="190" y="40" width="110" height="224" rx="8"/>
+<text class="t" x="245" y="64" text-anchor="middle">Orchestrator</text>
+<text class="m" x="245" y="82" text-anchor="middle">one per project</text>
+
+<g class="u">
+<rect class="box" x="20" y="150" width="150" height="40" rx="8"/>
+<text x="30" y="167" style="font-size:11px;fill:#94a3b8">while agents work:</text>
+<text x="30" y="182">"what's running?"</text>
+</g>
+<g class="o">
+<rect class="box" x="20" y="205" width="150" height="40" rx="8"/>
+<text x="30" y="222" style="font-size:11px;fill:#94a3b8">you keep chatting</text>
+<text class="m" x="30" y="237" style="fill:#e2e8f0">app-2, 3, 4 running</text>
+</g>
+
+<g class="s1">
+<line class="ln" x1="300" y1="62" x2="340" y2="62"/>
+<rect class="box" x="340" y="40" width="240" height="44" rx="8"/>
+<text class="t" x="350" y="59">architect: plan + questions</text>
+<text class="m" x="570" y="59" text-anchor="end">app-1</text>
+<text class="m" x="350" y="75">you answer, say OK</text>
+</g>
+
+<g class="s2">
+<line class="ln" x1="300" y1="190" x2="340" y2="190"/>
+<text class="h" x="340" y="108">WAVE 1: PARALLEL</text>
+<rect class="box" x="340" y="116" width="240" height="44" rx="8"/>
+<text x="350" y="134">implementer: API routes</text>
+<text class="m" x="570" y="134" text-anchor="end">app-2</text>
+<rect class="trk" x="350" y="144" width="220" height="5" rx="2.5"/>
+<rect class="box" x="340" y="168" width="240" height="44" rx="8"/>
+<text x="350" y="186">implementer: UI</text>
+<text class="m" x="570" y="186" text-anchor="end">app-3</text>
+<rect class="trk" x="350" y="196" width="220" height="5" rx="2.5"/>
+<rect class="box" x="340" y="220" width="240" height="44" rx="8"/>
+<text x="350" y="238">data-modeler: schema</text>
+<text class="m" x="570" y="238" text-anchor="end">app-4</text>
+<rect class="trk" x="350" y="248" width="220" height="5" rx="2.5"/>
+</g>
+<rect class="bar f1" x="350" y="144" width="220" height="5" rx="2.5"/>
+<rect class="bar f2" x="350" y="196" width="220" height="5" rx="2.5"/>
+<rect class="bar f3" x="350" y="248" width="220" height="5" rx="2.5"/>
+
+<g class="s3">
+<line class="ln" x1="580" y1="190" x2="620" y2="190"/>
+<text class="h" x="620" y="108">WAVE 2: AFTER WAVE 1</text>
+<rect class="box" x="620" y="116" width="160" height="44" rx="8"/>
+<text x="630" y="134">code-reviewer</text>
+<text class="m" x="770" y="134" text-anchor="end">app-5</text>
+<rect class="trk" x="630" y="144" width="140" height="5" rx="2.5"/>
+</g>
+<rect class="bar f4" x="630" y="144" width="140" height="5" rx="2.5"/>
+<g class="s4">
+<rect class="box" x="620" y="168" width="160" height="44" rx="8"/>
+<text x="630" y="186">git-ops</text>
+<text class="m" x="770" y="186" text-anchor="end">app-6</text>
+<rect class="trk" x="630" y="196" width="140" height="5" rx="2.5"/>
+</g>
+<rect class="bar f5" x="630" y="196" width="140" height="5" rx="2.5"/>
+<g class="s5">
+<rect class="pr box" x="620" y="220" width="160" height="44" rx="8"/>
+<path class="ok" d="M634 242l5 5 9-10"/>
+<text class="t" x="658" y="247" style="fill:#0f172a">PR opened</text>
+</g>
+
+<text class="m" x="400" y="288" text-anchor="middle">plan once, run independent work in parallel, review, open the PR</text>
+</svg>

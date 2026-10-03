@@ -2,29 +2,43 @@
 
 > From *guyub* (Javanese/Indonesian): a tight, harmonious collective where members work in sync.
 
-guyb is a Claude Code plugin: an **orchestrator playbook plus a team of 12 specialist subagents**. Every session becomes a project orchestrator that plans, delegates in the background, and reports back. **One terminal tab = one project = one orchestrator.** guyb manages where credentials live but never stores or sees their values.
+guyb is a Claude Code plugin: one orchestrator per project that plans the work, then runs a team of 12 specialist subagents in parallel background waves while you keep chatting with it.
 
-## Workflow
+<p align="center"><img src="docs/how-guyb-works.svg" alt="You send a request; the orchestrator gets a plan from the architect; implementers and a data-modeler run in parallel while you keep chatting; then code review and a pull request." width="800"></p>
 
-```mermaid
-flowchart TD
-    R["Session at projects root"] -->|"activate guyb / let's start X"| C{"Setup check"}
-    C -->|"blocking fail"| F["Offer fix, re-check"] --> C
-    C -->|"ok / warnings"| P["Project picker"]
-    P --> T["New tab: /guyb:start"]
-    T --> B["Briefing script"]
-    B --> Q["Your request"]
-    Q --> S{"Small change?<br/>(max 3 files, 20 lines)"}
-    S -->|yes| I["Orchestrator does it inline"]
-    S -->|no| A["Intake: architect plan + questions"]
-    A --> OK{"You approve?"}
-    OK -->|"no: revise"| A
-    OK -->|yes| W["Implementers<br/>(parallel waves only if heavy)"]
-    W --> CR["Code review<br/>(none: docs-only, 1 round: small)"]
-    I --> G
-    CR --> G["git-ops: branch, commit, PR"]
-    G --> E["/guyb:end: update STATE.md"]
+## Why guyb
+
+A plain Claude Code session works serially in one context. guyb changes that:
+
+| Plain session | With guyb |
+|---|---|
+| Context fills with code and logs | The orchestrator only plans and integrates; agents work in fresh contexts and send short reports |
+| You wait on each step | Independent work runs in parallel in the background (up to 4 agents); you keep talking |
+| Planning is whatever you remember to ask for | Non-trivial requests start with an architect plan and questions; you approve before code is written |
+| Review and git hygiene are optional | Review runs before every PR (except docs-only); git-ops handles branch, commit, PR |
+| Agents stall or guess | Agents never ask you directly; their questions are logged and routed through the orchestrator |
+| Every session starts from zero | `.claude/STATE.md` records decisions and next steps; `/guyb:start` briefs you from it |
+| Several projects get tangled | One terminal tab = one project = one orchestrator |
+
+## How it works
+
+1. You describe the work. A small change (max 3 files, 20 lines) is done inline; no agent is spawned.
+2. Otherwise the `architect` returns scope, risks, a task table, and open questions. You answer and say OK.
+3. The orchestrator groups the tasks into **waves**. Runs in the same wave are independent and start together; a wave starts when the runs it depends on are done. Parallel agents get disjoint files (one owner per file) and worktree isolation when they edit code at the same time.
+4. `code-reviewer` reviews the result, `git-ops` opens the PR, `/guyb:end` records the session in `STATE.md`.
+
+A wave plan, as the orchestrator tracks it:
+
 ```
+[app-1] architect: plan the export feature
+[app-2] implementer: API routes (wave 1, after app-1)
+[app-3] implementer: UI (wave 1, after app-1)
+[app-4] data-modeler: schema + migration (wave 1, after app-1)
+[app-5] code-reviewer: review the diff (wave 2, after app-2, app-3, app-4)
+[app-6] git-ops: branch, commit, PR (wave 3, after app-5)
+```
+
+While wave 1 runs, you can talk about anything else. Ask "what's running?" and the orchestrator answers from the run registry (`.claude/pipeline/runs.md`) and each run's progress file (`.claude/pipeline/progress/<id>.md`). Details are in [`plugins/guyb/skills/pipeline/SKILL.md`](plugins/guyb/skills/pipeline/SKILL.md).
 
 ## Install
 
@@ -66,7 +80,7 @@ guyb myapp        # open GUYB_ROOT/myapp in a new tab
 
 Launcher flags and the `-List` / `--list` output format are documented in the headers of `scripts/launch.ps1` and `scripts/launch.sh`; the check JSON is described in `plugins/guyb/skills/launch/SKILL.md`.
 
-**In a project.** `/guyb:start` gives a briefing (branch, open PRs, next steps from `.claude/STATE.md`), drafts `.claude/CLAUDE.md` on first use, and asks what to work on. Then just talk: "add rate limiting to the API and ship it". Non-trivial work shows a plan and questions first; you keep chatting while agents run in the background. Ask "what's running?" any time. Agents never ask you directly; decisions and permission prompts come through the orchestrator.
+**In a project.** `/guyb:start` gives a briefing (branch, open PRs, next steps from `.claude/STATE.md`), drafts `.claude/CLAUDE.md` on first use, and asks what to work on. Then just talk: "add rate limiting to the API and ship it".
 
 | Command | What it does |
 |---|---|
@@ -100,11 +114,13 @@ Change defaults via `model:` in `plugins/guyb/agents/*.md`; the orchestrator can
 
 ## Cost rules
 
-- Small changes (max 3 files, 20 lines, no new tests) are done inline; no agent is spawned.
+Every agent starts with fresh context (roughly 15-50k tokens), so guyb spends agents where they pay off:
+
+- Heavy work goes parallel: independent big areas (roughly >100 changed lines each) get their own implementers, up to 4 at once, or whenever you ask for speed. Otherwise one implementer does the parts in sequence.
+- Small changes (max 3 files, 20 lines, no new tests) are done inline.
 - Model per run: haiku for mechanical work, sonnet for normal work, opus only for large planning, hard debugging, security review.
 - Review is skipped for docs-only changes and limited to one round for small diffs.
 - Briefings come from a script, not an agent.
-- Parallel implementers (max 4) only for genuinely heavy work.
 - Agent reports are short, and follow-up fixes go to the same agent.
 
 ## Files guyb creates
@@ -116,7 +132,9 @@ Change defaults via `model:` in `plugins/guyb/agents/*.md`; the orchestrator can
 | `.env` (secrets; guyb makes sure it is gitignored) / `.env.example` | never / yes |
 | `.claude/pipeline/` (plans, run registry, progress, questions) | no, auto-gitignored |
 
-A commit guard hook blocks staging `.env`, keys, and credential files. Hooks only print the playbook at session start and check staged file names. Plugins run with your permissions, so read the agents and hooks before installing.
+## Security
+
+guyb manages where credentials live but never stores or sees their values. A commit guard hook blocks staging `.env`, keys, and credential files. Hooks only print the playbook at session start and check staged file names. Plugins run with your permissions, so read the agents and hooks before installing.
 
 ## More
 
