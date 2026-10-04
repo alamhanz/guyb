@@ -16,7 +16,7 @@ check() { # name expected actual; on failure prints the bash version and a bash 
   if [ -f "$tmp/.last.cwd" ]; then
     echo "--- bash -x trace (last 40 lines), stdin: $(cat "$tmp/.last.in")"
     sed 's#^exec 2>/dev/null$#:#' "$script" > "$tmp/.dbg.sh" # the script silences stderr, which is where -x writes
-    ( cd "$(cat "$tmp/.last.cwd")" && bash -x "$tmp/.dbg.sh" < "$tmp/.last.in" 2>&1 | tail -n 40 )
+    ( cd "$(cat "$tmp/.last.cwd")" && cat "$tmp/.last.in" | bash -x "$tmp/.dbg.sh" 2>&1 | tail -n 40 )
     echo "---"
   fi
 }
