@@ -56,6 +56,66 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "async": true,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" running"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "async": true,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" resume"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "async": true,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" waiting"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "async": true,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" done"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "async": true,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" end"
+          }
+        ]
+      }
     ]
   }
 }

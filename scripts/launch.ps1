@@ -14,6 +14,18 @@
 # Strip control chars (C0, DEL, C1 U+0080-U+009F) from a name before it reaches a title.
 function _guyb_clean([string]$Name) { -join ($Name.ToCharArray() | Where-Object { [int]$_ -gt 31 -and [int]$_ -ne 127 -and ([int]$_ -lt 128 -or [int]$_ -gt 159) }) }
 
+# Tab title at launch: "<done icon> <name>" (U+2705, "+" when GUYB_TAB_ASCII=1 or TERM is linux/dumb). plugins/guyb/hooks/tab-status.sh and
+# tab-status.ps1 swap the icon as Claude works; they act only when GUYB_TAB_NAME is set, which the launch command line exports.
+function _guyb_ascii { ($env:GUYB_TAB_ASCII -eq '1') -or ($env:TERM -eq 'linux') -or ($env:TERM -eq 'dumb') }
+function _guyb_title([string]$Name) { $g = if (_guyb_ascii) { '+' } else { [string][char]0x2705 }; "$g $Name" }
+
+# Command run inside the new shell: tab env, initial title (UTF-8 bytes, independent of the console code page), then claude.
+function _guyb_run([string]$Clean) {
+    $q = $Clean.Replace("'", "''")
+    $g = if (_guyb_ascii) { "'+'" } else { '[char]0x2705' }
+    "`$env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE='1'; `$env:GUYB_TAB_NAME='$q'; `$o=[Console]::OpenStandardOutput(); `$b=[Text.Encoding]::UTF8.GetBytes([string][char]27+']0;'+$g+' $q'+[char]7); `$o.Write(`$b,0,`$b.Length); claude /guyb:start"
+}
+
 # Tab colour: djb2 (32-bit) over the UTF-8 bytes of the name, mod 8, fixed palette. Same result in launch.sh.
 function _guyb_color([string]$Name) {
     $palette = '#E06C75', '#E5A445', '#98C379', '#56B6C2', '#61AFEF', '#C678DD', '#D19A66', '#4DB6AC'
@@ -26,8 +38,8 @@ function _guyb_color([string]$Name) {
 function _guyb_wt_args([string]$Name, [string]$Target, [string]$Shell, [string]$WtProfile) {
     $title = (_guyb_clean $Name).Replace(';', '\;')
     $dir = $Target.Replace(';', '\;')
-    $run = "`$env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE='1'; claude /guyb:start"
-    @('-w', '0', 'new-tab', '-p', $WtProfile, '--title', $title, '--suppressApplicationTitle', '--tabColor', (_guyb_color $Name),
+    $run = _guyb_run (_guyb_clean $Name)
+    @('-w', '0', 'new-tab', '-p', $WtProfile, '--title', $title, '--tabColor', (_guyb_color $Name),
       '--startingDirectory', $dir, $Shell, '-NoExit', '-Command', $run.Replace(';', '\;'))
 }
 
@@ -89,17 +101,19 @@ function guyb {
     $name = Split-Path $target -Leaf
 
     $clean = _guyb_clean $name
-    $run = "`$env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE='1'; claude /guyb:start"
+    $run = _guyb_run $clean
 
     if ($Here) {
-        if ($env:GUYB_DRYRUN) { "here: osc0 $clean"; "here: cd '$target'; $run"; return }
-        [Console]::Write("$([char]27)]0;$clean$([char]7)")
-        $prevTitle = $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE
-        $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = '1'
+        if ($env:GUYB_DRYRUN) { "here: osc0 $(_guyb_title $clean)"; "here: cd '$target'; $run"; return }
+        $ob = [Text.Encoding]::UTF8.GetBytes("$([char]27)]0;$(_guyb_title $clean)$([char]7)")
+        $so = [Console]::OpenStandardOutput(); $so.Write($ob, 0, $ob.Length)
+        $prevTitle = $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE; $prevTab = $env:GUYB_TAB_NAME
+        $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = '1'; $env:GUYB_TAB_NAME = $clean
         Push-Location -LiteralPath $target
         try { claude /guyb:start } finally {
             Pop-Location
             if ($null -eq $prevTitle) { Remove-Item env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE -ErrorAction SilentlyContinue } else { $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = $prevTitle }
+            if ($null -eq $prevTab) { Remove-Item env:GUYB_TAB_NAME -ErrorAction SilentlyContinue } else { $env:GUYB_TAB_NAME = $prevTab }
         }
         return
     }
@@ -133,8 +147,7 @@ function guyb {
         }
     }
     else {
-        $osc = "[Console]::Write(([string][char]27 + ']0;' + '$($clean.Replace("'", "''"))' + [char]7)); "
-        $spawn = $osc + $run
+        $spawn = $run
         if ($env:GUYB_DRYRUN) { "spawn: $spawn"; return }
         $env:CLAUDE_CODE_DISABLE_TERMINAL_TITLE = '1'
         try { Start-Process -FilePath $shell -WorkingDirectory $target -ArgumentList '-NoExit', '-Command', $spawn } finally {

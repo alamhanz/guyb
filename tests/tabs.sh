@@ -6,10 +6,13 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/guyb-tabs.XXXXXX") || exit 1
 tmp=$(cd "$tmp" && pwd) || exit 1  # macOS TMPDIR ends in '/'; normalize so expected paths match
 trap 'rm -rf "$tmp"' EXIT
-unset TMUX CLAUDECODE
-export GUYB_DRYRUN=1
+unset TMUX CLAUDECODE GUYB_TAB_NAME GUYB_TAB_ASCII
+export GUYB_DRYRUN=1 TERM=xterm
 # shellcheck disable=SC1091
 . "$root/scripts/launch.sh"
+
+# Tab icons as UTF-8 bytes: running U+23F3, done U+2705, waiting U+2753 (same code points in tabs.ps1).
+RUN=$(printf '\342\217\263'); DONE=$(printf '\342\234\205'); WAIT=$(printf '\342\235\223')
 
 pass=0; fail=0
 ok() { pass=$((pass + 1)); }
@@ -40,13 +43,18 @@ mkdir -p "$tmp/proj/my app" "$tmp/proj/guyb" "$tmp/proj/x;" "$tmp/proj/a#b"
 export GUYB_ROOT="$tmp/proj"
 
 out="$(guyb 'my app' 2>&1)"
-expect_has here-osc "$out" 'here: osc0 my app'
-expect_has here-env "$out" 'CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 claude /guyb:start'
+expect_has here-osc "$out" "here: osc0 $DONE my app"
+expect_has here-env "$out" "GUYB_TAB_NAME='my app' CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 claude /guyb:start"
+out="$(GUYB_TAB_ASCII=1 guyb 'my app' 2>&1)"
+expect_has here-osc-ascii "$out" 'here: osc0 + my app'
+out="$(TERM=dumb guyb 'my app' 2>&1)"
+expect_has here-osc-dumb "$out" 'here: osc0 + my app'
+out="$(guyb 'my app' 2>&1)"
 expect_lacks here-no-tmux "$out" 'tmux:'
 
 out="$(TMUX=/tmp/fake,1,0 guyb guyb 2>&1)"
-expect_has tmux-new "$out" "tmux: new-window -P -F '#{window_id}' -n 'guyb'"
-expect_has tmux-env "$out" 'CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 claude /guyb:start; exec $SHELL'
+expect_has tmux-new "$out" "tmux: new-window -P -F '#{window_id}' -n '$DONE guyb'"
+expect_has tmux-env "$out" "GUYB_TAB_NAME='guyb' CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 claude /guyb:start; exec \$SHELL"
 expect_has tmux-autorename "$out" 'set-window-option -t @dry automatic-rename off'
 expect_has tmux-allowrename "$out" 'set-window-option -t @dry allow-rename off'
 expect_has tmux-style "$out" 'window-status-style bg=#61AFEF,fg=#000000'
@@ -54,14 +62,48 @@ expect_has tmux-style-current "$out" 'window-status-current-style bg=#61AFEF,fg=
 expect_lacks tmux-no-global "$out" ' -g'
 
 out="$(TMUX=/tmp/fake,1,0 guyb 'x;' 2>&1)"
-expect_has tmux-semi-n "$out" "-n 'x\\;' -c '$tmp/proj/x\\;'"
+expect_has tmux-semi-n "$out" "-n '$DONE x\\;' -c '$tmp/proj/x\\;'"
 out="$(TMUX=/tmp/fake,1,0 guyb 'a#b' 2>&1)"
-expect_has tmux-hash "$out" "-n 'a##b' -c '$tmp/proj/a##b'"
+expect_has tmux-hash "$out" "-n '$DONE a##b' -c '$tmp/proj/a##b'"
 
 list="$(guyb --list 2>&1)"
 expect_has list-guyb "$list" "guyb	$tmp/proj/guyb"
 expect_has list-space "$list" 'my app'
 expect_lacks list-no-dryrun "$list" 'here:'
+
+# --- tab-status.sh (status hook): GUYB_DRYRUN=1 prints "tab: <mode> <title>". Acts only when GUYB_TAB_NAME is set.
+hook="$root/plugins/guyb/hooks/tab-status.sh"
+hk() { GUYB_TAB_NAME="$tname" TMPDIR="$tmp" bash "$hook" "$@" </dev/null 2>&1; }
+tname='my app'
+expect_eq hook-running "$(hk running)" "tab: osc0 $RUN my app"
+expect_eq hook-done "$(hk done)" "tab: osc0 $DONE my app"
+expect_eq hook-waiting "$(hk waiting)" "tab: osc0 $WAIT my app"
+expect_eq hook-end "$(hk end)" 'tab: osc0 my app'
+expect_eq hook-ascii-running "$(GUYB_TAB_ASCII=1 hk running)" 'tab: osc0 * my app'
+expect_eq hook-ascii-done "$(GUYB_TAB_ASCII=1 hk done)" 'tab: osc0 + my app'
+expect_eq hook-ascii-waiting "$(GUYB_TAB_ASCII=1 hk waiting)" 'tab: osc0 ? my app'
+expect_eq hook-dumb "$(TERM=dumb hk done)" 'tab: osc0 + my app'
+expect_eq hook-tmux "$(TMUX=/tmp/fake,1,0 hk waiting)" "tab: tmux $WAIT my app"
+expect_eq hook-bad-state "$(hk bogus)" ''
+expect_eq hook-no-state "$(hk)" ''
+tname=''
+expect_eq hook-unset-name "$(hk running)" ''
+tname="$(printf 'a\033]0;x\007b\302\233c\177')"
+expect_eq hook-clean "$(hk done)" "tab: osc0 $DONE a]0;xbc"
+# resume (PostToolUse) repaints only after "waiting"
+tname='rs'
+hk end >/dev/null
+expect_eq hook-resume-fresh "$(hk resume)" ''
+hk running >/dev/null
+expect_eq hook-resume-after-running "$(hk resume)" ''
+hk waiting >/dev/null
+expect_eq hook-resume-after-waiting "$(hk resume)" "tab: osc0 $RUN rs"
+expect_eq hook-resume-twice "$(hk resume)" ''
+hk end >/dev/null
+# no terminal to reach: never fails, never prints
+out="$(env -u GUYB_DRYRUN GUYB_TAB_NAME=zz TMPDIR="$tmp" TMUX=/nonexistent/sock,1,0 bash "$hook" running </dev/null 2>&1)"; rc=$?
+expect_eq hook-silent "$out" ''
+expect_eq hook-rc "$rc" 0
 
 # --- Real tmux (bash only; launch.ps1 has no tmux branch). Private server via -L, never the developer's tmux.
 # Skipped when tmux is missing unless GUYB_REQUIRE_TMUX=1 (CI), where a missing tmux is a failure.
@@ -85,7 +127,7 @@ else
   tguyb() (
     unset GUYB_DRYRUN
     TMUX="$(T display -p '#{socket_path}'),$(T display -p '#{pid}'),0"
-    export TMUX PATH="$tmp/bin:$PATH" SHELL=/bin/sh
+    export TMUX PATH="$tmp/bin:$PATH" SHELL=/bin/sh GUYB_TAB_ASCII=1
     guyb "$@" 2>&1
   )
   if T new-session -d -s base -x 120 -y 30 2>/dev/null; then
@@ -93,7 +135,7 @@ else
 
     out="$(tguyb 'my app')"
     expect_has real-opened "$out" "Opened 'my app'"
-    id="$(win_id 'my app')"
+    id="$(win_id '+ my app')"
     if [ -z "$id" ]; then no "real-window: no window named 'my app'"; else
       expect_eq real-autorename "$(T show-window-options -t "$id" -v automatic-rename)" off
       expect_eq real-allowrename "$(T show-window-options -t "$id" -v allow-rename)" off
@@ -104,18 +146,31 @@ else
     fi
 
     tguyb shuto >/dev/null
-    id="$(win_id shuto)"
+    id="$(win_id '+ shuto')"
     expect_eq real-color-shuto "$(T show-window-options -t "$id" -v window-status-style | tr a-z A-Z)" 'BG=#E06C75,FG=#000000'
-    expect_eq real-color-per-window "$(T show-window-options -t "$(win_id 'my app')" -v window-status-style | tr a-z A-Z)" 'BG=#61AFEF,FG=#000000'
+    expect_eq real-color-per-window "$(T show-window-options -t "$(win_id '+ my app')" -v window-status-style | tr a-z A-Z)" 'BG=#61AFEF,FG=#000000'
 
     # -n and -c escaping: the name and cwd must arrive intact ('#' doubled, trailing ';' escaped)
     for n in 'x;' 'a#b'; do
       tguyb "$n" >/dev/null
-      id="$(win_id "$n")"
+      id="$(win_id "+ $n")"
       if [ -z "$id" ]; then no "real-name '$n': no window with that name"; else
         ok
         expect_eq "real-cwd '$n'" "$(pane_dir "$id")" "$(cd "$tmp/proj/$n" && pwd -P)"
       fi
+    done
+
+    # status hook renames the window ('#' and a trailing ';' arrive intact)
+    for n in 'my app' 'x;' 'a#b'; do
+      id="$(win_id "+ $n")"
+      pane="$(T display -p -t "$id" '#{pane_id}')"
+      sockinfo="$(T display -p '#{socket_path}'),$(T display -p '#{pid}'),0"
+      (
+        unset GUYB_DRYRUN
+        export TMUX="$sockinfo" TMUX_PANE="$pane" GUYB_TAB_NAME="$n" GUYB_TAB_ASCII=1 TMPDIR="$tmp"
+        bash "$hook" waiting </dev/null >/dev/null 2>&1
+      )
+      expect_eq "real-hook '$n'" "$(win_id "? $n")" "$id"
     done
 
     expect_eq real-global-untouched "$(T show-options -g; T show-window-options -g)" "$before"
@@ -136,8 +191,8 @@ else
   zg() { zsh -f -c 'unset TMUX; GUYB_DRYRUN=1 GUYB_ROOT=$1; source $2; shift 2; guyb "$@"' _ "$GUYB_ROOT" "$zl" "$@" 2>&1; }
 
   out="$(zg 'my app')"
-  expect_has zsh-here "$out" 'here: osc0 my app'
-  expect_has zsh-here-env "$out" 'CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 claude /guyb:start'
+  expect_has zsh-here "$out" "here: osc0 $DONE my app"
+  expect_has zsh-here-env "$out" "GUYB_TAB_NAME='my app' CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 claude /guyb:start"
   out="$(zsh -f -c 'GUYB_DRYRUN=1 GUYB_ROOT=$1; source $2; TMUX=/tmp/fake,1,0 guyb "my app"' _ "$GUYB_ROOT" "$zl" 2>&1)"
   expect_has zsh-tmux-new "$out" 'tmux: new-window'
   expect_has zsh-tmux-style "$out" 'bg=#61AFEF,fg=#000000'
