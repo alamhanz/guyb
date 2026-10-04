@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git *)",
+            "if": "Bash(*git*)",
             "shell": "bash",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
           }
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "if": "PowerShell(git *)",
+            "if": "PowerShell(*git*)",
             "shell": "powershell",
             "command": "$h = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }; & $h -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"; exit $LASTEXITCODE"
           }

@@ -344,6 +344,19 @@ expect_eq "readonly reviewer git status" "$(hook guyb:code-reviewer 'git status'
 expect_eq "readonly implementer git add" "$(hook guyb:implementer 'git add .')" 0
 expect_eq "readonly main session git add" "$(printf '{"tool_input":{"command":"git add ."}}' | bash "$ro" >/dev/null 2>&1; echo $?)" 0
 expect_eq "readonly bad json" "$(printf 'not json' | bash "$ro" >/dev/null 2>&1; echo $?)" 0
+expect_eq "readonly chained cd && git add" "$(hook code-reviewer 'cd sub && git add .')" 2
+expect_eq "readonly chained pushd; git commit" "$(hook code-reviewer 'pushd sub; git commit -m x')" 2
+expect_eq "readonly piped echo | git apply" "$(hook code-reviewer 'echo hi | git apply')" 2
+expect_eq "readonly chained true; git push" "$(hook code-reviewer 'true; git push')" 2
+expect_eq "readonly chained newline git rm" "$(hook code-reviewer 'ls\ngit rm x')" 2
+expect_eq "readonly chained git -C dir reset" "$(hook code-reviewer 'cd a && git -C b reset --hard')" 2
+expect_eq "readonly git revert" "$(hook code-reviewer 'git revert HEAD')" 2
+expect_eq "readonly git am" "$(hook code-reviewer 'git am p.patch')" 2
+expect_eq "readonly chained read-only git" "$(hook code-reviewer 'cd sub && git log -1 | head')" 0
+expect_eq "readonly chained no git" "$(hook code-reviewer 'cd sub && ls')" 0
+for sel in 'Bash(*git*)' 'PowerShell(*git*)'; do
+  expect_eq "hooks.json readonly filter $sel" "$(grep -cF "\"if\": \"$sel\"" "$root/plugins/guyb/hooks/hooks.json")" 1
+done
 
 echo "smoke: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

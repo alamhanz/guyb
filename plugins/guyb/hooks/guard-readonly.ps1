@@ -1,5 +1,6 @@
 # guyb PreToolUse guard: stop read-only subagents from running git write commands.
 # PowerShell twin of guard-readonly.sh: keep the verb list and agent list in both files in sync.
+# The whole command string is scanned, so git after cd/&&/;/|/newline is seen (hooks.json filters on *git*).
 # Fail open: exit 2 only when the hook input names a read-only guyb subagent AND the command
 # is a git write verb. Missing field, parse trouble, or any other agent: exit 0.
 #
@@ -22,7 +23,7 @@ if (-not $cmd) { exit 0 }
 
 # Write verbs always blocked; stash, branch, tag, worktree are blocked only in their write forms
 # (stash list/show, branch/tag listing and worktree list stay allowed).
-$verbs = 'add|commit|reset|checkout|switch|clean|restore|rebase|merge|push|rm|mv|apply|cherry-pick|pull|fetch'
+$verbs = 'add|commit|reset|checkout|switch|clean|restore|rebase|merge|push|rm|mv|apply|cherry-pick|pull|fetch|revert|am'
 $opts = '(-c\s+\S+|-C\s+\S+|--[a-z-]+(=\S*)?)'
 $pre = "(^|[^\w.-])git(\.exe)?(\s+$opts)*\s+"
 $patterns = @(

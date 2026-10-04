@@ -344,6 +344,20 @@ try {
   Expect-Eq 'readonly implementer git add' (Hook 'guyb:implementer' 'git add .') 0
   Expect-Eq 'readonly main session git add' (Run-Child $ro @() '{"tool_input":{"command":"git add ."}}')[0] 0
   Expect-Eq 'readonly bad json' (Run-Child $ro @() 'not json')[0] 0
+  Expect-Eq 'readonly chained cd && git add' (Hook 'code-reviewer' 'cd sub && git add .') 2
+  Expect-Eq 'readonly chained pushd; git commit' (Hook 'code-reviewer' 'pushd sub; git commit -m x') 2
+  Expect-Eq 'readonly piped echo | git apply' (Hook 'code-reviewer' 'echo hi | git apply') 2
+  Expect-Eq 'readonly chained true; git push' (Hook 'code-reviewer' 'true; git push') 2
+  Expect-Eq 'readonly chained newline git rm' (Hook 'code-reviewer' 'ls\ngit rm x') 2
+  Expect-Eq 'readonly chained git -C dir reset' (Hook 'code-reviewer' 'cd a && git -C b reset --hard') 2
+  Expect-Eq 'readonly git revert' (Hook 'code-reviewer' 'git revert HEAD') 2
+  Expect-Eq 'readonly git am' (Hook 'code-reviewer' 'git am p.patch') 2
+  Expect-Eq 'readonly chained read-only git' (Hook 'code-reviewer' 'cd sub && git log -1 | head') 0
+  Expect-Eq 'readonly chained no git' (Hook 'code-reviewer' 'cd sub && ls') 0
+  $hj = Get-Content -Raw -LiteralPath (Join-Path $root 'plugins/guyb/hooks/hooks.json')
+  foreach ($sel in 'Bash(*git*)', 'PowerShell(*git*)') {
+    Expect-Eq "hooks.json readonly filter $sel" ($hj.Contains('"if": "' + $sel + '"')) $true
+  }
 } finally {
   Set-Location -LiteralPath $root
   Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
