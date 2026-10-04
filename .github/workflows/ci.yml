@@ -27,10 +27,43 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+      - name: Install tmux and zsh (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y tmux zsh
+      - name: Install tmux (macOS; zsh is /bin/zsh)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: brew install tmux || brew install tmux
+      - name: Put /bin first so nested bash is 3.2 (macOS)
+        if: runner.os == 'macOS'
+        run: echo /bin >> "$GITHUB_PATH"
+      - name: Assert bash 3.2 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          test "$(command -v bash)" = /bin/bash
+          /bin/bash -c 'case "$BASH_VERSION" in 3.2*) exit 0;; *) echo "bash $BASH_VERSION"; exit 1;; esac'
+      - name: Env summary (informational)
+        run: |
+          uname -a || true
+          bash --version | head -1 || true
+          docker --version || true
+          python3 --version || true
+          node --version || true
+          tmux -V || true
+          zsh --version || true
       - name: Lint
         run: /bin/bash tests/lint.sh
       - name: Smoke
         run: /bin/bash tests/smoke.sh
+      - name: Tabs (launcher colour and title lock; real tmux and zsh)
+        run: /bin/bash tests/tabs.sh
+        env:
+          GUYB_REQUIRE_TMUX: ${{ runner.os != 'Windows' && '1' || '' }}
+          GUYB_REQUIRE_ZSH: ${{ runner.os != 'Windows' && '1' || '' }}
+      - name: Status line
+        run: /bin/bash tests/statusline.sh
 
   # PowerShell 7 on all three OSes
   pwsh:
@@ -50,6 +83,10 @@ jobs:
         run: ./tests/lint.ps1
       - name: Smoke
         run: ./tests/smoke.ps1
+      - name: Tabs (launcher colour and title lock)
+        run: ./tests/tabs.ps1
+      - name: Status line
+        run: ./tests/statusline.ps1
       - name: Permission rules
         run: ./tests/permissions.ps1
 
@@ -67,6 +104,10 @@ jobs:
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/lint.ps1
       - name: Smoke
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/smoke.ps1
+      - name: Tabs (launcher colour and title lock)
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/tabs.ps1
+      - name: Status line
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/statusline.ps1
       - name: Permission rules
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/permissions.ps1
 

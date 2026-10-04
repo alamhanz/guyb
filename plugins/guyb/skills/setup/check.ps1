@@ -14,6 +14,30 @@ function Add-Check($id, $status, $blocking, $detail, $fix = '', $fixBy = 'none')
 }
 function Has-Cmd($name) { [bool](Get-Command $name -ErrorAction SilentlyContinue) }
 function Run($exe, [string[]]$a) { $o = & $exe @a 2>$null | Out-String; [pscustomobject]@{ Code = $LASTEXITCODE; Out = $o.Trim() } }
+# Bounded probe of a known tool from PATH (works on PS 5.1): never hangs, stderr discarded. Code -1 = not found or failed to start.
+function Probe($exe, [string]$argStr, [int]$ms = 3000) {
+    $r = [pscustomobject]@{ Code = -1; Out = ''; TimedOut = $false }
+    $cmd = Get-Command $exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $cmd) { return $r }
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $cmd.Source; $psi.Arguments = $argStr
+        $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+        $p = [System.Diagnostics.Process]::Start($psi)
+        $so = $p.StandardOutput.ReadToEndAsync(); $null = $p.StandardError.ReadToEndAsync()
+        if ($p.WaitForExit($ms)) {
+            $p.WaitForExit(); $r.Code = $p.ExitCode
+            if ($so.Wait(1000)) { $r.Out = ([string]$so.Result).Trim() }
+        } else {
+            $r.TimedOut = $true
+            # kill the whole tree: an orphaned grandchild would keep our stdout open (Windows)
+            if ($env:OS -eq 'Windows_NT') { & taskkill /PID $p.Id /T /F *> $null }
+            try { $p.Kill($true) } catch { try { $p.Kill() } catch { } }
+        }
+    } catch { }
+    return $r
+}
 function Read-Json($p) { if (Test-Path -LiteralPath $p) { try { Get-Content -LiteralPath $p -Raw | ConvertFrom-Json } catch { $null } } }
 
 # Profile files that may hold the guyb lines (PowerShell 7 and Windows PowerShell)
@@ -118,6 +142,61 @@ else {
 
 if (Test-Path -LiteralPath $profileMd) { Add-Check 'profile' 'ok' $false 'profile.md exists' }
 else { Add-Check 'profile' 'warn' $false 'no ~/.claude/guyb/profile.md' '/guyb:setup' 'user' }
+
+# --- toolchain (non-blocking, read-only; nothing is installed) ---
+$onMac = [bool]($PSVersionTable.PSVersion.Major -ge 6 -and $IsMacOS)
+$ctr = ''
+if (Has-Cmd docker) { $ctr = 'docker' } elseif (Has-Cmd podman) { $ctr = 'podman' }
+if ($ctr) {
+    $cv = Probe $ctr '--version'
+    $ver = if ($cv.Out -match '(\d+\.\d+(?:\.\d+)?)') { $Matches[1] } else { 'unknown' }
+    if ($ctr -eq 'docker') { $d = Probe 'docker' 'info --format "{{.ServerVersion}}"' } else { $d = Probe 'podman' 'info --format "{{.Version.Version}}"' }
+    if ($d.Code -eq 0 -and $d.Out) { Add-Check 'container' 'ok' $false "$ctr $ver, daemon running" }
+    else {
+        $why = if ($d.TimedOut) { 'not responding' } else { 'not running' }
+        $cfix = if ($ctr -eq 'podman') { 'podman machine start' } elseif ($onWin -or $onMac) { 'Start Docker Desktop' } else { 'sudo systemctl start docker' }
+        Add-Check 'container' 'warn' $false "$ctr $ver, daemon $why" $cfix 'user'
+    }
+} else {
+    $scanRoot = if ($root) { $root } else { $StartDir }
+    $nCont = 0
+    if ($scanRoot -and (Test-Path -LiteralPath $scanRoot -PathType Container)) {
+        $dirs = @(Get-ChildItem -LiteralPath $scanRoot -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' -and $_.Name -ne 'node_modules' } | Select-Object -First 200)
+        foreach ($dd in $dirs) {
+            foreach ($f in 'Dockerfile', 'compose.yaml', 'compose.yml', 'docker-compose.yml', 'docker-compose.yaml') {
+                if (Test-Path -LiteralPath (Join-Path $dd.FullName $f) -PathType Leaf) { $nCont++; break }
+            }
+        }
+    }
+    if ($nCont -gt 0) {
+        $cfix = if ($onWin) { 'winget install Docker.DockerDesktop (needs admin and WSL2; license terms apply to larger companies; alternative: podman)' }
+                elseif ($onMac) { 'brew install --cask docker (or brew install podman)' }
+                else { 'sudo apt install docker.io docker-compose-v2 (or sudo apt install podman)' }
+        Add-Check 'container' 'warn' $false "docker/podman not installed; $nCont project folder(s) use containers" $cfix 'user'
+    } else { Add-Check 'container' 'skip' $false 'docker/podman not installed; no container projects found' }
+}
+
+$py = $null
+foreach ($cand in @(@('python3', '--version'), @('python', '--version'), @('py', '-3 --version'))) {
+    $pr = Probe $cand[0] $cand[1]
+    if ($pr.Code -eq 0 -and $pr.Out -match '^Python (\d+\.\d+(?:\.\d+)?)') { $py = $Matches[1]; break }
+}
+if ($py) { Add-Check 'python' 'ok' $false "python $py" }
+else { Add-Check 'python' 'skip' $false 'python not installed' 'uv python install <version>' 'user' }
+
+$nv = Probe 'node' '--version'
+if ($nv.Code -eq 0 -and $nv.Out -match '^v?(\d+\.\d+(?:\.\d+)?)') { Add-Check 'node' 'ok' $false "node $($Matches[1])" }
+else {
+    $nfix = if ($onWin) { 'winget install Schniz.fnm' } elseif ($onMac) { 'brew install fnm' } else { 'curl -fsSL https://fnm.vercel.app/install | bash' }
+    Add-Check 'node' 'skip' $false 'node not installed' $nfix 'user'
+}
+
+$uvp = Probe 'uv' '--version'
+if ($uvp.Code -eq 0 -and $uvp.Out -match '(\d+\.\d+(?:\.\d+)?)') { Add-Check 'uv' 'ok' $false "uv $($Matches[1])" }
+else {
+    $ufix = if ($onWin) { 'winget install astral-sh.uv' } elseif ($onMac) { 'brew install uv' } else { 'curl -LsSf https://astral.sh/uv/install.sh | sh' }
+    Add-Check 'uv' 'skip' $false 'uv not installed' $ufix 'user'
+}
 
 $blockFail = @($checks | Where-Object { $_.blocking -and $_.status -eq 'fail' }).Count
 [ordered]@{

@@ -13,7 +13,8 @@ plugins/guyb/
   hooks/                          hooks.json, orchestrator.md (playbook), guard-secrets.*, guard-readonly.*
 scripts/                          install.ps1/.sh, launch.ps1/.sh (the `guyb` command)
 settings/                         recommended-permissions.json
-tests/                            lint.*, smoke.*, permissions.ps1 + permission-cases.json
+plugins/guyb/statusline/          guyb-status.sh/.ps1 (optional status line; setup copies them to ~/.claude/guyb/)
+tests/                            lint.*, smoke.*, tabs.*, statusline.*, permissions.ps1 + permission-cases.json
 .github/workflows/ci.yml          CI: runs the tests/ scripts on ubuntu, macOS, and Windows
 docs/                             README images (logo, icon, how-guyb-works.svg)
 ```
@@ -30,6 +31,7 @@ docs/                             README images (logo, icon, how-guyb-works.svg)
 3. Validate: `claude plugin validate ./plugins/guyb`.
 4. Run helper scripts directly: `skills/setup/check.ps1` / `check.sh` (setup check JSON), `skills/start/brief.ps1` / `brief.sh` (briefing), and the launchers with `guyb -List` / `guyb --list`.
 5. Test scripts on every shell you touched: PowerShell 7, Windows PowerShell 5.1, and bash (macOS/Linux or Git Bash).
+6. This repo keeps its own STATE.md and pipeline files in `.claude/guyb/`, like any project.
 
 ## Run the checks locally
 
@@ -37,9 +39,13 @@ CI runs these same scripts. They write nothing in the repo (smoke tests use a te
 
 ```
 bash tests/lint.sh                 # bash -n, JSON/SVG validity, ASCII, line endings (sh LF, ps1 CRLF)
-bash tests/smoke.sh                # brief.sh, check.sh, guard hooks on throwaway repos
+bash tests/smoke.sh                # brief.sh (incl. migration and cleanup detection), check.sh, guard hooks on throwaway repos
+bash tests/tabs.sh                 # launcher colour table, dry-run tab/tmux commands, title sanitising
+bash tests/statusline.sh           # status line fixtures (registries, branch, worktree, paths)
 pwsh -File tests/lint.ps1          # ps1 parse, same file rules
 pwsh -File tests/smoke.ps1         # brief.ps1, check.ps1, guard hooks
+pwsh -File tests/tabs.ps1          # same as tabs.sh
+pwsh -File tests/statusline.ps1    # same as statusline.sh
 pwsh -File tests/permissions.ps1   # settings/recommended-permissions.json vs tests/permission-cases.json
 ```
 

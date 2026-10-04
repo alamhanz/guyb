@@ -1,3 +1,4 @@
+<!-- guyb:state -->
 # guyb - State of the Project
 
 ## Overview
@@ -12,7 +13,7 @@
 - **Version**: 0.7.0 (plugins/guyb/.claude-plugin/plugin.json)
 
 ## Versions
-- **0.7.0**: GitHub Actions CI (ubuntu/macos/windows; lint, smoke, permission tests, optional plugin validate), PowerShell secrets guard, read-only agent guard hook + prompt rules, brief flags outdated plugin and STATE.md PR drift, agent reports in .claude/pipeline/reports/, merge is the user's step, option D brand (g> monogram, black + phosphor green)
+- **0.7.0**: GitHub Actions CI (ubuntu/macos/windows; lint, smoke, permission tests, optional plugin validate), PowerShell secrets guard, read-only agent guard hook + prompt rules, brief flags outdated plugin and STATE.md PR drift, agent reports in .claude/pipeline/reports/, merge is the user's step, new brand: "flock in motion" mark (five dots in a V, black + phosphor green)
 - **0.6.0** (PR #7): `max_parallel: N` in project `.claude/CLAUDE.md` or `~/.claude/guyb/profile.md`; cross-platform script fixes
 - **0.5.0** (PR #5): natural-language activation, setup check, cost rules
 - **0.4.0** (PR #4): root launcher tabs, delegation by default, intake via architect, question log

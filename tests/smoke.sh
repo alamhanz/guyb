@@ -44,7 +44,7 @@ chmod +x "$stub/gh"
 export PATH="$stub:$PATH"
 
 make_fixture() { # dir
-  mkdir -p "$1/.claude"
+  mkdir -p "$1/.claude/guyb"
   w=$(win "$1")
   git -C "$w" init -q 2>/dev/null
   git -C "$w" config user.name smoke
@@ -52,7 +52,7 @@ make_fixture() { # dir
   git -C "$w" config commit.gpgsign false
   printf '# fixture\n' > "$1/README.md"
   printf '# fixture\r\n\r\nmax_parallel: 3\r\n' > "$1/.claude/CLAUDE.md"
-  printf '# State\r\n\r\n## Next up\r\n- ship the thing\r\n\r\n## Open issues\r\n- PR #7 awaiting review\r\n- flaky test\r\n' > "$1/.claude/STATE.md"
+  printf '# State\r\n\r\n## Next up\r\n- ship the thing\r\n\r\n## Open issues\r\n- PR #7 awaiting review\r\n- flaky test\r\n' > "$1/.claude/guyb/STATE.md"
   git -C "$w" add -A >/dev/null 2>&1
   git -C "$w" commit -q -m init >/dev/null 2>&1
 }
@@ -109,6 +109,206 @@ out=$(GH_STUB_STATE=MERGED bash "$brief" "$(win "$a")" 2>&1)
 expect_has "drift MERGED" "$out" "STATE.md drift: PR #7 is MERGED - update STATE.md"
 out=$(GH_STUB_STATE=OPEN bash "$brief" "$(win "$a")" 2>&1)
 expect_lacks "drift OPEN" "$out" "STATE.md drift"
+
+# Fixture helpers for migration and cleanup cases (bash 3.2, BSD touch -t for mtimes).
+gen_lines() { awk -v n="$1" -v p="$2" 'BEGIN { for (i = 1; i <= n; i++) print p " " i }'; } # count prefix
+gen_table() { # file header count id-prefix status
+  { printf '%s\n|---|\n' "$2"; awk -v n="$3" -v p="$4" -v s="$5" 'BEGIN { for (i = 1; i <= n; i++) print "| " p i " | x-1 | q | no | a | " s " |" }'; } > "$1"
+}
+RUNHDR='| ID | Agent | Model | Task | Wave | After | Status | Started | Tokens |'
+runrow() { printf '| %s | implementer | sonnet | t | 1 | - | %s | %s | 1k |\n' "$1" "$2" "$3"; } # id status date
+GUYB_OLD_STATE='# State\n\n## Next up\n- OLD-NEXT\n\n## Open issues\n- old issue\n\n## Decisions\n- d\n\n## Recent changes\n- c\n'
+today=$(date +%Y-%m-%d)
+
+echo "brief.sh migration detection"
+lg="$tmp/legacy"; make_fixture "$lg"
+mkdir -p "$lg/.claude/pipeline"
+mv "$lg/.claude/guyb/STATE.md" "$lg/.claude/STATE.md"; rmdir "$lg/.claude/guyb"
+printf "$GUYB_OLD_STATE" > "$lg/.claude/STATE.md"
+{ echo "$RUNHDR"; echo '|---|'; runrow x-1 running "$today"; } > "$lg/.claude/pipeline/runs.md"
+out=$(bash "$brief" "$(win "$lg")" 2>&1)
+expect_has "migrate legacy" "$out" "migrate: move .claude/STATE.md, .claude/pipeline/ to .claude/guyb/"
+expect_lacks "migrate legacy" "$out" "conflict:"
+expect_has "migrate legacy fallback" "$out" "STATE.md Next up:"
+expect_has "migrate legacy fallback" "$out" "OLD-NEXT"
+expect_has "migrate legacy runs" "$out" "unfinished runs (1):"
+expect_has "migrate legacy gitignore" "$out" "gitignore: .claude/guyb/pipeline/ not ignored"
+printf '.claude/pipeline/\n' > "$lg/.gitignore"
+out=$(bash "$brief" "$(win "$lg")" 2>&1)
+expect_lacks "legacy gitignore accepted while legacy pipe is used" "$out" "gitignore:"
+printf '<!-- guyb:state -->\n# State\n' > "$lg/.claude/STATE.md"
+out=$(bash "$brief" "$(win "$lg")" 2>&1)
+expect_has "migrate marker file" "$out" "migrate: move .claude/STATE.md, .claude/pipeline/ to .claude/guyb/"
+printf '\357\273\277<!-- guyb:state -->\n# State\n' > "$lg/.claude/STATE.md"
+out=$(bash "$brief" "$(win "$lg")" 2>&1)
+expect_has "migrate BOM before marker" "$out" "migrate: move .claude/STATE.md, .claude/pipeline/ to .claude/guyb/"
+printf '# Project\r\n\r\n## Overview\r\n\r\n## Next Up\r\n- TC-NEXT\r\n\r\n## Open Issues\r\n\r\n## Last Updated\r\n2026-01-01\r\n\r\n## Decisions\r\n\r\n## Recent Changes\r\n' > "$lg/.claude/STATE.md"
+out=$(bash "$brief" "$(win "$lg")" 2>&1)
+expect_has "migrate real-world title-case headings" "$out" "migrate: move .claude/STATE.md, .claude/pipeline/ to .claude/guyb/"
+expect_has "migrate real-world headings read" "$out" "TC-NEXT"
+printf '# Notes\n\n## Next up\n\n## Open issues\n\n## Decisions\n- FOREIGN3\n' > "$lg/.claude/STATE.md"
+out=$(bash "$brief" "$(win "$lg")" 2>&1)
+expect_lacks "foreign file with 3 of 4 headings" "$out" "migrate: move .claude/STATE.md"
+expect_lacks "foreign file with 3 of 4 headings" "$out" "FOREIGN3"
+printf '# Notes from another tool\n\n## Next up\n- FOREIGN-NEXT\n' > "$lg/.claude/STATE.md"
+out=$(bash "$brief" "$(win "$lg")" 2>&1)
+expect_has "foreign STATE.md not moved" "$out" "migrate: move .claude/pipeline/ to .claude/guyb/"
+expect_lacks "foreign STATE.md not moved" "$out" "migrate: move .claude/STATE.md"
+expect_lacks "foreign STATE.md not read" "$out" "FOREIGN-NEXT"
+expect_has "foreign STATE.md not read" "$out" "STATE.md: missing"
+out=$(bash "$brief" "$(win "$a")" 2>&1)
+expect_lacks "migrate new-only" "$out" "migrate:"
+printf "$GUYB_OLD_STATE" > "$a/.claude/STATE.md"
+out=$(bash "$brief" "$(win "$a")" 2>&1)
+expect_has "migrate both STATE" "$out" "conflict: .claude/STATE.md and .claude/guyb/STATE.md both exist"
+expect_lacks "migrate both STATE" "$out" "OLD-NEXT"
+expect_has "migrate both STATE" "$out" "ship the thing"
+printf '# Notes from another tool\n' > "$a/.claude/STATE.md"
+out=$(bash "$brief" "$(win "$a")" 2>&1)
+expect_lacks "foreign STATE.md beside new one" "$out" "migrate:"
+rm -f "$a/.claude/STATE.md"
+mkdir -p "$a/.claude/pipeline" "$a/.claude/guyb/pipeline"
+out=$(bash "$brief" "$(win "$a")" 2>&1)
+expect_has "migrate both pipeline" "$out" "migrate: conflict: .claude/pipeline/ and .claude/guyb/pipeline/ both exist"
+rmdir "$a/.claude/pipeline"
+
+echo "brief.sh gitignore check"
+out=$(bash "$brief" "$(win "$a")" 2>&1)
+expect_has "gitignore missing" "$out" "gitignore: .claude/guyb/pipeline/ not ignored"
+for gi in '.claude/guyb/pipeline/' '/.claude/guyb/pipeline'; do
+  printf 'node_modules/\n%s\n' "$gi" > "$a/.gitignore"
+  out=$(bash "$brief" "$(win "$a")" 2>&1)
+  expect_lacks "gitignore $gi" "$out" "gitignore:"
+  expect_lacks "gitignore $gi" "$out" "warn:"
+done
+printf '.claude/\n' > "$a/.gitignore"
+out=$(bash "$brief" "$(win "$a")" 2>&1)
+expect_has "gitignore .claude/" "$out" "warn: .gitignore ignores .claude/ - guyb STATE.md will not be committed"
+expect_lacks "gitignore .claude/" "$out" "gitignore:"
+rm -f "$a/.gitignore"; rmdir "$a/.claude/guyb/pipeline"
+
+echo "brief.sh cleanup suggestions"
+mk_clean() { # dir claude-lines state-lines registry-rows
+  make_fixture "$1"
+  gen_lines "$2" "line" > "$1/.claude/CLAUDE.md"
+  { printf '# State\n\n## Next up\n- x\n\n## Open issues\n- y\n'; gen_lines "$(($3 - 7))" "filler"; } > "$1/.claude/guyb/STATE.md"
+  p="$1/.claude/guyb/pipeline"; mkdir -p "$p/progress" "$p/reports" "$p/plans" "$p/brand/x-1"
+  { echo "$RUNHDR"; echo '|---|'; runrow x-1 done 2020-01-01; runrow x-2 running "$today"; awk -v n="$4" 'BEGIN { for (i = 1; i <= n - 2; i++) printf "| f-%d | implementer | sonnet | t | 1 | - | done | 2020-01-01 | 1k |\n", i }'; } > "$p/runs.md"
+  gen_table "$p/questions.md" '| ID | Run | Question | Blocking | Assumed | Status |' "$4" Q answered
+  : > "$p/progress/x-1.md"; : > "$p/progress/x-2.md"; : > "$p/progress/x-3.md"; : > "$p/brand/x-1/a.svg"
+  touch -t 202001010000 "$p/progress/x-1.md" "$p/progress/x-2.md" "$p/brand/x-1/a.svg"
+}
+snap() { { find "$1" | sort; git -C "$(win "$1")" status --short 2>/dev/null; }; }
+ov="$tmp/over"; mk_clean "$ov" 201 301 201
+before=$(snap "$ov")
+out=$(bash "$brief" "$(win "$ov")" 2>&1)
+after=$(snap "$ov")
+expect_has "cleanup over" "$out" "cleanup: CLAUDE.md 201 lines (>200); STATE.md 301 lines (>300); runs.md 201 rows (>200); questions.md 201 rows (>200); 2 pipeline files older than 14 days"
+expect_lacks "cleanup over" "$out" "overdue:"
+expect_eq "brief leaves fixture unchanged" "$after" "$before"
+un="$tmp/under"; mk_clean "$un" 200 300 200
+rm -f "$un/.claude/guyb/pipeline/progress/x-1.md" "$un/.claude/guyb/pipeline/brand/x-1/a.svg"
+out=$(bash "$brief" "$(win "$un")" 2>&1)
+expect_lacks "cleanup under limits" "$out" "cleanup:"
+printf '# fixture\n\n- cleanup_state_lines: 10\ncleanup_days: 0\ncleanup_rows: abc\n' > "$un/.claude/CLAUDE.md"
+out=$(bash "$brief" "$(win "$un")" 2>&1)
+expect_has "cleanup override" "$out" "cleanup: STATE.md 300 lines (>10)"
+expect_lacks "cleanup invalid rows ignored" "$out" "rows"
+expect_lacks "cleanup invalid days ignored" "$out" "older than"
+mkdir -p "$home/.claude/guyb"; printf 'cleanup_days: 3\n' > "$home/.claude/guyb/profile.md"
+touch -t 202001010000 "$un/.claude/guyb/pipeline/progress/x-3.md"
+out=$(bash "$brief" "$(win "$un")" 2>&1)
+expect_has "cleanup profile days" "$out" "1 pipeline files older than 3 days"
+rm -f "$home/.claude/guyb/profile.md"
+lc="$tmp/legclean"; make_fixture "$lc"
+mkdir -p "$lc/.claude/pipeline/progress"; : > "$lc/.claude/pipeline/progress/z-9.md"
+touch -t 202001010000 "$lc/.claude/pipeline/progress/z-9.md"
+out=$(bash "$brief" "$(win "$lc")" 2>&1)
+expect_has "cleanup stale in legacy pipeline" "$out" "cleanup: 1 pipeline files older than 14 days"
+
+echo "brief.sh overdue items"
+od="$tmp/overdue"; make_fixture "$od"; mkdir -p "$od/.claude/guyb/pipeline"
+{ echo "$RUNHDR"; echo '|---|'; runrow y-1 running 2020-01-01; runrow y-2 queued "2020-01-02 10:30"; runrow y-3 done 2020-01-01; runrow y-4 running "$today"; runrow y-5 blocked 2020-02-01
+  runrow y-6 running 2020-03-01; runrow y-7 running 2020-03-02; } > "$od/.claude/guyb/pipeline/runs.md"
+{ echo '| ID | Run | Question | Blocking | Assumed | Status |'; echo '|---|---|---|---|---|---|'
+  echo '| Q1 | y-1 | old open | no | a | open |'; echo '| Q2 | y-4 | fresh open | no | a | open |'; echo '| Q3 | y-1 | old answered | no | a | answered |'; } > "$od/.claude/guyb/pipeline/questions.md"
+out=$(bash "$brief" "$(win "$od")" 2>&1)
+expect_has "overdue list" "$out" "overdue: y-1, y-2, y-5, y-6, y-7, +1 more"
+{ echo "$RUNHDR"; echo '|---|'; runrow y-1 running 2020-01-01; runrow y-3 done 2020-01-01; } > "$od/.claude/guyb/pipeline/runs.md"
+out=$(bash "$brief" "$(win "$od")" 2>&1)
+expect_has "overdue runs and questions" "$out" "overdue: y-1, Q1"
+
+echo "brief.sh registry formats and run ids"
+rg="$tmp/regfmt"; make_fixture "$rg"; rp="$rg/.claude/guyb/pipeline"; mkdir -p "$rp/progress"
+{ echo "$RUNHDR"; echo '|---|'; runrow mien-dev-3 running 2020-01-01; runrow r-6b running "$today"; runrow r-6 done 2020-01-01; } > "$rp/runs.md"
+{ echo '| Q | Run | Agent | Question | Blocking | Assumed | Status | Answer |'; echo '|---|---|---|---|---|---|---|---|'
+  echo '| Q1 | mien-dev-3 | architect | old open | no | a | open | |'; echo '| Q2 | r-6b | architect | fresh | no | a | open | |'; } > "$rp/questions.md"
+out=$(bash "$brief" "$(win "$rg")" 2>&1)
+expect_has "overdue hyphenated id, Q-format questions" "$out" "overdue: mien-dev-3, Q1"
+printf '| ID | Run | Question | Blocking | Assumed | Status |\n|---|---|---|---|---|---|\n| Q1 | mien-dev-3 | old open | no | a | open |\n' > "$rp/questions.md"
+out=$(bash "$brief" "$(win "$rg")" 2>&1)
+expect_has "overdue ID-format questions" "$out" "overdue: mien-dev-3, Q1"
+: > "$rp/progress/r-6b.md"; : > "$rp/progress/r-6.md"; : > "$rp/progress/mien-dev-3-notes.md"
+touch -t 202001010000 "$rp/progress/r-6b.md" "$rp/progress/r-6.md" "$rp/progress/mien-dev-3-notes.md"
+out=$(bash "$brief" "$(win "$rg")" 2>&1)
+expect_has "stale: r-6b and prefix ids active, r-6 done" "$out" "cleanup: 1 pipeline files older than 14 days"
+printf '.Claude/guyb/pipeline/\n' > "$rg/.gitignore"
+out=$(bash "$brief" "$(win "$rg")" 2>&1)
+expect_has "gitignore is case-sensitive" "$out" "gitignore: .claude/guyb/pipeline/ not ignored"
+
+echo "brief.sh and check.sh toolchain detection"
+ep="$tmp/envpy"; mkdir -p "$ep"; printf '99.1\r\n' > "$ep/.python-version"
+out=$(bash "$brief" "$(win "$ep")" 2>&1)
+expect_has "env python" "$out" "env: python wants 99.1 (.python-version), found"
+expect_has "env python" "$out" ".venv missing"
+mkdir -p "$ep/.venv"; out=$(bash "$brief" "$(win "$ep")" 2>&1)
+expect_lacks "env python venv present" "$out" ".venv missing"
+en="$tmp/envnode"; mkdir -p "$en"; printf '{"name":"x"}\n' > "$en/package.json"; : > "$en/pnpm-lock.yaml"
+out=$(bash "$brief" "$(win "$en")" 2>&1)
+expect_has "env node" "$out" "node_modules missing (pnpm)"
+ee="$tmp/envempty"; mkdir -p "$ee"
+out=$(bash "$brief" "$(win "$ee")" 2>&1)
+expect_lacks "env empty folder" "$out" "env:"
+ed="$tmp/envdocker"; mkdir -p "$ed"; : > "$ed/compose.yaml"
+mkdir -p "$tmp/dfail" "$tmp/dsleep"
+printf '#!/bin/sh\nexit 1\n' > "$tmp/dfail/docker"; printf '#!/bin/sh\nsleep 30 &\nsleep 30\n' > "$tmp/dsleep/docker"
+chmod +x "$tmp/dfail/docker" "$tmp/dsleep/docker"
+# Run twice: as shipped, and with timeout/gtimeout hidden (stock macOS) to exercise the poll-and-kill fallback.
+sed -e 's/command -v timeout /command -v no-such-timeout /' -e 's/command -v gtimeout /command -v no-such-gtimeout /' "$brief" > "$tmp/brief-notmo.sh"
+for bv in "$brief" "$tmp/brief-notmo.sh"; do
+  bn=$(basename "$bv")
+  out=$(PATH="$tmp/dfail:$PATH" bash "$bv" "$(win "$ed")" 2>&1)
+  expect_has "env docker down $bn" "$out" "env: docker daemon not running (compose.yaml)"
+  t0=$SECONDS; out=$(PATH="$tmp/dsleep:$PATH" bash "$bv" "$(win "$ed")" 2>&1); dt=$((SECONDS - t0))
+  expect_has "env docker hung $bn" "$out" "env: docker daemon not responding (compose.yaml)"
+  if [ "$dt" -lt 10 ]; then ok; else no "env docker hung $bn: brief took ${dt}s"; fi
+done
+if ! command -v docker >/dev/null 2>&1 && ! command -v podman >/dev/null 2>&1; then
+  out=$(bash "$brief" "$(win "$ed")" 2>&1)
+  expect_has "env docker missing" "$out" "env: docker not installed (compose.yaml)"
+  cr="$tmp/croot"; mkdir -p "$cr/svc"; : > "$cr/svc/Dockerfile"
+  GUYB_ROOT="$(win "$cr")" bash "$check" > "$tmp/check2.json" 2>/dev/null
+  expect_has "check container" "$(cat "$tmp/check2.json")" '"id":"container","status":"warn"'
+  expect_has "check container" "$(cat "$tmp/check2.json")" '"fix":"'
+fi
+bash "$check" "$(win "$ee")" > "$tmp/check3.json" 2>/dev/null
+if json_ok "$(win "$tmp/check3.json")"; then ok; else no "check toolchain: output is not valid JSON"; fi
+for id in container python node uv; do expect_has "check $id" "$(cat "$tmp/check3.json")" "\"id\":\"$id\""; done
+expect_lacks "check toolchain" "$(cat "$tmp/check3.json")" '"blocking":true,"detail":"python'
+
+# every version probe is capped too: a hanging node must not stall check.sh or brief.sh (with and without timeout)
+mkdir -p "$tmp/nsleep"; printf '#!/bin/sh\nsleep 30 &\nsleep 30\n' > "$tmp/nsleep/node"; chmod +x "$tmp/nsleep/node"
+sed -e 's/has timeout \&\& tmo=timeout/has no-such-timeout \&\& tmo=timeout/' -e 's/has gtimeout \&\& /has no-such-gtimeout \&\& /' "$check" > "$tmp/check-notmo.sh"
+en2="$tmp/envnode2"; mkdir -p "$en2"; printf '{"name":"x"}\n' > "$en2/package.json"
+for cv in "$check" "$tmp/check-notmo.sh"; do
+  t0=$SECONDS; PATH="$tmp/nsleep:$PATH" bash "$cv" "$(win "$ee")" > "$tmp/check4.json" 2>/dev/null; dt=$((SECONDS - t0))
+  if [ "$dt" -lt 25 ]; then ok; else no "check hung node $(basename "$cv"): took ${dt}s"; fi
+done
+for bv in "$brief" "$tmp/brief-notmo.sh"; do
+  t0=$SECONDS; out=$(PATH="$tmp/nsleep:$PATH" bash "$bv" "$(win "$en2")" 2>&1); dt=$((SECONDS - t0))
+  expect_has "env hung node $(basename "$bv")" "$out" "node not installed"
+  if [ "$dt" -lt 12 ]; then ok; else no "brief hung node $(basename "$bv"): took ${dt}s"; fi
+done
 
 echo "guard-secrets.sh"
 g="$tmp/guarded"; make_fixture "$g"

@@ -9,7 +9,7 @@ You review code; you never edit files, except the progress file the orchestrator
 
 ## Inputs
 - The change set: `git diff`, `git diff --staged`, or `git diff <base>...HEAD`.
-- The plan the orchestrator points you to (`.claude/pipeline/plans/<run-id>.md`, or `.claude/pipeline/plan.md`) if it exists - understand what was *supposed* to be built first.
+- The plan the orchestrator points you to (`.claude/guyb/pipeline/plans/<run-id>.md`, or `.claude/guyb/pipeline/plan.md`) if it exists - understand what was *supposed* to be built first.
 - Start from the diff. Read surrounding code only where needed to judge correctness, not whole files.
 
 ## Severity
@@ -32,5 +32,5 @@ Tests: ran <cmd> -> <result>  (run them if cheap)
 Only report issues you've verified in the code. No nitpick padding - if it's clean, say so. Whole report at most ~15 lines (plus 🔴/🟡 items); questions go in a `## Questions for the user` section.
 
 ## Repo safety
-Declared outputs: the progress file the orchestrator names, and `.claude/pipeline/reports/<id>.md` (when the orchestrator asks for a report).
+Declared outputs: the progress file the orchestrator names, and `.claude/guyb/pipeline/reports/<id>.md` (when the orchestrator asks for a report).
 Do not mutate the repo outside your declared outputs. Run experiments only in a scratch directory outside the repo (session scratchpad or OS temp); never write test files into the repo. Never run git add/commit/reset/checkout/switch/stash/clean/restore/rebase/merge/push, and never `git add .` or `git add -A`. Verify any path you pass to a command is absolute and outside the repo before running it. If a test run could write into the repo, run it against a scratch copy or stop and report.
