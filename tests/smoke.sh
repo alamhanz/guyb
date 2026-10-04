@@ -384,6 +384,10 @@ for v in 'notes add -m x' 'update-ref HEAD x' 'symbolic-ref HEAD x' 'replace a b
 done
 expect_eq "readonly config --get" "$(hook code-reviewer 'git config --get user.name')" 0
 expect_eq "readonly config --list" "$(hook code-reviewer 'git config --list')" 0
+expect_eq "readonly config read; config write" "$(hook code-reviewer 'git config --get user.name; git config core.hooksPath /tmp/h')" 2
+expect_eq "readonly config list && config write" "$(hook code-reviewer 'git config --list && git config user.name x')" 2
+expect_eq "readonly config read; config read" "$(hook code-reviewer 'git config --get a; git config --list')" 0
+expect_eq "readonly config single key" "$(hook code-reviewer 'git config user.name')" 0
 expect_eq "readonly remote -v" "$(hook code-reviewer 'git remote -v')" 0
 expect_eq "readonly reflog" "$(hook code-reviewer 'git reflog')" 0
 expect_eq "readonly -C dir with space log" "$(hook code-reviewer 'git -C \"my dir\" log -1')" 0

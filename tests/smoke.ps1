@@ -385,6 +385,10 @@ try {
   }
   Expect-Eq 'readonly config --get' (Hook 'code-reviewer' 'git config --get user.name') 0
   Expect-Eq 'readonly config --list' (Hook 'code-reviewer' 'git config --list') 0
+  Expect-Eq 'readonly config read; config write' (Hook 'code-reviewer' 'git config --get user.name; git config core.hooksPath /tmp/h') 2
+  Expect-Eq 'readonly config list && config write' (Hook 'code-reviewer' 'git config --list && git config user.name x') 2
+  Expect-Eq 'readonly config read; config read' (Hook 'code-reviewer' 'git config --get a; git config --list') 0
+  Expect-Eq 'readonly config single key' (Hook 'code-reviewer' 'git config user.name') 0
   Expect-Eq 'readonly remote -v' (Hook 'code-reviewer' 'git remote -v') 0
   Expect-Eq 'readonly reflog' (Hook 'code-reviewer' 'git reflog') 0
   Expect-Eq 'readonly -C dir with space log' (Hook 'code-reviewer' 'git -C \"my dir\" log -1') 0

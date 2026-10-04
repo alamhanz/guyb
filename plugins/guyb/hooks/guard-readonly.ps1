@@ -37,8 +37,13 @@ $patterns = @(
     "${pre}remote\s+(add|remove|rm|rename|set-url|set-head|set-branches|prune|update)([^\w-]|`$)",
     "${pre}reflog\s+(expire|delete)([^\w-]|`$)"
 )
-$configRead = "${pre}config\s+([^|;&]*\s)?(--get[a-z-]*|--list|-l|--show-origin)([^\w-]|`$)"
-$hit = ($cmd -match "${pre}config([^\w-]|`$)") -and ($cmd -notmatch $configRead)
+# config is judged per segment, so a read in one segment never excuses a write in another.
+# Allowed reads: --get*/--list/-l/--show-origin, or a single key with no value.
+$hit = $false
+$configRead = "${pre}config\s+(([^|;&]*\s)?(--get[a-z-]*|--list|-l|--show-origin)([^\w-]|`$)|[^-\s]\S*\s*`$)"
+foreach ($seg in ($cmd -split '[;&|\r\n]')) {
+    if ($seg -match "${pre}config([^\w-]|`$)" -and $seg -notmatch $configRead) { $hit = $true }
+}
 foreach ($p in $patterns) { if ($cmd -match $p) { $hit = $true; break } }
 if ($hit) {
     [Console]::Error.WriteLine("guyb: blocked - read-only agent '$name' may not run git write commands.")

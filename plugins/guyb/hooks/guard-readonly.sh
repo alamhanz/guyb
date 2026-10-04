@@ -44,7 +44,14 @@ chk "${pre}tag[[:space:]]+(([^|;&]*[[:space:]])?(-[dasfm]|--delete|--annotate|--
 chk "${pre}worktree[[:space:]]+(add|remove|move|prune|lock|unlock|repair)([^[:alnum:]_-]|\$)" && hit=1
 chk "${pre}remote[[:space:]]+(add|remove|rm|rename|set-url|set-head|set-branches|prune|update)([^[:alnum:]_-]|\$)" && hit=1
 chk "${pre}reflog[[:space:]]+(expire|delete)([^[:alnum:]_-]|\$)" && hit=1
-if chk "${pre}config([^[:alnum:]_-]|\$)" && ! chk "${pre}config[[:space:]]+([^|;&]*[[:space:]])?(--get[a-z-]*|--list|-l|--show-origin)([^[:alnum:]_-]|\$)"; then hit=1; fi
+# config: judged per segment, so a read in one segment never excuses a write in another.
+# Allowed reads: --get*/--list/-l/--show-origin, or a single key with no value.
+while IFS= read -r seg; do
+  printf '%s' "$seg" | grep -qiE "${pre}config([^[:alnum:]_-]|\$)" || continue
+  printf '%s' "$seg" | grep -qiE "${pre}config[[:space:]]+(([^|;&]*[[:space:]])?(--get[a-z-]*|--list|-l|--show-origin)([^[:alnum:]_-]|\$)|[^-[:space:]][^[:space:]]*[[:space:]]*\$)" || hit=1
+done <<EOF2
+$(printf '%s' "$cmd" | tr ';&|' '\n\n\n')
+EOF2
 if [ -n "$hit" ]; then
   {
     echo "guyb: blocked - read-only agent '${agent#guyb:}' may not run git write commands."
