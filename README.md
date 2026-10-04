@@ -160,7 +160,7 @@ Every agent starts with fresh context (roughly 15-50k tokens), so guyb spends ag
 
 ## Security
 
-guyb manages where credentials live but never stores or sees their values. A commit guard hook blocks `git commit` when `.env`, keys, or credential files are staged; it covers both Bash and PowerShell commits, but only plain `git commit ...` (not `git -C dir commit` or chained commands). A second hook stops the read-only subagents (`architect`, `code-reviewer`, `data-modeler`, `data-analyst`) from running git write commands (a best-effort text match; the agents' prompt rules are the main control). Hooks only print the playbook at session start and check staged file names and subagent git commands. Plugins run with your permissions, so read the agents and hooks before installing.
+guyb manages where credentials live but never stores or sees their values. A commit guard hook blocks `git commit` when `.env`, keys, or credential files are staged; it covers both Bash and PowerShell commits, including `git -C dir commit`, `git -c ... commit`, chained commands and `commit -a`. A second hook stops the read-only subagents (`architect`, `code-reviewer`, `data-modeler`, `data-analyst`) from running git write commands (a best-effort text match; the agents' prompt rules are the main control). Hooks only print the playbook at session start and check staged file names and subagent git commands. Plugins run with your permissions, so read the agents and hooks before installing.
 
 ## More
 
