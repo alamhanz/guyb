@@ -13,15 +13,19 @@ json=
 if [ ! -t 0 ]; then IFS= read -r -t 2 -n 65536 -d '' json; fi
 json=${json#$'\xef\xbb\xbf'}
 
-jget() { # key: sets v to the string value of the first "key": "..." in $json
-  v=
-  local rest k
-  k=\"$1\" # quoted key in a variable: bash 3.2 mis-strips ${json#*\""$1"\"} and returns the first value
-  case $json in *"$k"*) rest=${json#*"$k"} ;; *) return 1 ;; esac
-  case $rest in *:*) rest=${rest#*:} ;; *) return 1 ;; esac
-  rest=${rest#"${rest%%[![:space:]]*}"}
-  case $rest in \"*) rest=${rest#\"} ;; *) return 1 ;; esac
-  v=${rest%%\"*}
+jget() { # key: sets v to the string value of the first "key": "..." in $json (one awk, no pattern quoting)
+  v=$(printf '%s\n' "$json" | awk -v key="$1" '
+    { s = s $0 "\n" }
+    END {
+      k = "\"" key "\""
+      i = index(s, k)
+      if (!i) exit
+      s = substr(s, i + length(k))
+      if (!match(s, /^[ \t\r\n]*:[ \t\r\n]*"/)) exit
+      s = substr(s, RLENGTH + 1)
+      j = index(s, "\"")
+      if (j) printf "%s", substr(s, 1, j - 1)
+    }')
   case $v in *\\*) v=$(printf %s "$v" | sed 's/\\\\/\\/g; s/\\\//\//g') ;; esac
   [ -n "$v" ]
 }

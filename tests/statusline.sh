@@ -9,10 +9,19 @@ trap 'rm -rf "$tmp"' EXIT
 tmp=$(cd "$tmp" && pwd)
 
 fail=0
-check() { # name expected actual
-  if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: expected [$2] got [$3]"; fail=$((fail + 1)); fi
+check() { # name expected actual; on failure prints the bash version and a bash -x trace of the last run
+  if [ "$2" = "$3" ]; then echo "ok   $1"; return; fi
+  echo "FAIL $1: expected [$2] got [$3]"; fail=$((fail + 1))
+  bash --version | head -1
+  if [ -f "$tmp/.last.cwd" ]; then
+    echo "--- bash -x trace (last 40 lines), stdin: $(cat "$tmp/.last.in")"
+    sed 's#^exec 2>/dev/null$#:#' "$script" > "$tmp/.dbg.sh" # the script silences stderr, which is where -x writes
+    ( cd "$(cat "$tmp/.last.cwd")" && bash -x "$tmp/.dbg.sh" < "$tmp/.last.in" 2>&1 | tail -n 40 )
+    echo "---"
+  fi
 }
-run() { # cwd stdin-json
+run() { # cwd stdin-json (remembered in $tmp/.last.* for check diagnostics)
+  printf '%s' "$1" > "$tmp/.last.cwd"; printf '%s' "$2" > "$tmp/.last.in"
   ( cd "$1" && printf '%s' "$2" | bash "$script" 2>&1 )
 }
 json() { printf '{"session_id":"s","workspace":{"current_dir":"%s","project_dir":"%s"},"cwd":"%s"}' "$1" "$1" "$1"; }
@@ -50,10 +59,13 @@ check "branch with slash" "guyb > br  feat/x" "$(run "$tmp" "$(json "$tmp/br")")
 # only cwd; workspace.current_dir wins over cwd; PWD fallback on empty or garbled stdin
 check "only cwd" "guyb > new  main  2 running  2 questions" "$(run "$tmp" "{\"cwd\":\"$tmp/new\"}")"
 check "current_dir wins" "guyb > br  feat/x" "$(run "$tmp" "{\"cwd\":\"$tmp/new\",\"workspace\":{\"current_dir\":\"$tmp/br\"}}")"
+check "current_dir first, differs from cwd" "guyb > br  feat/x" "$(run "$tmp" "{\"workspace\":{\"current_dir\":\"$tmp/br\"},\"cwd\":\"$tmp/new\"}")"
+check "whitespace around colon" "guyb > br  feat/x" "$(run "$tmp" "{\"cwd\": \"$tmp/new\", \"workspace\": { \"current_dir\" : \"$tmp/br\" }}")"
 check "BOM on stdin" "guyb > br  feat/x" "$(run "$tmp" "$(printf '\357\273\277'; printf '{"cwd":"%s"}' "$tmp/br")")"
 check "empty stdin uses PWD" "guyb > br  feat/x" "$(run "$tmp/br" "")"
 check "garbled stdin uses PWD" "guyb > br  feat/x" "$(run "$tmp/br" '{not json "cwd": ')"
 check "missing dir uses PWD" "guyb > br  feat/x" "$(run "$tmp/br" "{\"cwd\":\"$tmp/nope\"}")"
+rm -f "$tmp/.last.cwd"
 check "no stdin (null device)" "guyb > br  feat/x" "$(cd "$tmp/br" && bash "$script" < /dev/null 2>&1)"
 
 # legacy registry: only when STATE.md is guyb-owned; new wins when both exist
