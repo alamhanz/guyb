@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git commit *)",
+            "if": "Bash(*commit*)",
             "shell": "bash",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-secrets.sh\""
           }
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "if": "PowerShell(git commit *)",
+            "if": "PowerShell(*commit*)",
             "shell": "powershell",
             "command": "$h = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }; & $h -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-secrets.ps1\"; exit $LASTEXITCODE"
           }
