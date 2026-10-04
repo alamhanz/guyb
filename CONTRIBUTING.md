@@ -10,11 +10,11 @@ plugins/guyb/
   .claude-plugin/plugin.json      plugin name, version, description
   agents/*.md                     one subagent per file
   skills/<name>/SKILL.md          slash commands (/guyb:<name>); helper scripts live beside them
-  hooks/                          hooks.json, orchestrator.md (playbook), guard-secrets.*, guard-readonly.*
+  hooks/                          hooks.json, orchestrator.md (playbook), guard-secrets.*, guard-readonly.*, tab-status.*
 scripts/                          install.ps1/.sh, launch.ps1/.sh (the `guyb` command)
 settings/                         recommended-permissions.json
 plugins/guyb/statusline/          guyb-status.sh/.ps1 (optional status line; setup copies them to ~/.claude/guyb/)
-tests/                            lint.*, smoke.*, tabs.*, statusline.*, permissions.ps1 + permission-cases.json
+tests/                            lint.*, smoke.*, tabs.*, statusline.*, secrets.*, permissions.ps1 + permission-cases.json
 .github/workflows/ci.yml          CI: runs the tests/ scripts on ubuntu, macOS, and Windows
 docs/                             README images (logo, icon, how-guyb-works.svg)
 ```
@@ -42,10 +42,12 @@ bash tests/lint.sh                 # bash -n, JSON/SVG validity, ASCII, line end
 bash tests/smoke.sh                # brief.sh (incl. migration and cleanup detection), check.sh, guard hooks on throwaway repos
 bash tests/tabs.sh                 # launcher colour table, dry-run tab/tmux commands, title sanitising
 bash tests/statusline.sh           # status line fixtures (registries, branch, worktree, paths)
+bash tests/secrets.sh              # secrets guard cases (git -C/-c, chained, commit -a)
 pwsh -File tests/lint.ps1          # ps1 parse, same file rules
 pwsh -File tests/smoke.ps1         # brief.ps1, check.ps1, guard hooks
 pwsh -File tests/tabs.ps1          # same as tabs.sh
 pwsh -File tests/statusline.ps1    # same as statusline.sh
+pwsh -File tests/secrets.ps1       # same as secrets.sh
 pwsh -File tests/permissions.ps1   # settings/recommended-permissions.json vs tests/permission-cases.json
 ```
 

@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git commit *)",
+            "if": "Bash(*commit*)",
             "shell": "bash",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-secrets.sh\""
           }
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "if": "PowerShell(git commit *)",
+            "if": "PowerShell(*commit*)",
             "shell": "powershell",
             "command": "$h = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }; & $h -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-secrets.ps1\"; exit $LASTEXITCODE"
           }
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git *)",
+            "if": "Bash(*git*)",
             "shell": "bash",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
           }
@@ -50,9 +50,69 @@
         "hooks": [
           {
             "type": "command",
-            "if": "PowerShell(git *)",
+            "if": "PowerShell(*git*)",
             "shell": "powershell",
             "command": "$h = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }; & $h -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"; exit $LASTEXITCODE"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "async": true,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" running"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "async": true,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" resume"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "async": true,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" waiting"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "async": true,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" done"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "async": true,
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" end"
           }
         ]
       }

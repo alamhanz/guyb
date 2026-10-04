@@ -57,6 +57,8 @@ jobs:
         run: /bin/bash tests/lint.sh
       - name: Smoke
         run: /bin/bash tests/smoke.sh
+      - name: Secrets guard
+        run: /bin/bash tests/secrets.sh
       - name: Tabs (launcher colour and title lock; real tmux and zsh)
         run: /bin/bash tests/tabs.sh
         env:
@@ -83,6 +85,8 @@ jobs:
         run: ./tests/lint.ps1
       - name: Smoke
         run: ./tests/smoke.ps1
+      - name: Secrets guard
+        run: ./tests/secrets.ps1
       - name: Tabs (launcher colour and title lock)
         run: ./tests/tabs.ps1
       - name: Status line
@@ -104,6 +108,8 @@ jobs:
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/lint.ps1
       - name: Smoke
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/smoke.ps1
+      - name: Secrets guard
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/secrets.ps1
       - name: Tabs (launcher colour and title lock)
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/tabs.ps1
       - name: Status line

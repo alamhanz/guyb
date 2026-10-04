@@ -164,6 +164,15 @@ try {
   Expect-Lacks 'migrate foreign + new' $r[1] 'migrate:'
   Expect-Has 'migrate foreign + new' $r[1] '- new next'
 
+  Write-Host 'brief.ps1 empty section, question rows'
+  $ep = Join-Path $tmp 'empty-sec'; New-Item -ItemType Directory -Force -Path (Join-Path $ep '.claude/guyb/pipeline') | Out-Null
+  Write-File (Join-Path $ep '.claude/guyb/STATE.md') "# Next up`r`n`r`n# Open issues`r`n- one`r`n"
+  Write-File (Join-Path $ep '.claude/guyb/pipeline/questions.md') "| Q | Question | Run | Status |`r`n|---|---|---|---|`r`n| Q1 | what | me | open |`r`n| Q2 | a |  | open |`r`n"
+  $r = Run-Child $brief @('-Dir', $ep) $null
+  Expect-Lacks 'empty section heading' $r[1] 'STATE.md Next up:'
+  Expect-Has 'empty section heading' $r[1] 'STATE.md Open issues:'
+  Expect-Has 'question row' $r[1] '  Q1 | what | me | open'
+
   Write-Host 'brief.ps1 gitignore check'
   $gi = Join-Path $tmp 'gi'; Make-Fixture $gi
   $r = Run-Child $brief @('-Dir', $gi) $null
@@ -325,6 +334,20 @@ try {
   } finally { Pop-Location }
   Push-Location -LiteralPath $tmp
   try { $r = Run-Child $guard @() $null; Expect-Eq 'guard outside a repo exit' $r[0] 0 } finally { Pop-Location }
+  function SG($cmd) { (Run-Child $guard @() (@{ cwd = $g; tool_input = @{ command = $cmd } } | ConvertTo-Json -Compress))[0] }
+  Git-Quiet -C $g reset -q
+  Expect-Eq 'guard untracked .env, plain commit' (SG 'git commit -m x') 0
+  Expect-Eq 'guard add -A ; commit, untracked .env' (SG 'git add -A ; git commit -m x') 2
+  Expect-Eq 'guard git stage then commit, untracked .env' (SG 'git stage .env; git commit -m x') 2
+  Git-Quiet -C $g add .env
+  Expect-Eq 'guard assignment git commit, staged .env' (SG '$out = git commit -m x') 2
+  Expect-Eq 'guard if block git commit, staged .env' (SG 'if ($?) { git commit -m x }') 2
+  Expect-Eq 'guard call operator, staged .env' (SG '& git commit -m x') 2
+  Expect-Eq 'guard uppercase GIT commit, staged .env' (SG 'GIT commit -m x') 2
+  Expect-Eq 'guard subshell cd then commit, staged .env' (SG "(cd '$tmp'); git commit -m x") 2
+  Expect-Eq 'guard --git-dir missing falls back to cwd' (SG "git --git-dir='$tmp/nogit' commit -m x") 2
+  Git-Quiet -C $g reset -q
+  Expect-Eq 'guard assignment git commit, nothing staged' (SG '$out = git commit -m x') 0
 
   Write-Host 'guard-readonly.ps1'
   $ro = Join-Path $root 'plugins/guyb/hooks/guard-readonly.ps1'
@@ -335,6 +358,48 @@ try {
   Expect-Eq 'readonly implementer git add' (Hook 'guyb:implementer' 'git add .') 0
   Expect-Eq 'readonly main session git add' (Run-Child $ro @() '{"tool_input":{"command":"git add ."}}')[0] 0
   Expect-Eq 'readonly bad json' (Run-Child $ro @() 'not json')[0] 0
+  Expect-Eq 'readonly chained cd && git add' (Hook 'code-reviewer' 'cd sub && git add .') 2
+  Expect-Eq 'readonly chained pushd; git commit' (Hook 'code-reviewer' 'pushd sub; git commit -m x') 2
+  Expect-Eq 'readonly piped echo | git apply' (Hook 'code-reviewer' 'echo hi | git apply') 2
+  Expect-Eq 'readonly chained true; git push' (Hook 'code-reviewer' 'true; git push') 2
+  Expect-Eq 'readonly chained newline git rm' (Hook 'code-reviewer' 'ls\ngit rm x') 2
+  Expect-Eq 'readonly chained git -C dir reset' (Hook 'code-reviewer' 'cd a && git -C b reset --hard') 2
+  Expect-Eq 'readonly git revert' (Hook 'code-reviewer' 'git revert HEAD') 2
+  Expect-Eq 'readonly git am' (Hook 'code-reviewer' 'git am p.patch') 2
+  Expect-Eq 'readonly chained read-only git' (Hook 'code-reviewer' 'cd sub && git log -1 | head') 0
+  Expect-Eq 'readonly chained no git' (Hook 'code-reviewer' 'cd sub && ls') 0
+  Expect-Eq 'readonly git stage' (Hook 'code-reviewer' 'git stage .') 2
+  Expect-Eq 'readonly quoted -C dir with space' (Hook 'code-reviewer' 'git -C \"my dir/x\" add .') 2
+  Expect-Eq 'readonly single-quoted -C dir with space' (Hook 'code-reviewer' "git -C 'my dir' add .") 2
+  Expect-Eq 'readonly --git-dir <dir> add' (Hook 'code-reviewer' 'git --git-dir /x/.git add .') 2
+  Expect-Eq 'readonly -p add' (Hook 'code-reviewer' 'git -p add .') 2
+  Expect-Eq 'readonly -P add' (Hook 'code-reviewer' 'git -P commit -m x') 2
+  Expect-Eq 'readonly --no-pager add' (Hook 'code-reviewer' 'git --no-pager add .') 2
+  Expect-Eq 'readonly quoted git' (Hook 'code-reviewer' '\"git\" add .') 2
+  Expect-Eq 'readonly quoted exe path' (Hook 'code-reviewer' '& \"C:/Program Files/Git/cmd/git.exe\" add .') 2
+  Expect-Eq 'readonly /usr/bin/git' (Hook 'code-reviewer' '/usr/bin/git add .') 2
+  Expect-Eq 'readonly uppercase GIT add' (Hook 'code-reviewer' 'GIT add .') 2
+  Expect-Eq 'readonly uppercase GIT.EXE' (Hook 'code-reviewer' 'GIT.EXE ADD .') 2
+  foreach ($v in 'notes add -m x', 'update-ref HEAD x', 'symbolic-ref HEAD x', 'replace a b', 'gc', 'prune', 'submodule update', 'init', 'clone u d', 'filter-branch x', 'config user.name x', 'config --global user.name x', 'remote add o u', 'remote set-url o u', 'reflog expire --all', 'bisect start') {
+    Expect-Eq "readonly git $v" (Hook 'code-reviewer' "git $v") 2
+  }
+  Expect-Eq 'readonly config --get' (Hook 'code-reviewer' 'git config --get user.name') 0
+  Expect-Eq 'readonly config --list' (Hook 'code-reviewer' 'git config --list') 0
+  Expect-Eq 'readonly config read; config write' (Hook 'code-reviewer' 'git config --get user.name; git config core.hooksPath /tmp/h') 2
+  Expect-Eq 'readonly config list && config write' (Hook 'code-reviewer' 'git config --list && git config user.name x') 2
+  Expect-Eq 'readonly config read; config read' (Hook 'code-reviewer' 'git config --get a; git config --list') 0
+  Expect-Eq 'readonly config single key' (Hook 'code-reviewer' 'git config user.name') 0
+  Expect-Eq 'readonly remote -v' (Hook 'code-reviewer' 'git remote -v') 0
+  Expect-Eq 'readonly reflog' (Hook 'code-reviewer' 'git reflog') 0
+  Expect-Eq 'readonly -C dir with space log' (Hook 'code-reviewer' 'git -C \"my dir\" log -1') 0
+  Expect-Eq 'readonly --git-dir <dir> log' (Hook 'code-reviewer' 'git --git-dir /x/.git log') 0
+  Expect-Eq 'readonly quoted git status' (Hook 'code-reviewer' '\"git\" status') 0
+  Expect-Eq 'readonly ls-files' (Hook 'code-reviewer' 'git ls-files') 0
+  Expect-Eq 'readonly word add, no git' (Hook 'code-reviewer' 'echo add to .gitignore') 0
+  $hj = Get-Content -Raw -LiteralPath (Join-Path $root 'plugins/guyb/hooks/hooks.json')
+  foreach ($sel in 'Bash(*git*)', 'PowerShell(*git*)') {
+    Expect-Eq "hooks.json readonly filter $sel" ($hj.Contains('"if": "' + $sel + '"')) $true
+  }
 } finally {
   Set-Location -LiteralPath $root
   Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue

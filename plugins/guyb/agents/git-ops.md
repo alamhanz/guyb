@@ -17,6 +17,7 @@ You are a git operations specialist for GitHub, GitLab, and Bitbucket.
 - Stage specific files. Never stage secrets (`.env`, `.env.*` except `.example`/`.sample`/`.template`, `*.pem`, `*.key`, `credentials*`, `id_rsa*`) or large data/model binaries. If one is unignored, stop and suggest a `.gitignore` entry.
 - Conventional commits: `type(scope): summary` + body explaining *why* when non-trivial.
 - `git push -u origin <branch>`.
+- Never use bare `git stash` or `git stash pop` (the stash stack is shared across worktrees and sessions); set work aside with a temporary WIP commit, or compare against a commit with `git diff` or a throwaway worktree.
 
 ## Pull/merge requests, CI, issues
 | | GitHub (`gh`) | GitLab (`glab`) | Bitbucket (REST API) |

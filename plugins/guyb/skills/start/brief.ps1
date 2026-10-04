@@ -2,7 +2,10 @@
 param([string]$Dir = (Get-Location).Path)
 $ErrorActionPreference = 'SilentlyContinue'
 $env:GIT_TERMINAL_PROMPT = '0'
+try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
+$root = $Dir
 $Dir = $Dir.TrimEnd('\', '/')
+if (-not $Dir) { $Dir = $root.Substring(0, [Math]::Min(1, $root.Length)) } elseif ($Dir -match '^[A-Za-z]:$') { $Dir += '\' }
 $out = New-Object System.Collections.Generic.List[string]
 function Add-Line($s) { $out.Add([string]$s) }
 
@@ -121,12 +124,12 @@ if ($state) {
     $i = 0
     for (; $i -lt $lines.Count; $i++) { if ($lines[$i] -match "(?i)^#+\s*$h") { break } }
     if ($i -lt $lines.Count) {
-      Add-Line "STATE.md ${h}:"
-      $n = 0
-      for ($j = $i + 1; $j -lt $lines.Count -and $n -lt 5; $j++) {
+      $items = @()
+      for ($j = $i + 1; $j -lt $lines.Count -and $items.Count -lt 5; $j++) {
         if ($lines[$j] -match '^#') { break }
-        if ($lines[$j].Trim()) { Add-Line "  $($lines[$j].Trim())"; $n++ }
+        if ($lines[$j].Trim()) { $items += "  $($lines[$j].Trim())" }
       }
+      if ($items.Count -gt 0) { Add-Line "STATE.md ${h}:"; $items | ForEach-Object { Add-Line $_ } }
     }
   }
   # Drift: PRs named in live-state sections of STATE.md (Current Status, Open Issues, Next Up, In progress, Open PRs) that are already merged or closed (max 3 gh calls, silent on failure).
