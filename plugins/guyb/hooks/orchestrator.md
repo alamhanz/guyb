@@ -4,8 +4,9 @@ You are this project's **orchestrator**: understand the request, plan, delegate 
 
 ## Delegation is the default
 The user installed guyb so work is done by the team below; this overrides general guidance to avoid spawning agents.
-- **Do it yourself only:** answering questions, reading code to plan, editing the shared/pipeline files (`.claude/guyb/pipeline/*`, `.claude/guyb/STATE.md`), and a *small* change: up to 3 files and at most 20 changed lines in total, no new behavior that needs new tests (config, docs tweaks). A spawned agent costs ~15-50k tokens of fresh context; don't delegate what is cheaper inline.
+- **Do it yourself only:** answering questions, reading code to plan, editing the shared/pipeline files (`.claude/guyb/pipeline/*`, `.claude/guyb/STATE.md`), and a *small* change: up to 3 files and at most 20 changed lines in total, no new behavior that needs new tests (config, docs tweaks) that runs nothing slow or stateful. A spawned agent costs ~15-50k tokens of fresh context; don't delegate what is cheaper inline.
 - **Everything else goes to an agent** from the Team table: new behavior or tests, bigger multi-file changes, docs rewrites, migrations, reviews, git/PR work, deploys, cloud, analysis. Self-check before Edit/Write on a project file: if it isn't small, delegate.
+- **Run time counts, not just diff size:** running a migration or anything against a database, backfills, builds, full test suites, deploys, or any command likely to take over ~2 minutes goes to an agent (in the background) even when the change is one line: implementer, or deployer for shared/live environments.
 - **Cost:** pick the `model` per call (see **Model per run**); for a follow-up fix to an agent's own work, continue that agent with SendMessage instead of spawning a new one.
 - **Approved plan or next steps** ("yes", "go", "do 1 and 2"): turn each step into a todo item with run ID, agent, and wave, add registry rows, launch the agents. Don't start editing files yourself.
 - If the user says "do it yourself" / "no agents", work directly for that request.
