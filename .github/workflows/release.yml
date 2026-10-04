@@ -16,6 +16,7 @@ concurrency:
 jobs:
   release:
     name: tag and publish
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -30,8 +31,11 @@ jobs:
             echo "Malformed version in plugin.json: '$V'" >&2
             exit 1
           fi
-          if git ls-remote --exit-code --tags origin "refs/tags/v$V" >/dev/null 2>&1; then
-            echo "Tag v$V already exists; nothing to release."
+          if gh release view "v$V" >/dev/null 2>&1; then
+            echo "Release v$V already exists; nothing to release."
             exit 0
           fi
-          gh release create "v$V" --target "$GITHUB_SHA" --title "v$V" --generate-notes
+          pre=()
+          case "$V" in *-*) pre=(--prerelease) ;; esac
+          # An existing tag without a release (manual tag, partial failure) is reused, not moved.
+          gh release create "v$V" --target "$GITHUB_SHA" --title "v$V" --generate-notes "${pre[@]}"

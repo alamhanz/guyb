@@ -47,7 +47,7 @@ claude plugin marketplace add alamhanz/guyb
 claude plugin install guyb@guyb
 ```
 
-Then run `/guyb:setup` once in any project: it detects installed CLIs and logins, installs what you choose (asking first), and records a no-secrets profile in `~/.claude/guyb/profile.md`. It can also install a status line (with consent, never replacing an existing `statusLine`); to remove it, delete the `statusLine` key in `~/.claude/settings.json` and `~/.claude/guyb/statusline.*`.
+Then run `/guyb:setup` once in any project: it detects installed CLIs and logins, installs what you choose (asking first), and records a no-secrets profile in `~/.claude/guyb/profile.md`. It can also install a status line (with consent, never replacing an existing `statusLine` without asking; the old settings are backed up); to remove it, delete the `statusLine` key in `~/.claude/settings.json` and `~/.claude/guyb/statusline.*`.
 
 **Updates and releases.** A tag and GitHub Release are created automatically when the plugin version is bumped on main. Update with:
 
@@ -114,7 +114,7 @@ Change defaults via `model:` in `plugins/guyb/agents/*.md`. Every agent starts w
 | `.env` (secrets; guyb makes sure it is gitignored) / `.env.example` | never / yes |
 | `.claude/guyb/pipeline/` (plans, run registry, progress, questions) | no, auto-gitignored |
 
-Upgrading from 0.6: files used to live in `.claude/STATE.md` and `.claude/pipeline/`. `/guyb:start` offers to move them; nothing moves without your OK. Cleanup suggestions never archive or delete without consent.
+Upgrading from 0.6: files used to live in `.claude/STATE.md` and `.claude/pipeline/`. `/guyb:start` offers to move them; nothing moves without your OK. Cleanup suggestions never archive or delete without consent; limits are `cleanup_claude_md_lines: 200`, `cleanup_state_lines: 300`, `cleanup_rows: 200`, `cleanup_days: 14`, overridable in `.claude/CLAUDE.md` or `~/.claude/guyb/profile.md`.
 
 ## Security
 
