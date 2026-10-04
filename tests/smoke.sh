@@ -334,6 +334,19 @@ git -C "$(win "$g")" reset -q >/dev/null 2>&1
 git -C "$(win "$g")" add .env.example >/dev/null 2>&1
 (cd "$g" && bash "$guard" >/dev/null 2>&1); expect_eq "guard staged .env.example exit" "$?" 0
 (cd "$tmp" && bash "$guard" >/dev/null 2>&1); expect_eq "guard outside a repo exit" "$?" 0
+sg() { printf '{"cwd":"%s","tool_input":{"command":"%s"}}' "$(win "$g")" "$1" | (cd "$tmp" && bash "$guard" >/dev/null 2>&1); echo $?; }
+git -C "$(win "$g")" reset -q >/dev/null 2>&1
+expect_eq "guard untracked .env, plain commit" "$(sg 'git commit -m x')" 0
+expect_eq "guard add -A && commit, untracked .env" "$(sg 'git add -A && git commit -m x')" 2
+expect_eq "guard git stage then commit, untracked .env" "$(sg 'git stage .env; git commit -m x')" 2
+git -C "$(win "$g")" add .env >/dev/null 2>&1
+expect_eq "guard env git commit, staged .env" "$(sg 'env git commit -m x')" 2
+expect_eq "guard if/then git commit, staged .env" "$(sg 'if true; then git commit -m x; fi')" 2
+expect_eq "guard uppercase GIT commit, staged .env" "$(sg 'GIT commit -m x')" 2
+expect_eq "guard subshell cd then commit, staged .env" "$(sg "(cd $(win "$tmp")); git commit -m x")" 2
+expect_eq "guard --git-dir elsewhere" "$(sg "git --git-dir=$(win "$tmp")/nogit commit -m x")" 2
+git -C "$(win "$g")" reset -q >/dev/null 2>&1
+expect_eq "guard env git commit, nothing staged" "$(sg 'env git commit -m x')" 0
 
 echo "guard-readonly.sh"
 ro="$root/plugins/guyb/hooks/guard-readonly.sh"
@@ -354,6 +367,30 @@ expect_eq "readonly git revert" "$(hook code-reviewer 'git revert HEAD')" 2
 expect_eq "readonly git am" "$(hook code-reviewer 'git am p.patch')" 2
 expect_eq "readonly chained read-only git" "$(hook code-reviewer 'cd sub && git log -1 | head')" 0
 expect_eq "readonly chained no git" "$(hook code-reviewer 'cd sub && ls')" 0
+expect_eq "readonly git stage" "$(hook code-reviewer 'git stage .')" 2
+expect_eq "readonly quoted -C dir with space" "$(hook code-reviewer 'git -C \"my dir/x\" add .')" 2
+expect_eq "readonly single-quoted -C dir with space" "$(hook code-reviewer "git -C 'my dir' add .")" 2
+expect_eq "readonly --git-dir <dir> add" "$(hook code-reviewer 'git --git-dir /x/.git add .')" 2
+expect_eq "readonly -p add" "$(hook code-reviewer 'git -p add .')" 2
+expect_eq "readonly -P add" "$(hook code-reviewer 'git -P commit -m x')" 2
+expect_eq "readonly --no-pager add" "$(hook code-reviewer 'git --no-pager add .')" 2
+expect_eq "readonly quoted git" "$(hook code-reviewer '\"git\" add .')" 2
+expect_eq "readonly quoted exe path" "$(hook code-reviewer '\"C:/Program Files/Git/cmd/git.exe\" add .')" 2
+expect_eq "readonly /usr/bin/git" "$(hook code-reviewer '/usr/bin/git add .')" 2
+expect_eq "readonly uppercase GIT add" "$(hook code-reviewer 'GIT add .')" 2
+expect_eq "readonly uppercase GIT.EXE" "$(hook code-reviewer 'GIT.EXE ADD .')" 2
+for v in 'notes add -m x' 'update-ref HEAD x' 'symbolic-ref HEAD x' 'replace a b' 'gc' 'prune' 'submodule update' 'init' 'clone u d' 'filter-branch x' 'config user.name x' 'config --global user.name x' 'remote add o u' 'remote set-url o u' 'reflog expire --all' 'bisect start'; do
+  expect_eq "readonly git $v" "$(hook code-reviewer "git $v")" 2
+done
+expect_eq "readonly config --get" "$(hook code-reviewer 'git config --get user.name')" 0
+expect_eq "readonly config --list" "$(hook code-reviewer 'git config --list')" 0
+expect_eq "readonly remote -v" "$(hook code-reviewer 'git remote -v')" 0
+expect_eq "readonly reflog" "$(hook code-reviewer 'git reflog')" 0
+expect_eq "readonly -C dir with space log" "$(hook code-reviewer 'git -C \"my dir\" log -1')" 0
+expect_eq "readonly --git-dir <dir> log" "$(hook code-reviewer 'git --git-dir /x/.git log')" 0
+expect_eq "readonly quoted git status" "$(hook code-reviewer '\"git\" status')" 0
+expect_eq "readonly ls-files" "$(hook code-reviewer 'git ls-files')" 0
+expect_eq "readonly .gitignore word add" "$(hook code-reviewer 'echo add to .gitignore')" 0
 for sel in 'Bash(*git*)' 'PowerShell(*git*)'; do
   expect_eq "hooks.json readonly filter $sel" "$(grep -cF "\"if\": \"$sel\"" "$root/plugins/guyb/hooks/hooks.json")" 1
 done

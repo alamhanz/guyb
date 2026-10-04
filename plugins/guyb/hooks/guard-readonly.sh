@@ -18,7 +18,8 @@ if command -v jq >/dev/null 2>&1; then
 else
   agent=$(printf '%s' "$input" | sed -nE 's/.*"agent_type"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' | head -n 1)
   cmd=$(printf '%s' "$input" | sed -nE 's/.*"command"[[:space:]]*:[[:space:]]*"(([^"\]|\\.)*)".*/\1/p' | head -n 1)
-  cmd=$(printf '%s' "$cmd" | sed 's/\\[nrt]/ /g')  # JSON newline escapes act as separators
+  # JSON newline escapes act as separators; \" and \\ are decoded so quoted paths match
+  cmd=$(printf '%s' "$cmd" | sed -e 's/\\[nrt]/ /g' -e 's/\\"/"/g' -e 's/\\\\/\\/g')
 fi
 
 case "${agent#guyb:}" in
@@ -27,17 +28,23 @@ case "${agent#guyb:}" in
 esac
 [ -z "$cmd" ] && exit 0
 
-# Write verbs always blocked; stash, branch, tag, worktree are blocked only in their write forms
-# (stash list/show, branch/tag listing and worktree list stay allowed).
-verbs='add|commit|reset|checkout|switch|clean|restore|rebase|merge|push|rm|mv|apply|cherry-pick|pull|fetch|revert|am'
-opts='(-c[[:space:]]+[^[:space:]]+|-C[[:space:]]+[^[:space:]]+|--[a-z-]+(=[^[:space:]]*)?)'
-pre="(^|[^[:alnum:]_.-])git(\.exe)?([[:space:]]+$opts)*[[:space:]]+"
+# Write verbs always blocked; stash, branch, tag, worktree, remote, reflog, config are blocked only in their
+# write forms (stash list/show, branch/tag listing, worktree list, config --get/--list stay allowed).
+# Matching is case-insensitive; git may be quoted or a full path, and options may carry quoted values.
+verbs='add|stage|commit|reset|checkout|switch|clean|restore|rebase|merge|push|rm|mv|apply|cherry-pick|pull|fetch|revert|am|notes|update-ref|symbolic-ref|replace|gc|prune|repack|submodule|init|clone|filter-branch|maintenance|sparse-checkout|read-tree|checkout-index|update-index|bisect'
+arg='("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+)'
+opts="(-c[[:space:]]+$arg|-C[[:space:]]+$arg|-[pP]|--(git-dir|work-tree|namespace|exec-path|super-prefix|config-env)[[:space:]]+$arg|--[a-z-]+(=[^[:space:]]*)?)"
+pre="(^|[^[:alnum:]_.-])[\"']?git(\.exe)?[\"']?([[:space:]]+$opts)*[[:space:]]+"
 hit=
-printf '%s' "$cmd" | grep -qE "$pre($verbs)([^[:alnum:]_-]|\$)" && hit=1
-printf '%s' "$cmd" | grep -qE "${pre}stash([[:space:]]*(\$|[;&|\"\\])|[[:space:]]+(push|pop|apply|drop|clear|save|branch|create|store|-))" && hit=1
-printf '%s' "$cmd" | grep -qE "${pre}branch[[:space:]]+(([^|;&]*[[:space:]])?(-[dDmMcCf]|--delete|--move|--copy|--force)([^[:alnum:]_-]|\$)|[^-[:space:]|;&])" && hit=1
-printf '%s' "$cmd" | grep -qE "${pre}tag[[:space:]]+(([^|;&]*[[:space:]])?(-[dasfm]|--delete|--annotate|--sign|--force|--message)([^[:alnum:]_-]|\$)|[^-[:space:]|;&])" && hit=1
-printf '%s' "$cmd" | grep -qE "${pre}worktree[[:space:]]+(add|remove|move|prune|lock|unlock|repair)([^[:alnum:]_-]|\$)" && hit=1
+chk() { printf '%s' "$cmd" | grep -qiE "$1"; }
+chk "$pre($verbs)([^[:alnum:]_-]|\$)" && hit=1
+chk "${pre}stash([[:space:]]*(\$|[;&|\"\\])|[[:space:]]+(push|pop|apply|drop|clear|save|branch|create|store|-))" && hit=1
+chk "${pre}branch[[:space:]]+(([^|;&]*[[:space:]])?(-[dDmMcCf]|--delete|--move|--copy|--force)([^[:alnum:]_-]|\$)|[^-[:space:]|;&])" && hit=1
+chk "${pre}tag[[:space:]]+(([^|;&]*[[:space:]])?(-[dasfm]|--delete|--annotate|--sign|--force|--message)([^[:alnum:]_-]|\$)|[^-[:space:]|;&])" && hit=1
+chk "${pre}worktree[[:space:]]+(add|remove|move|prune|lock|unlock|repair)([^[:alnum:]_-]|\$)" && hit=1
+chk "${pre}remote[[:space:]]+(add|remove|rm|rename|set-url|set-head|set-branches|prune|update)([^[:alnum:]_-]|\$)" && hit=1
+chk "${pre}reflog[[:space:]]+(expire|delete)([^[:alnum:]_-]|\$)" && hit=1
+if chk "${pre}config([^[:alnum:]_-]|\$)" && ! chk "${pre}config[[:space:]]+([^|;&]*[[:space:]])?(--get[a-z-]*|--list|-l|--show-origin)([^[:alnum:]_-]|\$)"; then hit=1; fi
 if [ -n "$hit" ]; then
   {
     echo "guyb: blocked - read-only agent '${agent#guyb:}' may not run git write commands."
