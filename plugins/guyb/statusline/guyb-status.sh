@@ -10,15 +10,7 @@ exec 2>/dev/null
 export LC_ALL=C
 
 json=
-if [ ! -t 0 ]; then
-  # bash 3.2 read -n returns early on a pipe (macOS CI): read until EOF, timeout or the cap
-  chunk=
-  while IFS= read -r -t 2 -n 65536 -d '' chunk; do
-    json=$json$chunk; chunk=
-    [ "${#json}" -ge 65536 ] && break
-  done
-  json=$json$chunk
-fi
+if [ ! -t 0 ]; then IFS= read -r -t 2 -n 65536 -d '' json; fi
 json=${json#$'\xef\xbb\xbf'}
 
 jget() { # key: sets v to the string value of the first "key": "..." in $json (one awk, no pattern quoting)

@@ -58,9 +58,13 @@ check "branch with slash" "guyb > br  feat/x" "$(run "$tmp" "$(json "$tmp/br")")
 
 # only cwd; workspace.current_dir wins over cwd; PWD fallback on empty or garbled stdin
 check "only cwd" "guyb > new  main  2 running  2 questions" "$(run "$tmp" "{\"cwd\":\"$tmp/new\"}")"
-check "current_dir wins" "guyb > br  feat/x" "$(run "$tmp" "{\"cwd\":\"$tmp/new\",\"workspace\":{\"current_dir\":\"$tmp/br\"}}")"
-check "current_dir first, differs from cwd" "guyb > br  feat/x" "$(run "$tmp" "{\"workspace\":{\"current_dir\":\"$tmp/br\"},\"cwd\":\"$tmp/new\"}")"
-check "whitespace around colon" "guyb > br  feat/x" "$(run "$tmp" "{\"cwd\": \"$tmp/new\", \"workspace\": { \"current_dir\" : \"$tmp/br\" }}")"
+# JSON with a comma goes through a variable: bash 3.2 brace-expands {a,b} inside "$(... "..." ...)"
+j="{\"cwd\":\"$tmp/new\",\"workspace\":{\"current_dir\":\"$tmp/br\"}}"
+check "current_dir wins" "guyb > br  feat/x" "$(run "$tmp" "$j")"
+j="{\"workspace\":{\"current_dir\":\"$tmp/br\"},\"cwd\":\"$tmp/new\"}"
+check "current_dir first, differs from cwd" "guyb > br  feat/x" "$(run "$tmp" "$j")"
+j="{\"cwd\": \"$tmp/new\", \"workspace\": { \"current_dir\" : \"$tmp/br\" }}"
+check "whitespace around colon" "guyb > br  feat/x" "$(run "$tmp" "$j")"
 check "BOM on stdin" "guyb > br  feat/x" "$(run "$tmp" "$(printf '\357\273\277'; printf '{"cwd":"%s"}' "$tmp/br")")"
 check "empty stdin uses PWD" "guyb > br  feat/x" "$(run "$tmp/br" "")"
 check "garbled stdin uses PWD" "guyb > br  feat/x" "$(run "$tmp/br" '{not json "cwd": ')"
