@@ -44,7 +44,9 @@
 - Deferred consider item: A15 (docs note)
 
 ## Next Up
-- Review (guyb-86), open 0.8.0 PR (guyb-87), user merges, watch CI (esp. macOS and validate job), then update installed plugin (installed is 0.5.0)
+- Review round 2 (guyb-89), open 0.8.0 PR (guyb-87), user merges, watch CI (esp. macOS and validate job), then update installed plugin (installed is 0.5.0)
+- 0.8.1 perf: guards cost ~1-1.6s per call on Windows (process spawns, not jq); check agent type first with bash builtins so non-read-only agents pay ~0, fewer subshells overall, run test files in parallel, add shellcheck to lint/CI (jq + shellcheck installed locally via scoop)
+- Guard follow-ups (guyb-89 consider): read-only guard blocks git verbs inside string/file text (reviewer worked around it with a placeholder + sed: text-only guards are evadable by runtime substitution); `-c` value with inner quotes passes; gitconfig aliases (`git ci`) not resolved; false positive `git grep "git add"`
 - Consider item A15
 - Gather feedback on 0.6.0, then pick next features
 
