@@ -164,6 +164,15 @@ try {
   Expect-Lacks 'migrate foreign + new' $r[1] 'migrate:'
   Expect-Has 'migrate foreign + new' $r[1] '- new next'
 
+  Write-Host 'brief.ps1 empty section, question rows'
+  $ep = Join-Path $tmp 'empty-sec'; New-Item -ItemType Directory -Force -Path (Join-Path $ep '.claude/guyb/pipeline') | Out-Null
+  Write-File (Join-Path $ep '.claude/guyb/STATE.md') "# Next up`r`n`r`n# Open issues`r`n- one`r`n"
+  Write-File (Join-Path $ep '.claude/guyb/pipeline/questions.md') "| Q | Question | Run | Status |`r`n|---|---|---|---|`r`n| Q1 | what | me | open |`r`n| Q2 | a |  | open |`r`n"
+  $r = Run-Child $brief @('-Dir', $ep) $null
+  Expect-Lacks 'empty section heading' $r[1] 'STATE.md Next up:'
+  Expect-Has 'empty section heading' $r[1] 'STATE.md Open issues:'
+  Expect-Has 'question row' $r[1] '  Q1 | what | me | open'
+
   Write-Host 'brief.ps1 gitignore check'
   $gi = Join-Path $tmp 'gi'; Make-Fixture $gi
   $r = Run-Child $brief @('-Dir', $gi) $null

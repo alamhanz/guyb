@@ -43,6 +43,8 @@ function guyb {
     if ($List) {
         # Non-interactive: one tab-separated line per project, most recent activity first:
         # name, abs path, last activity (ISO 8601 UTC), is git (y/n), dirty count, has .claude/guyb/STATE.md or legacy .claude/STATE.md (y/n)
+        # PS 5.1 decodes native git output with the OEM code page; read it as UTF-8.
+        try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
         if (-not (Test-Path -LiteralPath $root -PathType Container)) { Write-Error "Root not found: $root"; return }
         $hasGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
         Get-ChildItem -LiteralPath $root -Directory | Where-Object { -not $_.Name.StartsWith('.') } | ForEach-Object {
@@ -59,7 +61,7 @@ function guyb {
             }
             [pscustomobject]@{
                 When = $when
-                Line = (@($_.Name, $_.FullName, $when.ToString('yyyy-MM-ddTHH:mm:ssZ'), $(if ($isGit) { 'y' } else { 'n' }), $dirty,
+                Line = (@($_.Name, $_.FullName, $when.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture), $(if ($isGit) { 'y' } else { 'n' }), $dirty,
                     $(if ((Test-Path -LiteralPath (Join-Path $_.FullName '.claude\guyb\STATE.md')) -or (Test-Path -LiteralPath (Join-Path $_.FullName '.claude\STATE.md'))) { 'y' } else { 'n' })) -join "`t")
             }
         } | Sort-Object When -Descending | ForEach-Object { $_.Line }

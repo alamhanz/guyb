@@ -2,6 +2,7 @@
 # Read-only session briefing for /guyb:start. No prompts, no cd, no secrets. Usage: brief.sh [project folder]
 dir="${1:-$PWD}"
 dir="${dir%/}"
+[ -n "$dir" ] || dir=/
 export GIT_TERMINAL_PROMPT=0
 
 echo "project: $(basename "$dir")"
@@ -176,7 +177,7 @@ if [ -n "$pipe" ] && [ -f "$qs" ]; then
   open=$(grep -E '^\|[[:space:]]*Q[0-9]+.*\|[[:space:]]*open[[:space:]]*\|' "$qs")
   if [ -n "$open" ]; then
     echo "open questions ($(printf '%s\n' "$open" | wc -l | tr -d ' ')):"
-    printf '%s\n' "$open" | head -5 | cut -d'|' -f2-5 | sed -E 's/^[[:space:]]*//; s/[[:space:]]*\|[[:space:]]*/ | /g; s/^/  /'
+    printf '%s\n' "$open" | head -5 | awk -F'|' '{ n = 0; o = ""; for (i = 1; i <= NF && n < 4; i++) { c = $i; gsub(/^[ \t\r]+|[ \t\r]+$/, "", c); if (c != "") { o = o (n ? " | " : "") c; n++ } } print "  " o }'
   fi
 fi
 

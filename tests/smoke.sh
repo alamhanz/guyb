@@ -172,6 +172,18 @@ out=$(bash "$brief" "$(win "$a")" 2>&1)
 expect_has "migrate both pipeline" "$out" "migrate: conflict: .claude/pipeline/ and .claude/guyb/pipeline/ both exist"
 rmdir "$a/.claude/pipeline"
 
+echo "brief.sh empty section, question rows, root dir"
+ep="$tmp/empty-sec"; mkdir -p "$ep/.claude/guyb/pipeline"
+printf '# Next up\n\n# Open issues\n- one\n' > "$ep/.claude/guyb/STATE.md"
+printf '| Q | Question | Run | Status |\n|---|---|---|---|\n| Q1 | what | me | open |\n| Q2 | a |  | open |\n' > "$ep/.claude/guyb/pipeline/questions.md"
+out=$(bash "$brief" "$(win "$ep")" 2>&1)
+expect_lacks "empty section heading" "$out" "STATE.md Next up:"
+expect_has "empty section heading" "$out" "STATE.md Open issues:"
+expect_has "question row no trailing space" "$out" "  Q1 | what | me | open"
+case "$out" in *"open "$'\n'*|*"open ") no "question row trailing space" ;; *) ok ;; esac
+out=$(bash "$brief" / 2>&1 </dev/null)
+expect_has "root dir kept" "$out" "project: /"
+
 echo "brief.sh gitignore check"
 out=$(bash "$brief" "$(win "$a")" 2>&1)
 expect_has "gitignore missing" "$out" "gitignore: .claude/guyb/pipeline/ not ignored"

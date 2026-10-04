@@ -42,7 +42,7 @@ EOF2
 
 # Set a window option on one tmux window (never -g), or print the command under GUYB_DRYRUN.
 _guyb_tmux_opt() {
-  if [ -n "$GUYB_DRYRUN" ]; then printf 'tmux: set-window-option -t %s %s %s\n' "$1" "$2" "$3"
+  if [ -n "${GUYB_DRYRUN:-}" ]; then printf 'tmux: set-window-option -t %s %s %s\n' "$1" "$2" "$3"
   else tmux set-window-option -t "$1" "$2" "$3" >/dev/null 2>&1; fi
 }
 
@@ -51,7 +51,7 @@ guyb() {
   [ -n "${ZSH_VERSION:-}" ] && setopt local_options null_glob
   local root="${GUYB_ROOT:-$PWD}" target=""
 
-  if [ "$1" = "--list" ]; then
+  if [ "${1:-}" = "--list" ]; then
     # Non-interactive: one tab-separated line per project, most recent activity first:
     # name, abs path, last activity (ISO 8601 UTC), is git (y/n), dirty count, has .claude/guyb/STATE.md or legacy .claude/STATE.md (y/n)
     [ -d "$root" ] || { echo "Root not found: $root" >&2; return 1; }
@@ -74,27 +74,32 @@ guyb() {
     return 0
   fi
 
-  if [ -z "$1" ]; then
+  if [ -z "${1:-}" ]; then
     local dirs=() d
     for d in "$root"/*/; do [ -d "$d" ] && dirs+=("${d%/}"); done
     [ ${#dirs[@]} -eq 0 ] && { echo "No project folders in $root" >&2; return 1; }
     PS3="Project number: "
     select d in "${dirs[@]##*/}"; do [ -n "$d" ] && target="$root/$d" && break; done
-  elif [ -d "$1" ]; then
-    target="$(cd "$1" && pwd)"
-  elif [ -d "$root/$1" ]; then
-    target="$(cd "$root/$1" && pwd)"
+  elif [ -d "${1:-}" ]; then
+    target="$(cd "${1:-}" && pwd)"
+  elif [ -d "$root/${1:-}" ]; then
+    target="$(cd "$root/${1:-}" && pwd)"
   else
-    echo "Project not found: $1 (root: $root)" >&2; return 1
+    echo "Project not found: ${1:-} (root: $root)" >&2; return 1
   fi
 
   local name clean hex; name="$(basename "$target")"
   clean="$(_guyb_clean "$name")"; hex="$(_guyb_color "$name")"
   local env_off="CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1"
-  if [ -n "$TMUX" ]; then
-    local id="@dry" cmd="$env_off claude /guyb:start; exec \$SHELL" tn tc
+  # Called from inside a Claude Code session: drop its variables so the new claude starts as a normal top-level session (parity with launch.ps1).
+  local drop=""
+  if [ -n "${CLAUDECODE:-}" ] && [ -z "${GUYB_DRYRUN:-}" ]; then
+    drop="unset NO_COLOR CLAUDECODE CLAUDE_PID $(env | sed -n 's/^\(CLAUDE_CODE_[A-Za-z0-9_]*\)=.*/\1/p' | tr '\n' ' '); "
+  fi
+  if [ -n "${TMUX:-}" ]; then
+    local id="@dry" cmd="${drop}$env_off claude /guyb:start; exec \$SHELL" tn tc
     tn="$(_guyb_tmux_arg "$clean")"; tc="$(_guyb_tmux_arg "$target")"
-    if [ -n "$GUYB_DRYRUN" ]; then
+    if [ -n "${GUYB_DRYRUN:-}" ]; then
       printf "tmux: new-window -P -F '#{window_id}' -n '%s' -c '%s' '%s'\n" "$tn" "$tc" "$cmd"
     else
       id="$(tmux new-window -P -F '#{window_id}' -n "$tn" -c "$tc" "$cmd")" || return 1
@@ -103,12 +108,12 @@ guyb() {
     _guyb_tmux_opt "$id" allow-rename off
     _guyb_tmux_opt "$id" window-status-style "bg=$hex,fg=#000000"
     _guyb_tmux_opt "$id" window-status-current-style "bg=$hex,fg=#000000,bold"
-    [ -n "$GUYB_DRYRUN" ] || echo "Opened '$clean' in a new tmux window"
-  elif [ -n "$GUYB_DRYRUN" ]; then
+    [ -n "${GUYB_DRYRUN:-}" ] || echo "Opened '$clean' in a new tmux window"
+  elif [ -n "${GUYB_DRYRUN:-}" ]; then
     echo "here: osc0 $clean"
     echo "here: cd '$target' && $env_off claude /guyb:start"
   else
     printf '\033]0;%s\007' "$clean"
-    (cd "$target" && env "$env_off" claude /guyb:start)
+    (cd "$target" && { eval "$drop"; env "$env_off" claude /guyb:start; })
   fi
 }
