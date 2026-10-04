@@ -1,0 +1,40 @@
+[
+  { "cmd": "aws ecr get-login-password", "tool": "both", "expect": "ask", "note": "exact twin rule beats allow aws ecr get-*" },
+  { "cmd": "aws ecr get-login-password --region x", "tool": "both", "expect": "ask", "note": "" },
+  { "cmd": "aws ecr get-authorization-token", "tool": "both", "expect": "ask", "note": "" },
+  { "cmd": "aws lambda list-functions", "tool": "both", "expect": "ask", "note": "carved out of aws lambda list-*" },
+  { "cmd": "aws lambda list-functions --region x", "tool": "both", "expect": "ask", "note": "" },
+  { "cmd": "aws lambda get-function --function-name f", "tool": "both", "expect": "ask", "note": "carved out of aws lambda get-*" },
+  { "cmd": "aws secretsmanager get-secret-value --secret-id x", "tool": "both", "expect": "ask", "note": "" },
+  { "cmd": "git push --force origin main", "tool": "both", "expect": "ask", "note": "" },
+  { "cmd": "git push origin main -f", "tool": "both", "expect": "ask", "note": "" },
+  { "cmd": "git reset --hard HEAD~1", "tool": "both", "expect": "ask", "note": "" },
+  { "cmd": "aws ec2 terminate-instances --instance-ids i-1", "tool": "both", "expect": "ask", "note": "" },
+  { "cmd": "gh api repos/x/y", "tool": "both", "expect": "ask", "note": "" },
+
+  { "cmd": "git status", "tool": "both", "expect": "allow", "note": "trailing ' *' also matches the bare command" },
+  { "cmd": "git status -sb", "tool": "both", "expect": "allow", "note": "" },
+  { "cmd": "aws s3 ls s3://b", "tool": "both", "expect": "allow", "note": "" },
+  { "cmd": "aws ec2 describe-instances --region us-east-1", "tool": "both", "expect": "allow", "note": "" },
+  { "cmd": "aws sts get-caller-identity", "tool": "both", "expect": "allow", "note": "" },
+
+  { "cmd": "cat .env", "tool": "both", "expect": "deny", "note": "" },
+  { "cmd": "cat ./app/.env", "tool": "both", "expect": "deny", "note": "" },
+  { "cmd": "cat .env.local", "tool": "both", "expect": "deny", "note": "" },
+  { "cmd": "type .env.production", "tool": "both", "expect": "deny", "note": "" },
+  { "cmd": "Get-Content .env", "tool": "both", "expect": "deny", "note": "" },
+  { "cmd": "gc .env", "tool": "both", "expect": "deny", "note": "" },
+
+  { "cmd": "cat .env.example", "tool": "both", "expect": "not-deny", "note": "templates stay readable" },
+  { "cmd": "cat .env.sample", "tool": "both", "expect": "not-deny", "note": "templates stay readable" },
+
+  { "cmd": "head -n5 .env", "tool": "both", "expect": "deny", "note": "policy Q14: .env reads are blocked; flip expect here if policy changes" },
+  { "cmd": "grep KEY .env", "tool": "both", "expect": "deny", "note": "policy Q14: .env reads are blocked; flip expect here if policy changes" },
+  { "cmd": "cat -n .env", "tool": "both", "expect": "deny", "note": "policy Q14: options before the file still match 'cat *.env'" },
+
+  { "cmd": "cat .env 2>&1", "tool": "both", "expect": "none", "note": "KNOWN GAP: trailing redirection defeats 'cat *.env' (redirections not modeled; real behavior unverified)" },
+  { "cmd": "cat .env | head", "tool": "both", "expect": "deny", "note": "pipe is split, the cat part is denied" },
+  { "cmd": "cat '.env'", "tool": "both", "expect": "none", "note": "KNOWN GAP: closing quote defeats '*.env' (quote handling not modeled; real behavior unverified)" },
+  { "cmd": "Get-Content -Path .env", "tool": "both", "expect": "deny", "note": "'Get-Content *.env' matches with options in front" },
+  { "cmd": "aws iam list-users", "tool": "both", "expect": "ask", "note": "allowed by 'aws iam list-*' but asked by 'aws iam * *' (trailing ' *' optional); ask wins" }
+]

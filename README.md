@@ -1,8 +1,15 @@
-# guyb
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <img src="docs/logo-light.svg" alt="guyb" width="264">
+  </picture>
+</h1>
+
+<p align="center"><a href="https://github.com/alamhanz/guyb/actions/workflows/ci.yml"><img src="https://github.com/alamhanz/guyb/actions/workflows/ci.yml/badge.svg" alt="CI"></a></p>
 
 > From *guyub* (Javanese/Indonesian): a tight, harmonious collective where members work in sync.
 
-guyb is a Claude Code plugin: one orchestrator per project that plans the work, then runs a team of 12 specialist subagents in parallel background waves while you keep chatting with it.
+guyb is a Claude Code plugin: one orchestrator per project that plans the work, then runs a team of 13 specialist subagents in parallel background waves while you keep chatting with it.
 
 <p align="center"><img src="docs/how-guyb-works.svg" alt="You send a request; the orchestrator gets a plan from the architect; implementers and a data-modeler run in parallel while you keep chatting; then code review and a pull request." width="800"></p>
 
@@ -17,7 +24,7 @@ A plain Claude Code session works serially in one context. guyb changes that:
 | Planning is whatever you remember to ask for | Non-trivial requests start with an architect plan and questions; you approve before code is written |
 | Review and git hygiene are optional | Review runs before every PR (except docs-only); git-ops handles branch, commit, PR |
 | Agents stall or guess | Agents never ask you directly; their questions are logged and routed through the orchestrator |
-| Every session starts from zero | `.claude/STATE.md` records decisions and next steps; `/guyb:start` briefs you from it |
+| Every session starts from zero | `.claude/guyb/STATE.md` records decisions and next steps; `/guyb:start` briefs you from it |
 | Several projects get tangled | One terminal tab = one project = one orchestrator |
 
 ## How it works
@@ -38,7 +45,7 @@ A wave plan, as the orchestrator tracks it:
 [app-6] git-ops: branch, commit, PR (wave 3, after app-5)
 ```
 
-While wave 1 runs, you can talk about anything else. Ask "what's running?" and the orchestrator answers from the run registry (`.claude/pipeline/runs.md`) and each run's progress file (`.claude/pipeline/progress/<id>.md`). Details are in [`plugins/guyb/skills/pipeline/SKILL.md`](plugins/guyb/skills/pipeline/SKILL.md).
+While wave 1 runs, you can talk about anything else. Ask "what's running?" and the orchestrator answers from the run registry (`.claude/guyb/pipeline/runs.md`) and each run's progress file (`.claude/guyb/pipeline/progress/<id>.md`). Details are in [`plugins/guyb/skills/pipeline/SKILL.md`](plugins/guyb/skills/pipeline/SKILL.md).
 
 ## Install
 
@@ -69,7 +76,12 @@ Then run `/guyb:setup` once in any project: it detects installed CLIs and logins
 
 ## Usage
 
-guyb is built and tested for the terminal (Windows Terminal, or tmux on macOS/Linux). Claude Desktop and Cowork are untested.
+### Platform support
+
+- **Optimized for:** Claude Code in a terminal: PowerShell 7 / Windows PowerShell 5.1 in Windows Terminal, and bash. Development and manual testing happen on Windows and WSL (Ubuntu).
+- **macOS and native Linux:** the scripts are written to be portable (bash 3.2, BSD tools, pwsh 7) and CI runs them on Ubuntu and macOS, but day-to-day use there is less tested. Expect rough edges.
+- **Claude Desktop and Cowork:** may work, not guaranteed.
+- **When a guyb script fails on your platform,** the Claude session running guyb is expected to diagnose it and do the step another way (read the files directly, use the equivalent command) and tell you what it did. It then offers `/guyb:report-issue`, which shows a redacted draft and files a public GitHub issue on the guyb repo only with your consent.
 
 **From the projects root.** Start `claude` in the folder that holds your projects and say "activate guyb" or "let's start myapp". That session is a launcher (`/guyb:launch`): it runs the setup check, shows a picker (skipped if you named a project), and opens the project in a new tab running `/guyb:start`. Or use the shell launcher directly:
 
@@ -80,7 +92,11 @@ guyb myapp        # open GUYB_ROOT/myapp in a new tab
 
 Launcher flags and the `-List` / `--list` output format are documented in the headers of `scripts/launch.ps1` and `scripts/launch.sh`; the check JSON is described in `plugins/guyb/skills/launch/SKILL.md`.
 
-**In a project.** `/guyb:start` gives a briefing (branch, open PRs, next steps from `.claude/STATE.md`), drafts `.claude/CLAUDE.md` on first use, and asks what to work on. Then just talk: "add rate limiting to the API and ship it".
+**Tabs and status line.** With many tabs open, each `guyb myapp` tab keeps a stable title (the project name) and a colour derived from that name (8-colour palette, same name = same colour). Windows Terminal: `--suppressApplicationTitle` and `--tabColor`. tmux: window rename is turned off for that window only, and the window status is coloured. Other terminals: the launcher writes the title once (OSC 0) before starting Claude. Every guyb-launched tab also sets `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1` so Claude does not overwrite the title. That variable is not in Claude Code's documented settings; it was seen to stop the title write at startup only. If a Claude Code update drops it, the title lock still holds in Windows Terminal and tmux, and other terminals may show Claude's own title again.
+
+`/guyb:setup` can also install a status line (with your consent, never replacing an existing `statusLine` without asking): `guyb > myapp  main  2 running  1 question`, read from `.claude/guyb/pipeline/` and the git HEAD file, no network. It copies the scripts to `~/.claude/guyb/` and adds a `statusLine` entry to `~/.claude/settings.json`. To uninstall: remove the `statusLine` key and delete `~/.claude/guyb/statusline.*`.
+
+**In a project.** `/guyb:start` gives a briefing (branch, open PRs, next steps from `.claude/guyb/STATE.md`; it also flags an outdated plugin and `STATE.md` entries about PRs that are already merged or closed, and shows an `env:` line when the project's Python, Node, package manager, or Docker is missing or mismatched), drafts `.claude/CLAUDE.md` on first use, and asks what to work on. Then just talk: "add rate limiting to the API and ship it".
 
 | Command | What it does |
 |---|---|
@@ -90,8 +106,10 @@ Launcher flags and the `-List` / `--list` output format are documented in the he
 | `/guyb:build <what>` | architect, implementers, review, PR |
 | `/guyb:ship` | review, commit, push, PR, CI status |
 | `/guyb:status` | status table across all projects |
+| `/guyb:env [python\|node\|docker]` | set up the project's local environment (venv, dependencies, image pull) after consent |
 | `/guyb:creds [what]` | add credentials for this project (values go in `.env`, never the chat) |
-| `/guyb:end` | record the session in `.claude/STATE.md` |
+| `/guyb:end` | record the session in `.claude/guyb/STATE.md` |
+| `/guyb:report-issue` | draft a redacted bug report for a guyb failure and file it on the guyb repo after you approve it |
 
 ## The team
 
@@ -108,6 +126,7 @@ Launcher flags and the `-List` / `--list` output format are documented in the he
 | `cloud-ops` | sonnet | identity-first AWS / GCP / Azure inspect and change |
 | `deployer` | sonnet | test, build, deploy, verify live |
 | `repo-steward` | sonnet | status and hygiene across repos |
+| `brand-designer` | sonnet | logo and brand mark: SVG concepts, preview page, README block |
 | `session-tracker` | haiku | end-of-session `STATE.md` update, docs drift |
 
 Change defaults via `model:` in `plugins/guyb/agents/*.md`; the orchestrator can pick another model per run.
@@ -129,13 +148,17 @@ Every agent starts with fresh context (roughly 15-50k tokens), so guyb spends ag
 | File | Commit it? |
 |---|---|
 | `.claude/CLAUDE.md` (stack, commands, credential names) | yes |
-| `.claude/STATE.md` (status, decisions, next steps) | yes |
+| `.claude/guyb/STATE.md` (status, decisions, next steps; line 1 is the marker `<!-- guyb:state -->`) | yes |
 | `.env` (secrets; guyb makes sure it is gitignored) / `.env.example` | never / yes |
-| `.claude/pipeline/` (plans, run registry, progress, questions) | no, auto-gitignored |
+| `.claude/guyb/pipeline/` (plans, run registry, progress, questions; `runs-archive.md` / `questions-archive.md` after a cleanup) | no, auto-gitignored |
+
+**Upgrading from 0.6.** Files used to live in `.claude/STATE.md` and `.claude/pipeline/`. `/guyb:start` offers to move them to `.claude/guyb/`; nothing moves without your OK, and a `.claude/STATE.md` that guyb did not write (no marker, not guyb's structure) is never touched.
+
+**Cleanup suggestions.** `/guyb:start` suggests a cleanup when `.claude/CLAUDE.md` passes 200 lines, `STATE.md` 300 lines, `runs.md` or `questions.md` 200 rows, or scratch files under `pipeline/` are older than 14 days. Unfinished runs and open questions older than 14 days are listed as overdue and asked about one by one; nothing is archived or deleted without consent. Override the limits with lines in the project `.claude/CLAUDE.md` or `~/.claude/guyb/profile.md` (project wins): `cleanup_claude_md_lines: 200`, `cleanup_state_lines: 300`, `cleanup_rows: 200`, `cleanup_days: 14` (positive integers; invalid values are ignored). If `.gitignore` ignores all of `.claude/`, the briefing warns that `STATE.md` will not be committed.
 
 ## Security
 
-guyb manages where credentials live but never stores or sees their values. A commit guard hook blocks staging `.env`, keys, and credential files. Hooks only print the playbook at session start and check staged file names. Plugins run with your permissions, so read the agents and hooks before installing.
+guyb manages where credentials live but never stores or sees their values. A commit guard hook blocks `git commit` when `.env`, keys, or credential files are staged; it covers both Bash and PowerShell commits, but only plain `git commit ...` (not `git -C dir commit` or chained commands). A second hook stops the read-only subagents (`architect`, `code-reviewer`, `data-modeler`, `data-analyst`) from running git write commands (a best-effort text match; the agents' prompt rules are the main control). Hooks only print the playbook at session start and check staged file names and subagent git commands. Plugins run with your permissions, so read the agents and hooks before installing.
 
 ## More
 

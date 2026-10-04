@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # bash scripts on real bash: ubuntu (bash 5), macOS (/bin/bash 3.2, BSD tools), Windows (Git Bash)
+  bash:
+    name: bash (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tmux and zsh (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y tmux zsh
+      - name: Install tmux (macOS; zsh is /bin/zsh)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: brew install tmux || brew install tmux
+      - name: Put /bin first so nested bash is 3.2 (macOS)
+        if: runner.os == 'macOS'
+        run: echo /bin >> "$GITHUB_PATH"
+      - name: Assert bash 3.2 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          test "$(command -v bash)" = /bin/bash
+          /bin/bash -c 'case "$BASH_VERSION" in 3.2*) exit 0;; *) echo "bash $BASH_VERSION"; exit 1;; esac'
+      - name: Env summary (informational)
+        run: |
+          uname -a || true
+          bash --version | head -1 || true
+          docker --version || true
+          python3 --version || true
+          node --version || true
+          tmux -V || true
+          zsh --version || true
+      - name: Lint
+        run: /bin/bash tests/lint.sh
+      - name: Smoke
+        run: /bin/bash tests/smoke.sh
+      - name: Tabs (launcher colour and title lock; real tmux and zsh)
+        run: /bin/bash tests/tabs.sh
+        env:
+          GUYB_REQUIRE_TMUX: ${{ runner.os != 'Windows' && '1' || '' }}
+          GUYB_REQUIRE_ZSH: ${{ runner.os != 'Windows' && '1' || '' }}
+      - name: Status line
+        run: /bin/bash tests/statusline.sh
+
+  # PowerShell 7 on all three OSes
+  pwsh:
+    name: pwsh 7 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: ./tests/lint.ps1
+      - name: Smoke
+        run: ./tests/smoke.ps1
+      - name: Tabs (launcher colour and title lock)
+        run: ./tests/tabs.ps1
+      - name: Status line
+        run: ./tests/statusline.ps1
+      - name: Permission rules
+        run: ./tests/permissions.ps1
+
+  # Windows PowerShell 5.1 (the shell older Windows machines still use)
+  winps51:
+    name: Windows PowerShell 5.1
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/lint.ps1
+      - name: Smoke
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/smoke.ps1
+      - name: Tabs (launcher colour and title lock)
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/tabs.ps1
+      - name: Status line
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/statusline.ps1
+      - name: Permission rules
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/permissions.ps1
+
+  # Plugin manifest validation. Not part of ci-ok yet: it installs Claude Code from npm and may need
+  # network or auth. Make it required by adding it to ci-ok's needs once it has been green for a while.
+  validate:
+    name: claude plugin validate (non-required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate plugin
+        run: claude plugin validate ./plugins/guyb
+
+  # Single check to require in branch protection.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [bash, pwsh, winps51]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs passed
+        run: |
+          echo "bash=${{ needs.bash.result }} pwsh=${{ needs.pwsh.result }} winps51=${{ needs.winps51.result }}"
+          test "${{ needs.bash.result }}" = success
+          test "${{ needs.pwsh.result }}" = success
+          test "${{ needs.winps51.result }}" = success

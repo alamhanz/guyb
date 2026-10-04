@@ -17,12 +17,12 @@ Run the guyb global setup. Scope: "$ARGUMENTS" (empty = everything). Work throug
 
 - Path: `${CLAUDE_SKILL_DIR}/check.ps1` (PowerShell: `pwsh -NoProfile -File "${CLAUDE_SKILL_DIR}/check.ps1" -StartDir "<session start folder>"`; use `powershell` if `pwsh` is missing) or `bash "${CLAUDE_SKILL_DIR}/check.sh" "<session start folder>"`. `${CLAUDE_SKILL_DIR}` is fine inside this skill; callers outside it (e.g. `/guyb:launch`) use `${CLAUDE_PLUGIN_ROOT}/skills/setup` first. On Windows always use `check.ps1`; `check.sh` is for macOS/Linux. Strip any trailing `\` or `/` from the folder passed as `-StartDir` (a trailing backslash breaks `pwsh -File` quoting). If the variable arrives unexpanded or the file is missing, fall back to `${CLAUDE_PLUGIN_ROOT}/skills/setup/check.ps1`, then to `<repo>/plugins/guyb/skills/setup/` with the repo from `~/.claude/plugins/known_marketplaces.json` (`guyb.source.path`). A freshly added script only exists in the plugin cache after a plugin update.
 - JSON: `{version, os, root, repo, blockingFailures, checks:[{id, status: ok|warn|fail|skip, blocking, detail, fix, fixBy}]}`. `fixBy` is `claude-after-consent` (show the `fix` command, run it only after the user agrees), `user` (the user runs it, with `!` for logins), or `none`.
-- Checks: `claude`, `git`, `git-identity`, `launcher` (blocking: a `fail` here must be fixed or handed to the user before launching); `root` (GUYB_ROOT from process env, user env, then the `$PROFILE`/rc line), `launcher-profile`, `gh-auth`, `git-cred`, `terminal` (wt.exe / tmux), `plugin` (installed vs source version and sha), `profile` (warnings: show them in one line each and continue).
+- Checks: `claude`, `git`, `git-identity`, `launcher` (blocking: a `fail` here must be fixed or handed to the user before launching); `root` (GUYB_ROOT from process env, user env, then the `$PROFILE`/rc line), `launcher-profile`, `gh-auth`, `git-cred`, `terminal` (wt.exe / tmux), `plugin` (installed vs source version and sha), `profile` (warnings: show them in one line each and continue); `container` (docker/podman and whether the daemon answers within 3 s), `python`, `node`, `uv` (info only, never blocking; a missing runtime is `skip`, because per-project needs are checked by `/guyb:start` and fixed by `/guyb:env`).
 - For each non-ok check, follow the ground rules above: global changes (`git config --global`, appending to `$PROFILE`, `gh auth setup-git`, plugin update) only after consent; `gh auth login` and other logins are run by the user. Missing git host or cloud logins are handled by the sections below, so offer the full wizard for those.
 - Never print or ask for secret values while fixing a check.
 
 ## 0. Detect (read-only, no questions yet)
-Run the quick check script first and show its warnings. Then detect the OS and package manager (`winget` on Windows, `brew` on macOS, `apt`/`dnf` on Linux). Then check, in parallel, version and auth status for: `git` (+ `git config --global user.name/user.email`), `gh` (`gh auth status`), `glab` (`glab auth status`), `aws` (`aws configure list-profiles`, `aws sts get-caller-identity`), `gcloud` (`gcloud auth list`, `gcloud config list`), `az` (`az account show`), `psql`, `mysql`, `mongosh`, `redis-cli`, `docker`. Read `~/.claude/guyb/profile.md` if it exists.
+Run the quick check script first and show its warnings (it also reports the python/node/uv/container toolchain, so do not re-probe those). Then detect the OS and package manager (`winget` on Windows, `brew` on macOS, `apt`/`dnf` on Linux). Then check, in parallel, version and auth status for: `git` (+ `git config --global user.name/user.email`), `gh` (`gh auth status`), `glab` (`glab auth status`), `aws` (`aws configure list-profiles`, `aws sts get-caller-identity`), `gcloud` (`gcloud auth list`, `gcloud config list`), `az` (`az account show`), `psql`, `mysql`, `mongosh`, `redis-cli`, `docker`. Read `~/.claude/guyb/profile.md` if it exists.
 Show one compact table: tool | installed | logged in as | notes.
 
 ## 1. Ask what the user uses
@@ -35,6 +35,8 @@ Ask with multiple-choice questions (multi-select where it makes sense), skipping
 
 ## 2. Install missing tools (confirm each)
 Look up the exact package id first (`winget search <name>` / `brew search <name>`), show the command, and install only after the user says yes. Typical packages: GitHub CLI, GitLab CLI (glab), AWS CLI v2, Google Cloud SDK, Azure CLI, PostgreSQL client (macOS: `libpq`), MySQL client, mongosh. After installing on Windows, tell the user that a new terminal may be needed for PATH changes.
+
+Docker is the exception: it is never auto-installed here. The `container` check warns only when projects under the root have container files (Dockerfile, compose files) and no docker/podman exists. Then show the `fix` command for the user to run (`! <cmd>`). Docker Desktop on Windows needs admin and WSL2 and has license terms for larger companies; podman is an alternative.
 
 ## 3. Git identity and host login
 - If `user.name`/`user.email` are not set globally, ask what to use. For GitHub, offer the private no-reply address (`<id>+<user>@users.noreply.github.com`; get the id with `gh api user --jq .id` after login). Set it with `git config --global` after confirmation.
@@ -53,6 +55,25 @@ Look up the exact package id first (`winget search <name>` / `brew search <name>
 
 ## 6. Permissions
 The guyb installer already merged rules for gh, glab, aws, gcloud, and az. If the user added another CLI, offer to add read-only allow rules and destructive-command ask rules for it to `~/.claude/settings.json` (show the diff first).
+
+## 6b. Status line (optional)
+Offers a Claude Code status line: `guyb > <project>  <branch>  N running  M question(s)` (zero parts omitted; read-only, no network). Skip it if the user declines. Never print secrets; never edit `~/.claude/settings.json` without showing the change and getting a yes.
+
+1. Read `statusLine` from `~/.claude/settings.json` (the file may be missing; treat as absent).
+2. **Absent:** show the exact JSON to add and ask consent. Pick the fastest interpreter available. Measured per call including process spawn on Windows: bash (Git Bash) about 0.3 s, Windows PowerShell 5.1 about 0.46 s, pwsh 7 about 0.6 s. So: bash on macOS/Linux; on Windows bash when Git Bash exists (it does wherever Claude Code runs), else `powershell` (5.1), else `pwsh`. Tell the user which one you chose and why.
+   - Write the literal absolute path of the copied script into `command`, resolved now (no `$HOME`, `%USERPROFILE%` or `~`, since the shell that runs it varies). Forward slashes are fine on Windows. Quote the path with double quotes (escaped as `\"` inside the JSON string) so spaces work, and escape any backslash as `\\` if you do use one.
+   - bash: `{"statusLine":{"type":"command","command":"bash \"/home/me/.claude/guyb/statusline.sh\""}}` (Windows: `C:/Users/me/.claude/guyb/statusline.sh`)
+   - PowerShell: `{"statusLine":{"type":"command","command":"powershell -NoProfile -File \"C:/Users/me/.claude/guyb/statusline.ps1\""}}` (`pwsh` instead of `powershell` if chosen)
+
+   On a yes: copy the script(s) for that interpreter from `${CLAUDE_PLUGIN_ROOT}/statusline/` (`guyb-status.sh` / `guyb-status.ps1`; same fallbacks as the check script rules above) to `~/.claude/guyb/statusline.sh` / `statusline.ps1` (create the folder; this stable path is used because the plugin cache path changes on every version). Do not point settings at the plugin cache; `${CLAUDE_PLUGIN_ROOT}` is not expanded in user settings.
+
+   Merge rules for `~/.claude/settings.json`:
+   - Missing file: create it containing only the `statusLine` object.
+   - File does not parse as JSON: stop, tell the user the parse error, write nothing.
+   - Otherwise copy it to `settings.json.guyb-bak` first, then insert or replace only the `statusLine` member with the Edit tool (no JSON serializer round-trip), so formatting and key order of everything else stay as they were.
+   - Re-read after writing and confirm it parses and the other keys are unchanged. If not, restore the backup and tell the user. Delete the backup once confirmed, or keep it if the user asks.
+3. **Present:** show the existing value. Ask keep (default) or replace. Replace only on an explicit yes, and tell the user the previous value so they can restore it. A status line that already runs the guyb script only needs its copy refreshed.
+4. **Uninstall:** remove the `statusLine` key from `~/.claude/settings.json` (or put back the previous value shown earlier) and delete `~/.claude/guyb/statusline.sh` / `statusline.ps1`. After a plugin update, re-run `/guyb:setup status line` to refresh the copy.
 
 ## 7. Record the profile (no secrets)
 Write `~/.claude/guyb/profile.md`:

@@ -134,6 +134,100 @@ fi
 if [ -f "$profile_md" ]; then add profile ok false "profile.md exists"
 else add profile warn false "no ~/.claude/guyb/profile.md" "/guyb:setup" user; fi
 
+# --- toolchain (never blocking, never installs) ---
+tmo=""
+has timeout && tmo=timeout
+[ -z "$tmo" ] && has gtimeout && tmo=gtimeout
+# 3s cap on probes; without a timeout binary (stock macOS): background to a temp file, poll, kill
+vt() {
+  if [ -n "$tmo" ]; then "$tmo" 3 "$@"; return; fi
+  vf=$(mktemp "${TMPDIR:-/tmp}/guyb-probe.XXXXXX" 2>/dev/null) || { "$@"; return; }
+  "$@" >"$vf" 2>&1 </dev/null &
+  vp=$!; vn=0
+  while kill -0 "$vp" 2>/dev/null && [ $vn -lt 30 ]; do sleep 0.1; vn=$((vn + 1)); done
+  if kill -0 "$vp" 2>/dev/null; then
+    has pkill && pkill -P "$vp" 2>/dev/null
+    kill "$vp" 2>/dev/null
+  fi
+  wait "$vp" 2>/dev/null; cat "$vf" 2>/dev/null; rm -f "$vf"
+}
+# daemon probe, 3s cap, exit 124 on timeout; portable (no timeout binary on stock macOS: background, poll, kill)
+dprobe() {
+  if [ -n "$tmo" ]; then "$tmo" 3 "$@" >/dev/null 2>&1 </dev/null; return $?; fi
+  "$@" >/dev/null 2>&1 </dev/null &
+  dp=$!; dn=0
+  while kill -0 "$dp" 2>/dev/null && [ $dn -lt 30 ]; do sleep 0.1; dn=$((dn + 1)); done
+  if kill -0 "$dp" 2>/dev/null; then
+    has pkill && pkill -P "$dp" 2>/dev/null
+    kill "$dp" 2>/dev/null; wait "$dp" 2>/dev/null; return 124
+  fi
+  wait "$dp"; return $?
+}
+case "$(uname -s 2>/dev/null)" in
+  Darwin) cfix="brew install --cask docker (or brew install podman)"; ufix="brew install uv"; nfix="brew install fnm" ;;
+  *) if [ $onwin -eq 1 ]; then
+       cfix="winget install Docker.DockerDesktop (needs admin and WSL2; license terms apply to larger companies; alternative: podman)"
+       ufix="winget install astral-sh.uv"; nfix="winget install Schniz.fnm"
+     else
+       cfix="sudo apt install docker.io docker-compose-v2 (or sudo apt install podman)"
+       ufix="curl -LsSf https://astral.sh/uv/install.sh | sh"; nfix="curl -fsSL https://fnm.vercel.app/install | bash"
+     fi ;;
+esac
+
+# container-use: project folders one level under the root with container files (cap 200, no recursion)
+cscan="${root:-$start_dir}"; ncont=0; nscan=0
+if [ -n "$cscan" ] && [ -d "$cscan" ]; then
+  for d in "$cscan"/*/; do
+    [ -d "$d" ] || continue
+    case "$(basename "$d")" in node_modules) continue ;; esac
+    nscan=$((nscan + 1)); [ $nscan -gt 200 ] && break
+    for cf in Dockerfile compose.yaml compose.yml docker-compose.yml docker-compose.yaml; do
+      [ -f "${d}$cf" ] && { ncont=$((ncont + 1)); break; }
+    done
+  done
+fi
+
+cbin=""
+if has docker; then cbin=docker; elif has podman; then cbin=podman; fi
+if [ -n "$cbin" ]; then
+  cv=$(vt "$cbin" --version 2>/dev/null </dev/null | tr -d '\r' | sed -n 's/.*[Vv]ersion \([0-9][0-9.]*\).*/\1/p' | head -n1)
+  cd1="$cbin${cv:+ $cv}"
+  if [ "$cbin" = docker ]; then dprobe docker info --format '{{.ServerVersion}}'; crc=$?
+  else dprobe podman info --format '{{.Version.Version}}'; crc=$?; fi
+  if [ $crc -eq 0 ]; then add container ok false "$cd1, daemon running"
+  else
+    if [ "$cbin" = podman ]; then dfix="podman machine start"
+    elif [ $onwin -eq 1 ] || [ "$(uname -s 2>/dev/null)" = Darwin ]; then dfix="Start Docker Desktop"
+    else dfix="sudo systemctl start docker"; fi
+    dd="daemon not running"; [ $crc -eq 124 ] && dd="daemon not responding"
+    add container warn false "$cd1, $dd" "$dfix" user
+  fi
+elif [ $ncont -gt 0 ]; then
+  add container warn false "docker/podman not installed; $ncont project folder(s) use containers" "$cfix" user
+else add container skip false "docker/podman not installed; no container projects found"; fi
+
+pv=""
+for pc in python3 python; do
+  has "$pc" || continue
+  pv=$(vt "$pc" --version 2>&1 </dev/null | tr -d '\r' | sed -n 's/^Python \([0-9][0-9]*\.[0-9][0-9.]*\).*/\1/p' | head -n1)
+  [ -n "$pv" ] && break
+done
+if [ -z "$pv" ] && [ $onwin -eq 1 ] && has py; then
+  pv=$(vt py -3 --version 2>&1 </dev/null | tr -d '\r' | sed -n 's/^Python \([0-9][0-9]*\.[0-9][0-9.]*\).*/\1/p' | head -n1)
+fi
+if [ -n "$pv" ]; then add python ok false "python $pv"
+else add python skip false "python not installed" "uv python install <version>" user; fi
+
+nv=""
+has node && nv=$(vt node --version 2>&1 </dev/null | tr -d '\r' | sed -n 's/^v\([0-9][0-9]*\.[0-9][0-9.]*\).*/\1/p' | head -n1)
+if [ -n "$nv" ]; then add node ok false "node $nv"
+else add node skip false "node not installed" "$nfix" user; fi
+
+uvv=""
+has uv && uvv=$(vt uv --version 2>&1 </dev/null | tr -d '\r' | sed -n 's/^uv \([0-9][0-9]*\.[0-9][0-9.]*\).*/\1/p' | head -n1)
+if [ -n "$uvv" ]; then add uv ok false "uv $uvv"
+else add uv skip false "uv not installed" "$ufix" user; fi
+
 os=unix; [ $onwin -eq 1 ] && os=windows
 printf '{\n  "version": 1,\n  "os": "%s",\n  "root": "%s",\n  "repo": "%s",\n  "blockingFailures": %s,\n  "checks": [%s\n  ]\n}\n' \
   "$os" "$(esc "$root")" "$(esc "$repo")" "$blockfail" "$out"
