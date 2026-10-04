@@ -93,8 +93,9 @@ try {
   Write-File (Join-Path $sp '.env') "KEY=value`n"; GS add .env
   Chk 'Set-Location spaced repo' 2 $out "Set-Location '$sp'; git commit -m x"
   Chk 'Set-Location -LiteralPath' 2 $out "Set-Location -LiteralPath `"$sp`"; git commit -m x"
-  Chk 'cd away from the bad repo' 0 $r "cd '$par'; git -C '$out' commit -m x"
+  Chk 'cd away to a non-repo falls back to the cwd repo' 2 $r "cd '$par'; git -C '$out' commit -m x"
   GS reset -q
+  Chk 'cd away to a clean repo' 0 $r "cd '$par'; git -C '$sp' commit -m x"
 
   Write-Host 'here-string message'
   $hd = "git commit -m @'`nbody -a`n'@"
@@ -145,6 +146,61 @@ try {
   Chk 'missing cwd dir' 0 (Join-Path $tmp 'no-such-dir') 'git commit -m x'
   $m = Run-Guard $out (Hook-Json $out "git -C '$r' commit -m x")
   Expect-Eq 'message names the repo' ($m[1].Contains('would be committed (')) $true
+
+  Write-Host 'git add in the same command'
+  G reset -q   # .env is untracked, nothing staged
+  Chk 'untracked .env, plain commit' 0 $r 'git commit -m x'
+  Chk 'add -A ; commit' 2 $r 'git add -A ; git commit -m x'
+  Chk 'add . && commit' 2 $r 'git add . && git commit -m x'
+  Chk 'add .env ; commit' 2 $r 'git add .env ; git commit -m x'
+  Chk 'stage -A ; commit' 2 $r 'git stage -A ; git commit -m x'
+  Chk '-C add ; -C commit' 2 $out "git -C '$r' add -A ; git -C '$r' commit -m x"
+  Chk 'add README only, .env untracked' 2 $r 'git add README.md ; git commit -m x'
+  Chk 'GIT ADD' 2 $r 'GIT add -A ; GIT commit -m x'
+  Chk 'add .env.example, .env untracked' 2 $r 'git add .env.example ; git commit -m x'
+  Move-Item -LiteralPath (Join-Path $r '.env') -Destination (Join-Path $r 'env.keep')
+  Chk 'add README, no untracked secrets' 0 $r 'git add README.md ; git commit -m x'
+  Add-Content -LiteralPath (Join-Path $r '.git/info/exclude') -Value 'ign.pem'
+  Write-File (Join-Path $r 'ign.pem') "k`n"
+  Chk 'add -A, only an ignored key' 0 $r 'git add -A ; git commit -m x'
+  Chk 'add -f ignored key' 2 $r 'git add -f ign.pem ; git commit -m x'
+  Remove-Item -LiteralPath (Join-Path $r 'ign.pem') -Force
+  Move-Item -LiteralPath (Join-Path $r 'env.keep') -Destination (Join-Path $r '.env')
+
+  Write-Host 'wrappers and unparsed commits'
+  G add .env
+  Chk 'assignment' 2 $r '$out = git commit -m x'
+  Chk 'null assignment' 2 $r '$null = git commit -m x'
+  Chk 'if ($?) block' 2 $r 'if ($?) { git commit -m x }'
+  Chk 'add ; if LASTEXITCODE block' 2 $r 'git add -A; if ($LASTEXITCODE -eq 0) { git commit -m x }'
+  Chk 'call operator' 2 $r '& git commit -m x'
+  Chk 'call operator, quoted exe path' 2 $r "& 'C:/Program Files/Git/cmd/git.exe' commit -m x"
+  Chk 'subexpression' 2 $r 'Write-Host $(git commit -m x)'
+  Chk 'ForEach-Object block' 2 $r '1 | ForEach-Object { git commit -m x }'
+  Chk 'env git commit' 2 $r 'env git commit -m x'
+  Chk 'time git commit' 2 $r 'time git commit -m x'
+  Chk 'alias via -c' 2 $r 'git -c alias.ci=commit ci -m x'
+  Chk 'cmd /c' 2 $r 'cmd /c "git commit -m x"'
+  Chk 'GIT uppercase' 2 $r 'GIT commit -m x'
+  Chk 'GIT.EXE uppercase' 2 $r 'GIT.EXE commit -m x'
+  Chk 'subshell cd then commit' 2 $r "(cd '$out'); git commit -m x"
+  Chk 'cd missing dir then commit' 2 $r "cd '$out/no-such-dir'; git commit -m x"
+  G reset -q
+  Chk 'assignment, nothing staged' 0 $r '$out = git commit -m x'
+  Chk 'if ($?) block, nothing staged' 0 $r 'if ($?) { git commit -m x }'
+  Chk 'cmd /c, nothing staged' 0 $r 'cmd /c "git commit -m x"'
+  Chk 'alias via -c, nothing staged' 0 $r 'git -c alias.ci=commit ci -m x'
+  Chk 'commit text, no git word' 0 $r 'echo "please commit"'
+
+  Write-Host '--git-dir and --work-tree'
+  G add .env
+  Chk '--git-dir=other repo from the bad cwd' 0 $r "git --git-dir='$sp/.git' commit -m x"
+  Chk '--git-dir other repo, spaced' 0 $r "git --git-dir `"$sp/.git`" commit -m x"
+  Chk '--git-dir=bad repo from elsewhere' 2 $out "git --git-dir='$r/.git' commit -m x"
+  Chk '--git-dir bad repo, spaced' 2 $out "git --git-dir '$r/.git' commit -m x"
+  Chk '--git-dir --work-tree bad repo' 2 $out "git --git-dir='$r/.git' --work-tree='$r' commit -m x"
+  Chk '--git-dir that does not exist falls back to cwd' 2 $r "git --git-dir='$out/none/.git' commit -m x"
+  G reset -q
 } finally {
   Set-Location -LiteralPath $root
   Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue

@@ -70,7 +70,7 @@ chk "-c k=v" 2 "$R" 'git -c user.name=a commit -m x'
 chk "--no-pager" 2 "$R" 'git --no-pager commit -m x'
 chk "git.exe" 2 "$R" 'git.exe commit -m x'
 chk "absolute git path" 2 "$R" '/usr/bin/git commit -m x'
-chk "-C other clean repo" 0 "$R" "git -C $SP commit -m x"
+chk "-C other clean repo" 0 "$R" "git -C \"$SP\" commit -m x"
 chk "-C quoted spaced path" 0 "$R" "git -C \"$SP\" commit -m x"
 gs reset -q
 
@@ -88,8 +88,9 @@ chk "recommit" 0 "$R" 'recommit now'
 printf 'KEY=value\n' > "$sp/.env"; gs add .env
 chk "cd quoted spaced repo" 2 "$OUT" "cd \"$SP\" ; git commit -m x"
 chk "cd single-quoted spaced repo" 2 "$OUT" "cd '$SP' && git commit -m x"
-chk "cd away from the bad repo" 0 "$R" "cd $PAR && git -C $OUT commit -m x"
+chk "cd away to a non-repo falls back to the cwd repo" 2 "$R" "cd $PAR && git -C $OUT commit -m x"
 gs reset -q
+chk "cd away to a clean repo" 0 "$R" "cd $PAR && git -C \"$SP\" commit -m x"
 
 echo "heredoc message"
 hd=$'git commit -m "$(cat <<\'EOF\'\nbody -a\nEOF\n)"'
@@ -140,6 +141,61 @@ chk "unknown dir falls back to cwd (not a repo)" 0 "$OUT" 'cd $UNSET && git comm
 chk "unknown dir falls back to cwd (repo)" 2 "$R" 'cd $UNSET && git commit -m x'
 chk "missing cwd dir" 0 "$tmp/no-such-dir" 'git commit -m x'
 expect_eq "message names the repo" "$(json "$OUT" "git -C $R commit -m x" | (cd "$out" && bash "$guard" 2>&1 >/dev/null) | grep -c "would be committed (")" 1
+
+echo "git add in the same command"
+g reset -q   # .env is untracked, nothing staged
+chk "untracked .env, plain commit" 0 "$R" 'git commit -m x'
+chk "add -A && commit" 2 "$R" 'git add -A && git commit -m x'
+chk "add . ; commit" 2 "$R" 'git add . ; git commit -m x'
+chk "add .env && commit" 2 "$R" 'git add .env && git commit -m x'
+chk "stage -A && commit" 2 "$R" 'git stage -A && git commit -m x'
+chk "-C add && -C commit" 2 "$OUT" "git -C $R add -A && git -C $R commit -m x"
+chk "add README only, .env untracked" 2 "$R" 'git add README.md && git commit -m x'
+chk "GIT ADD" 2 "$R" 'GIT add -A && GIT commit -m x'
+chk "add .env.example, .env untracked" 2 "$R" 'git add .env.example && git commit -m x'
+mv "$r/.env" "$r/env.keep"
+chk "add README, no untracked secrets" 0 "$R" 'git add README.md && git commit -m x'
+printf 'ign.pem\n' >> "$r/.git/info/exclude"; printf 'k\n' > "$r/ign.pem"
+chk "add -A, only an ignored key" 0 "$R" 'git add -A && git commit -m x'
+chk "add -f ignored key" 2 "$R" 'git add -f ign.pem && git commit -m x'
+rm -f "$r/ign.pem"; mv "$r/env.keep" "$r/.env"
+
+echo "wrappers and unparsed commits"
+g add .env
+chk "env git commit" 2 "$R" 'env git commit -m x'
+chk "env -i VAR=1 git commit" 2 "$R" 'env -i VAR=1 git commit -m x'
+chk "command git commit" 2 "$R" 'command git commit -m x'
+chk "time git commit" 2 "$R" 'time git commit -m x'
+chk "sudo -u root git commit" 2 "$R" 'sudo -u root git commit -m x'
+chk "nice -n 5 git commit" 2 "$R" 'nice -n 5 git commit -m x'
+chk "if then fi" 2 "$R" 'if true; then git commit -m x; fi'
+chk "while do done" 2 "$R" 'while false; do git commit -m x; done'
+chk "brace group" 2 "$R" '{ git commit -m x; }'
+chk "negation" 2 "$R" '! git commit -m x'
+chk "backticks" 2 "$R" 'echo `git commit -m x`'
+chk "command substitution" 2 "$R" 'x=$(git commit -m y)'
+chk "alias via -c" 2 "$R" 'git -c alias.ci=commit ci -m x'
+chk "bash -c" 2 "$R" 'bash -c "git commit -m x"'
+chk "GIT uppercase" 2 "$R" 'GIT commit -m x'
+chk "GIT.EXE uppercase" 2 "$R" 'GIT.EXE commit -m x'
+chk "subshell cd then commit" 2 "$R" "(cd $OUT); git commit -m x"
+chk "cd missing dir then commit" 2 "$R" "cd $OUT/no-such-dir && git commit -m x"
+g reset -q
+chk "env git commit, nothing staged" 0 "$R" 'env git commit -m x'
+chk "if then fi, nothing staged" 0 "$R" 'if true; then git commit -m x; fi'
+chk "bash -c, nothing staged" 0 "$R" 'bash -c "git commit -m x"'
+chk "alias via -c, nothing staged" 0 "$R" 'git -c alias.ci=commit ci -m x'
+chk "commit text, no git word" 0 "$R" 'echo "please commit"'
+
+echo "--git-dir and --work-tree"
+g add .env
+chk "--git-dir=other repo from the bad cwd" 0 "$R" "git --git-dir=\"$SP/.git\" commit -m x"
+chk "--git-dir other repo, spaced" 0 "$R" "git --git-dir \"$SP/.git\" commit -m x"
+chk "--git-dir=bad repo from elsewhere" 2 "$OUT" "git --git-dir=$R/.git commit -m x"
+chk "--git-dir bad repo, spaced" 2 "$OUT" "git --git-dir $R/.git commit -m x"
+chk "--git-dir --work-tree bad repo" 2 "$OUT" "git --git-dir=$R/.git --work-tree=$R commit -m x"
+chk "--git-dir that does not exist falls back to cwd" 2 "$R" "git --git-dir=$OUT/none/.git commit -m x"
+g add .env
 
 if command -v cygpath >/dev/null 2>&1; then
   echo "windows-style cwd"
