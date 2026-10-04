@@ -15,8 +15,9 @@ json=${json#$'\xef\xbb\xbf'}
 
 jget() { # key: sets v to the string value of the first "key": "..." in $json
   v=
-  local rest
-  case $json in *\""$1"\"*) rest=${json#*\""$1"\"} ;; *) return 1 ;; esac
+  local rest k
+  k=\"$1\" # quoted key in a variable: bash 3.2 mis-strips ${json#*\""$1"\"} and returns the first value
+  case $json in *"$k"*) rest=${json#*"$k"} ;; *) return 1 ;; esac
   case $rest in *:*) rest=${rest#*:} ;; *) return 1 ;; esac
   rest=${rest#"${rest%%[![:space:]]*}"}
   case $rest in \"*) rest=${rest#\"} ;; *) return 1 ;; esac
