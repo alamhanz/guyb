@@ -4,6 +4,7 @@
 # PowerShell twin: tabs.ps1 (keep the expected colour table identical).
 root=$(cd "$(dirname "$0")/.." && pwd)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/guyb-tabs.XXXXXX") || exit 1
+tmp=$(cd "$tmp" && pwd) || exit 1  # macOS TMPDIR ends in '/'; normalize so expected paths match
 trap 'rm -rf "$tmp"' EXIT
 unset TMUX CLAUDECODE
 export GUYB_DRYRUN=1
