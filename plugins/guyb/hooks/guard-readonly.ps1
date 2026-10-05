@@ -424,5 +424,5 @@ try {
             $code = 2
         }
     }
-} catch { [Console]::Error.WriteLine('DBG [' + (($Raw.ToCharArray() | Select-Object -First 40 | ForEach-Object { [int]$_ }) -join ',') + '] len=' + $Raw.Length + ' ' + $_.ToString() + ' @ ' + $_.InvocationInfo.PositionMessage); $code = 0 }
+} catch { $code = 0 }
 exit $code

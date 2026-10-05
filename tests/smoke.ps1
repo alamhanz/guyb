@@ -358,7 +358,8 @@ try {
     $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
     $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
     $p = [System.Diagnostics.Process]::Start($psi)
-    $p.StandardInput.Write($stdin); $p.StandardInput.Close()
+    $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($stdin) # raw bytes: no BOM, whatever the console code page
+    $p.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length); $p.StandardInput.Close()
     return [pscustomobject]@{ P = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync() }
   }
   function Finish-Proc($h) { # exit code, then combined stdout+stderr text
@@ -405,7 +406,7 @@ try {
     }
   }
   $res = Run-Batch @($rows | ForEach-Object { $_.Job })
-  for ($i = 0; $i -lt $rows.Count; $i++) { Expect-Eq ('readonly ' + $rows[$i].Label) $res[$i].Code $rows[$i].Expect; if ("$($res[$i].Code)" -ne $rows[$i].Expect) { Write-Host ('  out: ' + $res[$i].Text) } }
+  for ($i = 0; $i -lt $rows.Count; $i++) { Expect-Eq ('readonly ' + $rows[$i].Label) $res[$i].Code $rows[$i].Expect }
   $bad = Run-Batch @([pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = 'not json' })
   Expect-Eq 'readonly bad json' $bad[0].Code 0
   $emp = Run-Batch @([pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = '{"agent_type":"code-reviewer","tool_input":{"command":""}}' })
