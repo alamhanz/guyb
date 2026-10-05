@@ -127,3 +127,79 @@ expect	shell	agent	cwd	command	note
 2	ps	guyb:code-reviewer	-	$x=git add .	ps assignment without spaces
 2	both	guyb:session-tracker	-	git add .	session-tracker git add
 0	both	brand-designer	-	git status	brand-designer git status
+0	both	guyb:code-reviewer	-	git submodule status	submodule status is a read
+0	both	guyb:code-reviewer	-	git submodule summary	submodule summary is a read
+0	both	guyb:code-reviewer	-	git submodule --quiet	bare submodule is a read
+0	both	guyb:code-reviewer	-	git submodule foreach git status	submodule foreach read command
+0	both	guyb:code-reviewer	-	git notes list	notes list is a read
+0	both	guyb:code-reviewer	-	git notes show HEAD	notes show is a read
+0	both	guyb:code-reviewer	-	git notes	bare notes is a read
+0	both	guyb:code-reviewer	-	git bisect log	bisect log is a read
+0	both	guyb:code-reviewer	-	git bisect visualize	bisect visualize is a read
+0	both	guyb:code-reviewer	-	git bisect	bare bisect is a read
+0	both	guyb:code-reviewer	-	git symbolic-ref HEAD	symbolic-ref read
+0	both	guyb:code-reviewer	-	git symbolic-ref --short HEAD	symbolic-ref --short read
+0	both	guyb:code-reviewer	-	git symbolic-ref -q --short refs/remotes/origin/HEAD	symbolic-ref default branch read
+0	both	guyb:code-reviewer	-	git sparse-checkout list	sparse-checkout list is a read
+0	both	guyb:code-reviewer	-	git replace -l	replace -l is a read
+0	both	guyb:code-reviewer	-	git clean -n	clean -n is a dry run
+0	both	guyb:code-reviewer	-	git clean --dry-run -d	clean --dry-run
+0	both	guyb:code-reviewer	-	git clean -nfd	clean clustered -n
+0	both	guyb:code-reviewer	-	git branch --sort -committerdate	branch --sort separate value
+0	both	guyb:code-reviewer	-	git branch --format '%(refname:short)'	branch --format separate value
+0	both	guyb:code-reviewer	-	git branch --contains HEAD newb	branch --contains implies list
+0	both	guyb:code-reviewer	-	git branch -vv x	branch -v implies list
+0	both	guyb:code-reviewer	-	git branch --show-current	branch --show-current
+0	both	guyb:code-reviewer	-	git branch --merged main	branch --merged value
+0	both	guyb:code-reviewer	-	git tag -v v1	tag -v verifies
+0	both	guyb:code-reviewer	-	git tag -n5 \"v*\"	tag -n lists
+0	both	guyb:code-reviewer	-	git tag --contains HEAD	tag --contains lists
+0	both	guyb:code-reviewer	-	git tag --points-at HEAD	tag --points-at lists
+2	both	guyb:code-reviewer	-	git branch --track x origin/x	branch --track creates
+2	both	guyb:code-reviewer	-	git branch -t x origin/x	branch -t creates
+2	both	guyb:code-reviewer	-	git branch --no-track x origin/x	branch --no-track creates
+2	both	guyb:code-reviewer	-	git branch -q newb	branch -q creates
+2	both	guyb:code-reviewer	-	git branch --create-reflog x	branch --create-reflog creates
+2	both	guyb:code-reviewer	-	git branch -vv -D x	branch list flag with -D
+2	both	guyb:code-reviewer	-	git tag --no-sign v1	tag --no-sign creates
+2	both	guyb:code-reviewer	-	git tag -l -d v1	tag list flag with -d
+2	both	guyb:code-reviewer	-	git submodule update --init	submodule update
+2	both	guyb:code-reviewer	-	git submodule sync	submodule sync
+2	both	guyb:code-reviewer	-	git submodule foreach git add .	submodule foreach write command
+2	both	guyb:code-reviewer	-	git notes --ref x add	notes --ref add
+2	both	guyb:code-reviewer	-	git bisect good	bisect good
+2	both	guyb:code-reviewer	-	git sparse-checkout init	sparse-checkout init
+2	both	guyb:code-reviewer	-	git symbolic-ref HEAD refs/heads/x	symbolic-ref set
+2	both	guyb:code-reviewer	-	git symbolic-ref -d HEAD	symbolic-ref delete
+2	both	guyb:code-reviewer	-	git replace -d x	replace -d
+2	both	guyb:code-reviewer	-	git clean -fdx	clean -fdx
+2	both	guyb:code-reviewer	-	git clean -i	clean interactive
+2	both	guyb:code-reviewer	-	wsl git add .	wsl wrapper
+2	both	guyb:code-reviewer	-	wsl -d ubuntu -e git push	wsl -d -e wrapper
+2	sh	guyb:code-reviewer	-	doas git add .	doas wrapper
+2	sh	guyb:code-reviewer	-	doas -u u git push	doas -u wrapper
+2	sh	guyb:code-reviewer	-	ionice -c3 git gc	ionice attached class
+2	sh	guyb:code-reviewer	-	ionice -c 3 git gc	ionice class value
+2	sh	guyb:code-reviewer	-	git $'add' .	ANSI-C quoted verb
+2	ps	guyb:code-reviewer	-	if ($a) { git status } else { git add . }	ps else block
+2	ps	guyb:code-reviewer	-	try { git push } catch { }	ps try block
+2	ps	guyb:code-reviewer	-	try { git status } catch { git push }	ps catch block
+2	ps	guyb:code-reviewer	-	Get-ChildItem *.md | ForEach-Object { git add $_.FullName }	ps ForEach-Object block
+2	ps	guyb:code-reviewer	-	gci | % { git add $_ }	ps % block
+2	ps	guyb:code-reviewer	-	1..3 | ForEach-Object -Process { git add $_ }	ps -Process block
+2	ps	guyb:code-reviewer	-	Invoke-Command -ScriptBlock { git push }	ps Invoke-Command block
+2	ps	guyb:code-reviewer	-	Start-Job { git push }	ps Start-Job block
+2	ps	guyb:code-reviewer	-	start git push	ps start alias
+0	ps	guyb:code-reviewer	-	Get-ChildItem *.md | ForEach-Object { git log -1 -- $_.FullName }	ps ForEach-Object read
+0	ps	guyb:code-reviewer	-	try { git status } catch { }	ps try read
+0	ps	guyb:code-reviewer	-	Get-ChildItem | Where-Object { $_.Name -like \"*git*\" }	ps Where-Object text
+0	both	guyb:code-reviewer	-	git status -sb	status -sb
+0	both	guyb:code-reviewer	-	git diff --name-only origin/main...HEAD	diff range
+0	both	guyb:code-reviewer	-	git stash list	stash list
+0	both	guyb:code-reviewer	-	git stash show -p	stash show
+0	both	guyb:code-reviewer	-	git worktree list	worktree list
+0	both	guyb:code-reviewer	-	git remote get-url origin	remote get-url
+0	both	guyb:code-reviewer	-	git config --global user.email	config single key read
+0	both	guyb:code-reviewer	-	git rev-parse --show-toplevel	rev-parse
+0	both	guyb:code-reviewer	-	cd \"$(git rev-parse --show-toplevel)\" && git log	substitution read
+0	both	guyb:code-reviewer	-	git log --oneline | head -5 && git status	pipe and chain reads

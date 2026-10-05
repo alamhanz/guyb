@@ -13,7 +13,9 @@
 # it): the body runs to the end of input.
 #
 # KNOWN GAPS (skipped to stay small): PowerShell here-strings (@' '@) and <# #> block comments are
-# not special; Start-Process with -ArgumentList @(...) is only seen for the plain 'a','b' form.
+# not special; Start-Process with -ArgumentList @(...) is only seen for the plain 'a','b' form;
+# $'...' escapes (\x61) are not decoded; GNU parallel and pwsh -EncodedCommand are not unpacked.
+# In PowerShell, { and } split segments, so scriptblocks (ForEach-Object { }, try { }) are checked.
 #
 # Verified hook stdin (Claude Code 2.1.288): PreToolUse JSON for a call made inside a subagent
 # carries "agent_id" and "agent_type". Plugin agents report "agent_type":"guyb:<name>"
@@ -26,7 +28,7 @@
 param([string]$Raw)
 
 $ShellNames = 'bash', 'sh', 'zsh', 'dash', 'ksh'
-$AlwaysWrite = 'add stage commit reset checkout switch clean restore rebase merge push rm mv apply cherry-pick pull fetch revert am notes update-ref symbolic-ref replace gc prune repack submodule init clone filter-branch maintenance sparse-checkout read-tree checkout-index update-index bisect' -split ' '
+$AlwaysWrite = 'add stage commit reset checkout switch restore rebase merge push rm mv apply cherry-pick pull fetch revert am update-ref gc prune repack init clone filter-branch maintenance read-tree checkout-index update-index' -split ' '
 $KnownRead = 'status log diff show grep blame annotate ls-files ls-tree ls-remote rev-parse rev-list cat-file describe shortlog show-ref show-branch for-each-ref merge-base name-rev var help version whatchanged range-diff cherry diff-tree diff-index diff-files check-ignore check-attr check-mailmap count-objects verify-commit verify-tag fsck format-patch archive bundle request-pull fast-export' -split ' '
 
 function Get-Base([string]$w) {
@@ -104,7 +106,7 @@ function Split-Command([string]$s, [bool]$sh, [int]$depth) {
                 if ($readBody) { $segs.AddRange((Split-Command $body.ToString() $true ($depth + 1))) }
             }
             $pending.Clear()
-        } elseif (';|&()'.IndexOf($c) -ge 0) {
+        } elseif (';|&()'.IndexOf($c) -ge 0 -or (-not $sh -and ($c -eq '{' -or $c -eq '}'))) {
             . $endSeg; $i++
         } elseif ($c -eq '#' -and -not $inWord) {
             while ($i -lt $n -and $s[$i] -ne "`n") { $i++ }
@@ -194,6 +196,8 @@ function Split-Command([string]$s, [bool]$sh, [int]$depth) {
             while ($i -lt $n -and ($s[$i] -eq '<' -or $s[$i] -eq '>')) { $i++ }
             if ($i -lt $n -and ($s[$i] -eq '&' -or $s[$i] -eq '|')) { $i++ }
             $rdr = $true
+        } elseif ($sh -and $c -eq '$' -and $i + 1 -lt $n -and $s[$i + 1] -eq "'") {
+            $i++
         } else {
             [void]$sb.Append($c); $inWord = $true; $i++
         }
@@ -215,7 +219,7 @@ function Remove-Wrapper([string[]]$Arr, [ref]$nested) {
         if ($w -match '^[A-Za-z_][A-Za-z0-9_]*=') { $i++ }
         elseif ($w -match '^\$[A-Za-z_][A-Za-z0-9_:]*[+]?=(.+)$') { $Arr[$i] = $Matches[1] }
         elseif ($w -match '^\$[A-Za-z_][A-Za-z0-9_:]*$' -and $i + 1 -lt $n -and $Arr[$i + 1] -match '^[+]?=$') { $i += 2 }
-        elseif ('!', '{', 'if', 'then', 'elif', 'else', 'do', 'while', 'until', '&', '.' -ccontains $w) { $i++ }
+        elseif ('!', '{', 'if', 'then', 'elif', 'else', 'elseif', 'do', 'while', 'until', 'try', 'catch', 'finally', '&', '.' -ccontains $w) { $i++ }
         elseif ($b -eq 'env') {
             $i++
             while ($i -lt $n) {
@@ -239,8 +243,8 @@ function Remove-Wrapper([string[]]$Arr, [ref]$nested) {
             while ($i -lt $n -and $Arr[$i].StartsWith('-')) { if ($Arr[$i] -cmatch '^-[sk]$') { $i += 2 } else { $i++ } }
             $i++
         }
-        elseif ('nice', 'sudo', 'watch', 'stdbuf', 'xargs' -contains $b) {
-            $take = @{ nice = '^-n$'; sudo = '^-[ugCDhprtTUR]$'; watch = '^-n$'; stdbuf = '^-[ioe]$'; xargs = '^-[IinPdLaEs]$' }[$b]
+        elseif ('nice', 'sudo', 'doas', 'ionice', 'watch', 'stdbuf', 'xargs', 'wsl' -contains $b) {
+            $take = @{ nice = '^-n$'; sudo = '^-[ugCDhprtTUR]$'; doas = '^-[uCa]$'; ionice = '^-[cnpPu]$'; watch = '^-n$'; stdbuf = '^-[ioe]$'; xargs = '^-[IinPdLaEs]$'; wsl = '^(-d|--distribution|-u|--user|--cd|--shell-type)$' }[$b]
             $i++
             while ($i -lt $n -and $Arr[$i].StartsWith('-')) { if ($Arr[$i] -cmatch $take) { $i += 2 } else { $i++ } }
         }
@@ -306,7 +310,7 @@ function Test-Segment([string[]]$Words, [bool]$sh, [int]$depth) {
         }
         return $false
     }
-    if ('start-process', 'saps' -contains $b) {
+    if (-not $sh -and ('start-process', 'saps', 'start' -contains $b)) {
         $file = $null
         $argv = $null
         $j = 0
@@ -356,13 +360,56 @@ function Test-GitWords([string[]]$Arr, [int]$depth) {
     if ($verb -eq 'stash') {
         return ($a.Count -eq 0 -or $first.StartsWith('-') -or ('push', 'pop', 'apply', 'drop', 'clear', 'save', 'branch', 'create', 'store' -contains $first))
     }
-    if ($verb -eq 'branch') {
-        foreach ($x in $a) { if ($x -cmatch '^(-[^-]*[dDmMcCfu][^-]*|--(delete|move|copy|force|set-upstream-to(=.*)?|unset-upstream|edit-description))$') { return $true } }
-        return ($a.Count -gt 0 -and -not $first.StartsWith('-'))
+    if ($verb -eq 'branch' -or $verb -eq 'tag') {
+        # Write flag: write. List mode (flag below, or no name given): read. A name otherwise creates.
+        if ($verb -eq 'branch') {
+            $wre = '^(-[^-]*[dDmMcCfu][^-]*|--(delete|move|copy|force|set-upstream-to(=.*)?|unset-upstream|edit-description))$'
+            $lre = '^(-[^-]*[lv][^-]*|--(list|verbose|show-current|(no-)?contains|(no-)?merged|points-at)(=.*)?)$'
+        } else {
+            $wre = '^(-[^-]*[dasfmFu][^-]*|--(delete|annotate|sign|force|message(=.*)?|file(=.*)?))$'
+            $lre = '^(-[^-]*[lv][^-]*|-n[0-9]*|--(list|verify|(no-)?contains|(no-)?merged|points-at)(=.*)?)$'
+        }
+        $names = 0
+        $list = $false
+        for ($k = 0; $k -lt $a.Count; $k++) {
+            $x = $a[$k]
+            if ($x -cmatch $wre) { return $true }
+            if ($x -cmatch $lre) { $list = $true }
+            elseif ($x -cmatch '^--(sort|format|points-at)$') { $k++ }
+            elseif (-not $x.StartsWith('-')) { $names++ }
+        }
+        return ($names -gt 0 -and -not $list)
     }
-    if ($verb -eq 'tag') {
-        foreach ($x in $a) { if ($x -cmatch '^(-[^-]*[dasfmFu][^-]*|--(delete|annotate|sign|force|message(=.*)?|file(=.*)?))$') { return $true } }
-        return ($a.Count -gt 0 -and -not $first.StartsWith('-'))
+    # Verbs whose read subcommands are listed; any other subcommand writes. No subcommand: read.
+    $sub = @{ submodule = 'status summary'; notes = 'list show'; bisect = 'log visualize view help'; 'sparse-checkout' = 'list check-rules' }
+    if ($sub.ContainsKey($verb)) {
+        $k = 0
+        while ($k -lt $a.Count -and $a[$k].StartsWith('-')) { if ($a[$k] -ceq '--ref') { $k++ }; $k++ }
+        if ($k -ge $a.Count) { return $false }
+        $sc = $a[$k].ToLower()
+        if ($verb -eq 'submodule' -and $sc -eq 'foreach') {
+            $k++
+            while ($k -lt $a.Count -and $a[$k].StartsWith('-')) { $k++ }
+            if ($k -ge $a.Count) { return $false }
+            return (Test-Segment $a[$k..($a.Count - 1)] $true ($depth + 1))
+        }
+        return (($sub[$verb] -split ' ') -notcontains $sc)
+    }
+    if ($verb -eq 'symbolic-ref') {
+        $names = 0
+        for ($k = 0; $k -lt $a.Count; $k++) {
+            if ($a[$k] -cmatch '^(-d|--delete)$') { return $true }
+            if ($a[$k] -ceq '-m') { $k++ } elseif (-not $a[$k].StartsWith('-')) { $names++ }
+        }
+        return ($names -ge 2)
+    }
+    if ($verb -eq 'replace') {
+        foreach ($x in $a) { if ($x -cmatch '^(-l|--list)$') { return $false } }
+        return ($a.Count -gt 0)
+    }
+    if ($verb -eq 'clean') {
+        foreach ($x in $a) { if ($x -cmatch '^(-[A-Za-z]*n[A-Za-z]*|--dry-run)$') { return $false } }
+        return $true
     }
     if ($verb -eq 'worktree') { return ('add', 'remove', 'move', 'prune', 'lock', 'unlock', 'repair' -contains $first) }
     if ($verb -eq 'remote') { return ('add', 'remove', 'rm', 'rename', 'set-url', 'set-head', 'set-branches', 'prune', 'update' -contains $first) }

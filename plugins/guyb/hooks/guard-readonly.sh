@@ -15,8 +15,8 @@
 # Sourced by hooks.json: use `exit`, never rely on $0. No fork happens before the agent check.
 # The command is tokenized by one awk (quotes, separators, heredocs, substitutions, wrappers,
 # bash -c / eval / find -exec runners). Unknown git verbs are looked up as aliases (git config --get).
-# Known gaps (skipped to stay small): $'...' quoting, env -S, nice/watch/stdbuf option values,
-# arithmetic like $((1<<2)) (reads as a heredoc, so later lines are taken as its body).
+# Known gaps (skipped to stay small): $'...' escapes (\x61) are not decoded, env -S,
+# GNU parallel, arithmetic like $((1<<2)) (reads as a heredoc, so later lines are taken as its body).
 #
 # Verified hook stdin (Claude Code 2.1.288): PreToolUse JSON for a call made inside a subagent
 # carries "agent_id" and "agent_type". Plugin agents report "agent_type":"guyb:<name>"
@@ -87,14 +87,14 @@ function strip(l, a, e,   i, t, b, j, u) {
     if (t ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { i++; continue }
     b = base(t)
     if (b == "!" || b == "{" || b ~ /^(if|then|elif|else|do|while|until)$/) { i++; continue }
-    if (b ~ /^(env|command|builtin|exec|nohup|nice|time|sudo|timeout|watch|stdbuf|xargs)$/) {
+    if (b ~ /^(env|command|builtin|exec|nohup|nice|time|sudo|doas|ionice|timeout|watch|stdbuf|xargs|wsl)$/) {
       i++
       while (i <= e) {
         u = W[l, i]
         if (u ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { i++; continue }
         if (substr(u, 1, 1) != "-" || u == "-") break
         if (b == "command" && (u == "-v" || u == "-V")) return 0
-        if ((b == "env" && inset(u, "|-u|-C|-S|--unset|--chdir|")) || (b == "sudo" && inset(u, "|-u|-g|-C|-D|-h|-p|-r|-t|-T|-U|-R|")) || (b == "timeout" && inset(u, "|-s|-k|")) || (b == "xargs" && inset(u, "|-I|-i|-n|-P|-d|-L|-a|-E|-s|")) || (b == "nice" && u == "-n") || (b == "watch" && u == "-n") || (b == "stdbuf" && inset(u, "|-i|-o|-e|")) || (b == "exec" && u == "-a")) i++
+        if ((b == "env" && inset(u, "|-u|-C|-S|--unset|--chdir|")) || (b == "sudo" && inset(u, "|-u|-g|-C|-D|-h|-p|-r|-t|-T|-U|-R|")) || (b == "timeout" && inset(u, "|-s|-k|")) || (b == "xargs" && inset(u, "|-I|-i|-n|-P|-d|-L|-a|-E|-s|")) || (b == "doas" && inset(u, "|-u|-C|-a|")) || (b == "ionice" && inset(u, "|-c|-n|-p|-P|-u|")) || (b == "wsl" && inset(u, "|-d|--distribution|-u|--user|--cd|--shell-type|")) || (b == "nice" && u == "-n") || (b == "watch" && u == "-n") || (b == "stdbuf" && inset(u, "|-i|-o|-e|")) || (b == "exec" && u == "-a")) i++
         i++
       }
       if (b == "timeout") i++
@@ -134,7 +134,7 @@ function classify(l, a, e,   i, b, k, m) {
     }
   }
 }
-function gitcheck(l, i, e,   j, t, dir, verb, s, wr, a, k, kv, eq, nm, v, c, d, bad) {
+function gitcheck(l, i, e,   j, t, dir, verb, s, wr, a, k, kv, eq, nm, v, c, d, bad, lst) {
   GEN++
   j = i + 1; dir = ""
   while (j <= e) {
@@ -155,7 +155,8 @@ function gitcheck(l, i, e,   j, t, dir, verb, s, wr, a, k, kv, eq, nm, v, c, d, 
   if (inset(verb, WV)) wr = 1
   else if (verb == "stash") wr = (s > e || substr(a, 1, 1) == "-" || inset(a, "|push|pop|apply|drop|clear|save|branch|create|store|"))
   else if (verb == "branch" || verb == "tag") {
-    if (s <= e && substr(a, 1, 1) != "-") wr = 1
+    # write flag: write; list mode (flag below, or no name given): read; a name otherwise creates
+    c = 0; lst = 0
     for (k = s; k <= e && !wr; k++) {
       t = W[l, k]
       if (inset(t, (verb == "branch") ? BO : TO)) wr = 1
@@ -163,7 +164,43 @@ function gitcheck(l, i, e,   j, t, dir, verb, s, wr, a, k, kv, eq, nm, v, c, d, 
       else if (verb == "tag" && t ~ /^-[^-]*[dasfmFu]/) wr = 1
       else if (verb == "branch" && index(t, "--set-upstream-to=") == 1) wr = 1
       else if (verb == "tag" && (index(t, "--message=") == 1 || index(t, "--file=") == 1)) wr = 1
+      else if (t ~ /^-[^-]*[lv]/ || t ~ /^--(list|(no-)?contains|(no-)?merged|points-at)(=|$)/) lst = 1
+      else if (verb == "branch" && t ~ /^--(verbose|show-current)$/) lst = 1
+      else if (verb == "tag" && (t ~ /^-n[0-9]*$/ || t == "--verify")) lst = 1
+      else if (inset(t, "|--sort|--format|")) k++
+      else if (substr(t, 1, 1) != "-") c++
     }
+    if (!wr) wr = (c > 0 && !lst)
+  }
+  else if (inset(verb, "|submodule|notes|bisect|sparse-checkout|")) {
+    # read subcommands are listed; any other subcommand writes; none: read
+    for (k = s; k <= e && substr(W[l, k], 1, 1) == "-"; k++) if (W[l, k] == "--ref") k++
+    if (k > e) return
+    a = tolower(W[l, k])
+    if (verb == "submodule" && a == "foreach") {
+      for (k++; k <= e && substr(W[l, k], 1, 1) == "-"; k++) ;
+      if (k <= e) classify(l, k, e)
+      return
+    }
+    wr = !inset(a, verb == "submodule" ? "|status|summary|" : verb == "notes" ? "|list|show|" : verb == "bisect" ? "|log|visualize|view|help|" : "|list|check-rules|")
+  }
+  else if (verb == "symbolic-ref") {
+    c = 0
+    for (k = s; k <= e; k++) {
+      t = W[l, k]
+      if (t == "-d" || t == "--delete") wr = 1
+      else if (t == "-m") k++
+      else if (substr(t, 1, 1) != "-") c++
+    }
+    if (c >= 2) wr = 1
+  }
+  else if (verb == "replace") {
+    wr = (s <= e)
+    for (k = s; k <= e; k++) if (W[l, k] == "-l" || W[l, k] == "--list") wr = 0
+  }
+  else if (verb == "clean") {
+    wr = 1
+    for (k = s; k <= e; k++) if (W[l, k] ~ /^-[A-Za-z]*n[A-Za-z]*$/ || W[l, k] == "--dry-run") wr = 0
   }
   else if (verb == "worktree") wr = inset(a, "|add|remove|move|prune|lock|unlock|repair|")
   else if (verb == "remote") wr = inset(a, "|add|remove|rm|rename|set-url|set-head|set-branches|prune|update|")
@@ -231,6 +268,7 @@ function scan(s, stop,   l, i, n, c, c2, inq, par, nhd, j, k, q, d, ds, rest, bo
       else { WRD[l] = WRD[l] substr(s, i + 1, j - 1); INW[l] = 1; i += j + 1 }
     }
     else if (c == "\"") { inq = 1; INW[l] = 1; i++ }
+    else if (c == "$" && c2 == "\047") i++
     else if (c == " " || c == "\t" || c == "\r") { endword(l); i++ }
     else if (c == "#" && !INW[l]) { j = index(substr(s, i), "\n"); i = j ? i + j - 1 : n + 1 }
     else if (c == "\n") {
@@ -294,7 +332,7 @@ function scan(s, stop,   l, i, n, c, c2, inq, par, nhd, j, k, q, d, ds, rest, bo
 }
 BEGIN {
   MODE = ENVIRON["GUYB_MODE"]; cwd = ENVIRON["GUYB_CWD"]
-  WV = "|add|stage|commit|reset|checkout|switch|clean|restore|rebase|merge|push|rm|mv|apply|cherry-pick|pull|fetch|revert|am|notes|update-ref|symbolic-ref|replace|gc|prune|repack|submodule|init|clone|filter-branch|maintenance|sparse-checkout|read-tree|checkout-index|update-index|bisect|"
+  WV = "|add|stage|commit|reset|checkout|switch|restore|rebase|merge|push|rm|mv|apply|cherry-pick|pull|fetch|revert|am|update-ref|gc|prune|repack|init|clone|filter-branch|maintenance|read-tree|checkout-index|update-index|"
   RV = "|status|log|diff|show|grep|blame|annotate|ls-files|ls-tree|ls-remote|rev-parse|rev-list|cat-file|describe|shortlog|show-ref|show-branch|for-each-ref|merge-base|name-rev|var|help|version|whatchanged|range-diff|cherry|diff-tree|diff-index|diff-files|check-ignore|check-attr|check-mailmap|count-objects|verify-commit|verify-tag|fsck|format-patch|archive|bundle|request-pull|fast-export|"
   BO = "|--delete|--move|--copy|--force|--set-upstream-to|--unset-upstream|--edit-description|"
   TO = "|--delete|--annotate|--sign|--force|--message|--file|"
