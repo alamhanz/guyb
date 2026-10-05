@@ -15,7 +15,7 @@
 # would fail too; a git failure on the computed target is retried against the cwd first.
 
 input=
-[ -t 0 ] || input=$(cat 2>/dev/null)
+[ -t 0 ] || IFS= read -r -d '' input
 case "$input" in *commit*) ;; *) [ -n "$input" ] && exit 0 ;; esac
 
 secret='(^|/)(\.env(\.[^/]*)?|\.envrc|\.netrc|\.npmrc|\.pypirc|[^/]*\.(pem|key|p12|p8|pfx|jks|keystore|kdbx|tfvars|tfvars\.json)|id_(rsa|ed25519|ecdsa)[^/]*|credentials(\.[^/]*)?|[^/]*service[-_]?account[^/]*\.json)$'

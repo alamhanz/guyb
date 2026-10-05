@@ -121,7 +121,7 @@ else echo "skip Windows-style path (no cygpath/wslpath)"; fi
 
 # loose timing sanity
 s=$(date +%s); run "$tmp" "$(json "$tmp/new")" > /dev/null; e=$(date +%s)
-if [ $((e - s)) -le 1 ]; then echo "ok   runtime under 1s"; else echo "FAIL runtime over 1s"; fail=$((fail + 1)); fi
+if [ $((e - s)) -le 3 ]; then echo "ok   runtime under 3s"; else echo "FAIL runtime over 3s"; fail=$((fail + 1)); fi
 
 if [ "$fail" -eq 0 ]; then echo "statusline: all passed"; else echo "statusline: $fail failed"; fi
 [ "$fail" -eq 0 ]

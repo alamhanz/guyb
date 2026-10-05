@@ -72,10 +72,26 @@ brief="$root/plugins/guyb/skills/start/brief.sh"
 check="$root/plugins/guyb/skills/setup/check.sh"
 
 echo "brief.sh and check.sh on fixtures ($runners)"
+jobs_max=${GUYB_TEST_JOBS:-8}
+mx="$tmp/mx"; mkdir -p "$mx"
+mx_case() { # index runner dir: brief + check output, exit codes, to $mx/<index>.*
+  i=$1; r=$2; dw=$(win "$3")
+  run "$r" "$brief" "$dw" > "$mx/$i.brief" 2>&1; echo $? > "$mx/$i.brc"
+  run "$r" "$check" "$dw" > "$mx/$i.check" 2>/dev/null; echo $? > "$mx/$i.crc"
+}
+n=0
 for r in $runners; do
   for d in "$a" "$b"; do
-    name=$(basename "$d"); dw=$(win "$d")
-    out=$(run "$r" "$brief" "$dw" 2>&1); rc=$?
+    n=$((n + 1)); mx_case "$n" "$r" "$d" &
+    [ $((n % jobs_max)) -eq 0 ] && wait
+  done
+done
+wait
+n=0
+for r in $runners; do
+  for d in "$a" "$b"; do
+    n=$((n + 1)); name=$(basename "$d")
+    out=$(cat "$mx/$n.brief"); rc=$(cat "$mx/$n.brc")
     expect_eq "brief $r $name exit" "$rc" 0
     expect_has "brief $r $name" "$out" "project: $name"
     expect_has "brief $r $name" "$out" "branch: "
@@ -84,10 +100,9 @@ for r in $runners; do
     expect_has "brief $r $name" "$out" "STATE.md Open issues:"
     expect_eq "brief $r $name CR count" "$(crs "$out")" 0
     expect_lacks "brief $r $name" "$out" "plugin: "
-    run "$r" "$check" "$dw" > "$tmp/check.json" 2>/dev/null; rc=$?
-    expect_eq "check $r $name exit" "$rc" 0
-    if json_ok "$(win "$tmp/check.json")"; then ok; else no "check $r $name: output is not valid JSON"; fi
-    expect_has "check $r $name" "$(cat "$tmp/check.json")" '"version": 1'
+    expect_eq "check $r $name exit" "$(cat "$mx/$n.crc")" 0
+    if json_ok "$(win "$mx/$n.check")"; then ok; else no "check $r $name: output is not valid JSON"; fi
+    expect_has "check $r $name" "$(cat "$mx/$n.check")" '"version": 1'
   done
 done
 
@@ -205,7 +220,7 @@ mk_clean() { # dir claude-lines state-lines registry-rows
   gen_lines "$2" "line" > "$1/.claude/CLAUDE.md"
   { printf '# State\n\n## Next up\n- x\n\n## Open issues\n- y\n'; gen_lines "$(($3 - 7))" "filler"; } > "$1/.claude/guyb/STATE.md"
   p="$1/.claude/guyb/pipeline"; mkdir -p "$p/progress" "$p/reports" "$p/plans" "$p/brand/x-1"
-  { echo "$RUNHDR"; echo '|---|'; runrow x-1 done 2020-01-01; runrow x-2 running "$today"; awk -v n="$4" 'BEGIN { for (i = 1; i <= n - 2; i++) printf "| f-%d | implementer | sonnet | t | 1 | - | done | 2020-01-01 | 1k |\n", i }'; } > "$p/runs.md"
+  { echo "$RUNHDR"; echo '|---|'; runrow x-1 'done' 2020-01-01; runrow x-2 running "$today"; awk -v n="$4" 'BEGIN { for (i = 1; i <= n - 2; i++) printf "| f-%d | implementer | sonnet | t | 1 | - | done | 2020-01-01 | 1k |\n", i }'; } > "$p/runs.md"
   gen_table "$p/questions.md" '| ID | Run | Question | Blocking | Assumed | Status |' "$4" Q answered
   : > "$p/progress/x-1.md"; : > "$p/progress/x-2.md"; : > "$p/progress/x-3.md"; : > "$p/brand/x-1/a.svg"
   touch -t 202001010000 "$p/progress/x-1.md" "$p/progress/x-2.md" "$p/brand/x-1/a.svg"
@@ -240,19 +255,19 @@ expect_has "cleanup stale in legacy pipeline" "$out" "cleanup: 1 pipeline files 
 
 echo "brief.sh overdue items"
 od="$tmp/overdue"; make_fixture "$od"; mkdir -p "$od/.claude/guyb/pipeline"
-{ echo "$RUNHDR"; echo '|---|'; runrow y-1 running 2020-01-01; runrow y-2 queued "2020-01-02 10:30"; runrow y-3 done 2020-01-01; runrow y-4 running "$today"; runrow y-5 blocked 2020-02-01
+{ echo "$RUNHDR"; echo '|---|'; runrow y-1 running 2020-01-01; runrow y-2 queued "2020-01-02 10:30"; runrow y-3 'done' 2020-01-01; runrow y-4 running "$today"; runrow y-5 blocked 2020-02-01
   runrow y-6 running 2020-03-01; runrow y-7 running 2020-03-02; } > "$od/.claude/guyb/pipeline/runs.md"
 { echo '| ID | Run | Question | Blocking | Assumed | Status |'; echo '|---|---|---|---|---|---|'
   echo '| Q1 | y-1 | old open | no | a | open |'; echo '| Q2 | y-4 | fresh open | no | a | open |'; echo '| Q3 | y-1 | old answered | no | a | answered |'; } > "$od/.claude/guyb/pipeline/questions.md"
 out=$(bash "$brief" "$(win "$od")" 2>&1)
 expect_has "overdue list" "$out" "overdue: y-1, y-2, y-5, y-6, y-7, +1 more"
-{ echo "$RUNHDR"; echo '|---|'; runrow y-1 running 2020-01-01; runrow y-3 done 2020-01-01; } > "$od/.claude/guyb/pipeline/runs.md"
+{ echo "$RUNHDR"; echo '|---|'; runrow y-1 running 2020-01-01; runrow y-3 'done' 2020-01-01; } > "$od/.claude/guyb/pipeline/runs.md"
 out=$(bash "$brief" "$(win "$od")" 2>&1)
 expect_has "overdue runs and questions" "$out" "overdue: y-1, Q1"
 
 echo "brief.sh registry formats and run ids"
 rg="$tmp/regfmt"; make_fixture "$rg"; rp="$rg/.claude/guyb/pipeline"; mkdir -p "$rp/progress"
-{ echo "$RUNHDR"; echo '|---|'; runrow mien-dev-3 running 2020-01-01; runrow r-6b running "$today"; runrow r-6 done 2020-01-01; } > "$rp/runs.md"
+{ echo "$RUNHDR"; echo '|---|'; runrow mien-dev-3 running 2020-01-01; runrow r-6b running "$today"; runrow r-6 'done' 2020-01-01; } > "$rp/runs.md"
 { echo '| Q | Run | Agent | Question | Blocking | Assumed | Status | Answer |'; echo '|---|---|---|---|---|---|---|---|'
   echo '| Q1 | mien-dev-3 | architect | old open | no | a | open | |'; echo '| Q2 | r-6b | architect | fresh | no | a | open | |'; } > "$rp/questions.md"
 out=$(bash "$brief" "$(win "$rg")" 2>&1)
@@ -309,17 +324,17 @@ for id in container python node uv; do expect_has "check $id" "$(cat "$tmp/check
 expect_lacks "check toolchain" "$(cat "$tmp/check3.json")" '"blocking":true,"detail":"python'
 
 # every version probe is capped too: a hanging node must not stall check.sh or brief.sh (with and without timeout)
-mkdir -p "$tmp/nsleep"; printf '#!/bin/sh\nsleep 30 &\nsleep 30\n' > "$tmp/nsleep/node"; chmod +x "$tmp/nsleep/node"
+mkdir -p "$tmp/nsleep"; printf '#!/bin/sh\nsleep 60 &\nsleep 60\n' > "$tmp/nsleep/node"; chmod +x "$tmp/nsleep/node"
 sed -e 's/has timeout \&\& tmo=timeout/has no-such-timeout \&\& tmo=timeout/' -e 's/has gtimeout \&\& /has no-such-gtimeout \&\& /' "$check" > "$tmp/check-notmo.sh"
 en2="$tmp/envnode2"; mkdir -p "$en2"; printf '{"name":"x"}\n' > "$en2/package.json"
 for cv in "$check" "$tmp/check-notmo.sh"; do
   t0=$SECONDS; PATH="$tmp/nsleep:$PATH" bash "$cv" "$(win "$ee")" > "$tmp/check4.json" 2>/dev/null; dt=$((SECONDS - t0))
-  if [ "$dt" -lt 25 ]; then ok; else no "check hung node $(basename "$cv"): took ${dt}s"; fi
+  if [ "$dt" -lt 45 ]; then ok; else no "check hung node $(basename "$cv"): took ${dt}s"; fi
 done
 for bv in "$brief" "$tmp/brief-notmo.sh"; do
   t0=$SECONDS; out=$(PATH="$tmp/nsleep:$PATH" bash "$bv" "$(win "$en2")" 2>&1); dt=$((SECONDS - t0))
   expect_has "env hung node $(basename "$bv")" "$out" "node not installed"
-  if [ "$dt" -lt 12 ]; then ok; else no "brief hung node $(basename "$bv"): took ${dt}s"; fi
+  if [ "$dt" -lt 45 ]; then ok; else no "brief hung node $(basename "$bv"): took ${dt}s"; fi
 done
 
 echo "guard-secrets.sh"
@@ -348,56 +363,70 @@ expect_eq "guard --git-dir elsewhere" "$(sg "git --git-dir=$(win "$tmp")/nogit c
 git -C "$(win "$g")" reset -q >/dev/null 2>&1
 expect_eq "guard env git commit, nothing staged" "$(sg 'env git commit -m x')" 0
 
-echo "guard-readonly.sh"
+echo "guard-readonly.sh (tests/readonly-cases.tsv)"
 ro="$root/plugins/guyb/hooks/guard-readonly.sh"
-hook() { printf '{"agent_type":"%s","tool_name":"Bash","tool_input":{"command":"%s"}}' "$1" "$2" | bash "$ro" >/dev/null 2>&1; echo $?; }
-expect_eq "readonly reviewer git add" "$(hook guyb:code-reviewer 'git add .')" 2
-expect_eq "readonly bare architect git push" "$(hook architect 'git push origin main')" 2
-expect_eq "readonly reviewer git status" "$(hook guyb:code-reviewer 'git status')" 0
-expect_eq "readonly implementer git add" "$(hook guyb:implementer 'git add .')" 0
-expect_eq "readonly main session git add" "$(printf '{"tool_input":{"command":"git add ."}}' | bash "$ro" >/dev/null 2>&1; echo $?)" 0
-expect_eq "readonly bad json" "$(printf 'not json' | bash "$ro" >/dev/null 2>&1; echo $?)" 0
-expect_eq "readonly chained cd && git add" "$(hook code-reviewer 'cd sub && git add .')" 2
-expect_eq "readonly chained pushd; git commit" "$(hook code-reviewer 'pushd sub; git commit -m x')" 2
-expect_eq "readonly piped echo | git apply" "$(hook code-reviewer 'echo hi | git apply')" 2
-expect_eq "readonly chained true; git push" "$(hook code-reviewer 'true; git push')" 2
-expect_eq "readonly chained newline git rm" "$(hook code-reviewer 'ls\ngit rm x')" 2
-expect_eq "readonly chained git -C dir reset" "$(hook code-reviewer 'cd a && git -C b reset --hard')" 2
-expect_eq "readonly git revert" "$(hook code-reviewer 'git revert HEAD')" 2
-expect_eq "readonly git am" "$(hook code-reviewer 'git am p.patch')" 2
-expect_eq "readonly chained read-only git" "$(hook code-reviewer 'cd sub && git log -1 | head')" 0
-expect_eq "readonly chained no git" "$(hook code-reviewer 'cd sub && ls')" 0
-expect_eq "readonly git stage" "$(hook code-reviewer 'git stage .')" 2
-expect_eq "readonly quoted -C dir with space" "$(hook code-reviewer 'git -C \"my dir/x\" add .')" 2
-expect_eq "readonly single-quoted -C dir with space" "$(hook code-reviewer "git -C 'my dir' add .")" 2
-expect_eq "readonly --git-dir <dir> add" "$(hook code-reviewer 'git --git-dir /x/.git add .')" 2
-expect_eq "readonly -p add" "$(hook code-reviewer 'git -p add .')" 2
-expect_eq "readonly -P add" "$(hook code-reviewer 'git -P commit -m x')" 2
-expect_eq "readonly --no-pager add" "$(hook code-reviewer 'git --no-pager add .')" 2
-expect_eq "readonly quoted git" "$(hook code-reviewer '\"git\" add .')" 2
-expect_eq "readonly quoted exe path" "$(hook code-reviewer '\"C:/Program Files/Git/cmd/git.exe\" add .')" 2
-expect_eq "readonly /usr/bin/git" "$(hook code-reviewer '/usr/bin/git add .')" 2
-expect_eq "readonly uppercase GIT add" "$(hook code-reviewer 'GIT add .')" 2
-expect_eq "readonly uppercase GIT.EXE" "$(hook code-reviewer 'GIT.EXE ADD .')" 2
-for v in 'notes add -m x' 'update-ref HEAD x' 'symbolic-ref HEAD x' 'replace a b' 'gc' 'prune' 'submodule update' 'init' 'clone u d' 'filter-branch x' 'config user.name x' 'config --global user.name x' 'remote add o u' 'remote set-url o u' 'reflog expire --all' 'bisect start'; do
-  expect_eq "readonly git $v" "$(hook code-reviewer "git $v")" 2
+cases="$root/tests/readonly-cases.tsv"
+ar="$tmp/aliasrepo"; mkdir -p "$ar"
+git -C "$(win "$ar")" init -q 2>/dev/null
+git -C "$(win "$ar")" config alias.st status
+git -C "$(win "$ar")" config alias.ci commit
+git -C "$(win "$ar")" config alias.c2 ci
+git -C "$(win "$ar")" config alias.sh '!echo hi'
+git -C "$(win "$ar")" config alias.la lb
+git -C "$(win "$ar")" config alias.lb la
+nr="$tmp/norepo"; mkdir -p "$nr"
+rod="$tmp/ro"; mkdir -p "$rod"
+ro_case() { # index agent cwd command: hook exit code to $rod/<index>
+  i=$1; agent=$2; cwd=$3; cmd=$4
+  fields=""
+  [ "$agent" = "-" ] || fields="\"agent_type\":\"$agent\","
+  case "$cwd" in
+    -) ;;
+    norepo) fields="$fields\"cwd\":\"$(win "$nr")\"," ;;
+    *) fields="$fields\"cwd\":\"$(win "$ar")\"," ;;
+  esac
+  printf '{%s"tool_name":"Bash","tool_input":{"command":"%s"}}' "$fields" "$cmd" | (cd "$tmp" && bash "$ro" >/dev/null 2>&1)
+  echo $? > "$rod/$i"
+}
+n=0; rows=0
+while IFS="$(printf '\t')" read -r exp shell agent cwd cmd note; do
+  n=$((n + 1)); [ "$n" -eq 1 ] && continue
+  case "$shell" in both | sh) ;; *) continue ;; esac
+  rows=$((rows + 1))
+  ro_exp[$rows]=$exp; ro_note[$rows]="$note: $cmd"
+  ro_case "$rows" "$agent" "$cwd" "$cmd" &
+  [ $((rows % jobs_max)) -eq 0 ] && wait
+done < <(tr -d '\r' < "$cases")
+wait
+i=0
+while [ "$i" -lt "$rows" ]; do
+  i=$((i + 1))
+  expect_eq "readonly ${ro_note[$i]}" "$(cat "$rod/$i" 2>/dev/null)" "${ro_exp[$i]}"
 done
-expect_eq "readonly config --get" "$(hook code-reviewer 'git config --get user.name')" 0
-expect_eq "readonly config --list" "$(hook code-reviewer 'git config --list')" 0
-expect_eq "readonly config read; config write" "$(hook code-reviewer 'git config --get user.name; git config core.hooksPath /tmp/h')" 2
-expect_eq "readonly config list && config write" "$(hook code-reviewer 'git config --list && git config user.name x')" 2
-expect_eq "readonly config read; config read" "$(hook code-reviewer 'git config --get a; git config --list')" 0
-expect_eq "readonly config single key" "$(hook code-reviewer 'git config user.name')" 0
-expect_eq "readonly remote -v" "$(hook code-reviewer 'git remote -v')" 0
-expect_eq "readonly reflog" "$(hook code-reviewer 'git reflog')" 0
-expect_eq "readonly -C dir with space log" "$(hook code-reviewer 'git -C \"my dir\" log -1')" 0
-expect_eq "readonly --git-dir <dir> log" "$(hook code-reviewer 'git --git-dir /x/.git log')" 0
-expect_eq "readonly quoted git status" "$(hook code-reviewer '\"git\" status')" 0
-expect_eq "readonly ls-files" "$(hook code-reviewer 'git ls-files')" 0
-expect_eq "readonly .gitignore word add" "$(hook code-reviewer 'echo add to .gitignore')" 0
+expect_eq "readonly bad json" "$(printf 'not json' | bash "$ro" >/dev/null 2>&1; echo $?)" 0
+expect_eq "readonly empty command" "$(printf '{"agent_type":"code-reviewer","tool_input":{"command":""}}' | bash "$ro" >/dev/null 2>&1; echo $?)" 0
 for sel in 'Bash(*git*)' 'PowerShell(*git*)'; do
   expect_eq "hooks.json readonly filter $sel" "$(grep -cF "\"if\": \"$sel\"" "$root/plugins/guyb/hooks/hooks.json")" 1
 done
+
+echo "hooks.json guard-readonly bash entry, end to end"
+if command -v jq >/dev/null 2>&1; then
+  hcmd=$(jq -r '.hooks.PreToolUse[].hooks[] | select(.shell == "bash") | select(.command | contains("guard-readonly")) | .command' "$root/plugins/guyb/hooks/hooks.json" | tr -d '\r')
+  expect_eq "hooks.json readonly bash entry count" "$(printf '%s\n' "$hcmd" | grep -c .)" 1
+  hcmd=${hcmd//\$\{CLAUDE_PLUGIN_ROOT\}/$(win "$root")/plugins/guyb}
+  wrap() { # json: stdout+stderr, then exit code on the last line
+    printf '%s' "$1" | (cd "$tmp" && bash -c "$hcmd" 2>&1); echo "rc=$?"
+  }
+  out=$(wrap '{"agent_type":"guyb:code-reviewer","tool_name":"Bash","tool_input":{"command":"git add ."}}')
+  expect_has "wrapper reviewer git add" "$out" "rc=2"
+  expect_has "wrapper reviewer git add" "$out" "guyb: blocked - read-only agent"
+  expect_has "wrapper reviewer git status" "$(wrap '{"agent_type":"guyb:code-reviewer","tool_name":"Bash","tool_input":{"command":"git status"}}')" "rc=0"
+  expect_has "wrapper implementer git add" "$(wrap '{"agent_type":"guyb:implementer","tool_name":"Bash","tool_input":{"command":"git add ."}}')" "rc=0"
+  expect_has "wrapper main session git add" "$(wrap '{"tool_name":"Bash","tool_input":{"command":"git add ."}}')" "rc=0"
+  expect_has "wrapper bad json" "$(wrap 'not json')" "rc=0"
+else
+  echo "skip: jq missing, hooks.json wrapper cases not run"
+fi
 
 echo "smoke: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Static checks for the guyb repo. Read-only; writes nothing. Usage: bash tests/lint.sh
-# Checks: bash -n on *.sh, JSON/SVG validity, ASCII only, sh files LF, ps1 files CRLF, no bash 4+ syntax.
+# Checks: bash -n and shellcheck (-S warning) on *.sh, JSON/SVG validity, ASCII only (incl. *.tsv), sh and tsv files LF, ps1 files CRLF, no bash 4+ syntax.
 # Targets bash 3.2 (macOS /bin/bash): no mapfile, associative arrays, or ${v,,}.
-# PowerShell twin: lint.ps1 (parses ps1 files; keep the file rules in sync).
+# Shellcheck step is skipped when not installed, required when GUYB_REQUIRE_SHELLCHECK=1 (CI Linux job).
+# PowerShell twin: lint.ps1 (parses ps1 files; no shellcheck there; keep the file rules in sync).
 cd "$(dirname "$0")/.." || exit 1
 
 fail=0
@@ -13,8 +14,9 @@ list() { find "$@" -type f 2>/dev/null | sort; }
 sh_files=$(list plugins scripts tests -name '*.sh')
 ps1_files=$(list plugins scripts tests -name '*.ps1')
 json_files=$(list plugins scripts tests settings .claude-plugin -name '*.json')
+tsv_files=$(list tests -name '*.tsv')
 svg_files=$(list docs -name '*.svg')
-text_files=$( { list plugins scripts tests settings .claude-plugin docs .github \( -name '*.sh' -o -name '*.ps1' -o -name '*.json' -o -name '*.svg' -o -name '*.yml' \); ls .gitattributes 2>/dev/null; } )
+text_files=$( { list plugins scripts tests settings .claude-plugin docs .github \( -name '*.sh' -o -name '*.ps1' -o -name '*.json' -o -name '*.svg' -o -name '*.yml' -o -name '*.tsv' \); ls .gitattributes 2>/dev/null; } )
 
 parse_with() { # kind file: validate JSON or XML with the first tool available; 2 = no tool
   if [ "$1" = json ] && command -v jq >/dev/null 2>&1; then jq empty "$2" >/dev/null 2>&1
@@ -29,6 +31,13 @@ parse_with() { # kind file: validate JSON or XML with the first tool available; 
 
 echo "bash -n"
 for f in $sh_files; do bash -n "$f" 2>/dev/null || bad "$f: bash -n failed"; done
+
+echo "shellcheck (-S warning)"
+if command -v shellcheck >/dev/null 2>&1; then
+  # shellcheck disable=SC2086 # sh_files is a newline-separated list of paths without spaces
+  shellcheck -S warning $sh_files || bad "shellcheck findings"
+elif [ "${GUYB_REQUIRE_SHELLCHECK:-}" = 1 ]; then bad "shellcheck not installed (GUYB_REQUIRE_SHELLCHECK=1)"
+else echo "skip: shellcheck not installed"; fi
 
 echo "bash 3.2 syntax"
 for f in $sh_files; do
@@ -57,9 +66,9 @@ for f in $text_files; do
   [ "$n" -gt 0 ] && bad "$f: $n non-ASCII or control byte(s)"
 done
 
-echo "line endings (sh = LF, ps1 = CRLF)"
-for f in $sh_files; do
-  [ "$(count '\r' "$f")" -gt 0 ] && bad "$f: sh file contains CR (must be LF)"
+echo "line endings (sh, tsv = LF; ps1 = CRLF)"
+for f in $sh_files $tsv_files; do
+  [ "$(count '\r' "$f")" -gt 0 ] && bad "$f: file contains CR (must be LF)"
 done
 for f in $ps1_files; do
   lf=$(count '\n' "$f"); cr=$(count '\r' "$f")

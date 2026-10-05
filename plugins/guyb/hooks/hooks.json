@@ -19,7 +19,7 @@
             "type": "command",
             "if": "Bash(*commit*)",
             "shell": "bash",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-secrets.sh\""
+            "command": ". \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-secrets.sh\""
           }
         ]
       },
@@ -41,7 +41,7 @@
             "type": "command",
             "if": "Bash(*git*)",
             "shell": "bash",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
+            "command": ". \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
           }
         ]
       },
@@ -52,7 +52,7 @@
             "type": "command",
             "if": "PowerShell(*git*)",
             "shell": "powershell",
-            "command": "$h = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }; & $h -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"; exit $LASTEXITCODE"
+            "command": "$i = [Console]::In.ReadToEnd(); if ($i -notmatch '\"agent_type\"\\s*:\\s*\"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)\"') { exit 0 }; & ([scriptblock]::Create([IO.File]::ReadAllText(\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"))) -Raw $i; exit $LASTEXITCODE"
           }
         ]
       }

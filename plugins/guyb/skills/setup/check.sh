@@ -23,6 +23,7 @@ for f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile" "
 $(cat "$f" 2>/dev/null)"
 done
 # rc file to suggest in fix hints: zsh -> .zshrc; macOS bash reads .bash_profile (login shells); else .bashrc
+# shellcheck disable=SC2088 # rcfile is display text, the tilde is meant literally
 case "$(basename "${SHELL:-}")" in
   zsh) rcfile="~/.zshrc" ;;
   *) if [ "$(uname -s 2>/dev/null)" = Darwin ]; then rcfile="~/.bash_profile"; else rcfile="~/.bashrc"; fi ;;

@@ -77,20 +77,20 @@ hk() { GUYB_TAB_NAME="$tname" TMPDIR="$tmp" bash "$hook" "$@" </dev/null 2>&1; }
 hkin() { GUYB_TAB_NAME="$tname" TMPDIR="$tmp" bash "$hook" "$@" 2>&1; }  # stdin comes from the caller
 tname='my app'
 expect_eq hook-running "$(hk running)" "tab: osc0 $RUN my app"
-expect_eq hook-done "$(hk done)" "tab: osc0 $DONE my app"
+expect_eq hook-done "$(hk 'done')" "tab: osc0 $DONE my app"
 expect_eq hook-waiting "$(hk waiting)" "tab: osc0 $WAIT my app"
 expect_eq hook-end "$(hk end)" 'tab: osc0 my app'
 expect_eq hook-ascii-running "$(GUYB_TAB_ASCII=1 hk running)" 'tab: osc0 * my app'
-expect_eq hook-ascii-done "$(GUYB_TAB_ASCII=1 hk done)" 'tab: osc0 + my app'
+expect_eq hook-ascii-done "$(GUYB_TAB_ASCII=1 hk 'done')" 'tab: osc0 + my app'
 expect_eq hook-ascii-waiting "$(GUYB_TAB_ASCII=1 hk waiting)" 'tab: osc0 ? my app'
-expect_eq hook-dumb "$(TERM=dumb hk done)" 'tab: osc0 + my app'
+expect_eq hook-dumb "$(TERM=dumb hk 'done')" 'tab: osc0 + my app'
 expect_eq hook-tmux "$(TMUX=/tmp/fake,1,0 hk waiting)" "tab: tmux $WAIT my app"
 expect_eq hook-bad-state "$(hk bogus)" ''
 expect_eq hook-no-state "$(hk)" ''
 tname=''
 expect_eq hook-unset-name "$(hk running)" ''
 tname="$(printf 'a\033]0;x\007b\302\233c\177')"
-expect_eq hook-clean "$(hk done)" "tab: osc0 $DONE a]0;xbc"
+expect_eq hook-clean "$(hk 'done')" "tab: osc0 $DONE a]0;xbc"
 # resume (PostToolUse) repaints only after "waiting"
 tname='rs'
 hk end >/dev/null
@@ -108,32 +108,32 @@ hk end >/dev/null
 hk running >/dev/null
 ev agent-start a1 >/dev/null
 expect_eq agent-stop-before-main-stop "$(ev agent-stop a1)" ''
-expect_eq agent-stop-first-then-done "$(hk done)" "tab: osc0 $DONE ag"
+expect_eq agent-stop-first-then-done "$(hk 'done')" "tab: osc0 $DONE ag"
 hk running >/dev/null
 ev agent-start a1 >/dev/null; ev agent-start a2 >/dev/null
-expect_eq agent-done-with-live "$(hk done)" ''  # hourglass already shown: no repaint
+expect_eq agent-done-with-live "$(hk 'done')" ''  # hourglass already shown: no repaint
 expect_eq agent-done-with-live-state "$(cat "$tmp/guyb-tab-ag")" idle-agents
 expect_eq agent-stop-one-of-two "$(ev agent-stop a1)" ''
 expect_eq agent-stop-last-after-done "$(ev agent-stop a2)" "tab: osc0 $DONE ag"
 expect_eq agent-stop-again "$(ev agent-stop a2)" ''
 # "?" after Stop while an agent runs: the last agent-stop still paints the check (main is idle)
-hk running >/dev/null; ev agent-start w1 >/dev/null; hk done >/dev/null
+hk running >/dev/null; ev agent-start w1 >/dev/null; hk 'done' >/dev/null
 expect_eq agent-idle-notify "$(hk waiting)" "tab: osc0 $WAIT ag"
 expect_eq agent-idle-sub-resume "$(ev resume w1)" ''
 expect_eq agent-idle-last-stop "$(ev agent-stop w1)" "tab: osc0 $DONE ag"
 # ... and a main-agent tool use after that "?" goes back to the hourglass
-hk running >/dev/null; ev agent-start w2 >/dev/null; hk done >/dev/null; hk waiting >/dev/null
+hk running >/dev/null; ev agent-start w2 >/dev/null; hk 'done' >/dev/null; hk waiting >/dev/null
 expect_eq agent-idle-main-resume "$(hk resume)" "tab: osc0 $RUN ag"
 ev agent-stop w2 >/dev/null
 # Stop with a live agent after a waiting "?" repaints the hourglass
 ev agent-start a3 >/dev/null; hk waiting >/dev/null
-expect_eq agent-ascii "$(GUYB_TAB_ASCII=1 hk done)" 'tab: osc0 * ag'
+expect_eq agent-ascii "$(GUYB_TAB_ASCII=1 hk 'done')" 'tab: osc0 * ag'
 ev agent-stop a3 >/dev/null
 # main agent runs again while agents live (background task re-invoked it): last agent-stop must not paint
-hk running >/dev/null; ev agent-start b1 >/dev/null; hk done >/dev/null
+hk running >/dev/null; ev agent-start b1 >/dev/null; hk 'done' >/dev/null
 expect_eq agent-main-resumes "$(hk resume)" ''
 expect_eq agent-stop-while-main-runs "$(ev agent-stop b1)" ''
-expect_eq agent-then-done "$(hk done)" "tab: osc0 $DONE ag"
+expect_eq agent-then-done "$(hk 'done')" "tab: osc0 $DONE ag"
 # a start hook that lands after Stop shows the hourglass; its stop restores the check mark
 expect_eq agent-late-start "$(ev agent-start c1)" "tab: osc0 $RUN ag"
 expect_eq agent-late-stop "$(ev agent-stop c1)" "tab: osc0 $DONE ag"
@@ -146,7 +146,7 @@ printf '{"agent_id":"../x y"}' | hkin agent-stop >/dev/null
 # stale markers (older than 4h) are ignored and deleted
 hk running >/dev/null; ev agent-start old >/dev/null
 touch -t 200001010000 "$tmp/guyb-tab-ag.agents/old"
-expect_eq agent-stale-ignored "$(hk done)" "tab: osc0 $DONE ag"
+expect_eq agent-stale-ignored "$(hk 'done')" "tab: osc0 $DONE ag"
 expect_eq agent-stale-deleted "$(ls "$tmp/guyb-tab-ag.agents")" ''
 # a waiting "?" is not cleared by a subagent's PostToolUse, but is by the main agent's
 hk waiting >/dev/null
