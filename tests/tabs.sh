@@ -74,6 +74,7 @@ expect_lacks list-no-dryrun "$list" 'here:'
 # --- tab-status.sh (status hook): GUYB_DRYRUN=1 prints "tab: <mode> <title>". Acts only when GUYB_TAB_NAME is set.
 hook="$root/plugins/guyb/hooks/tab-status.sh"
 hk() { GUYB_TAB_NAME="$tname" TMPDIR="$tmp" bash "$hook" "$@" </dev/null 2>&1; }
+hkin() { GUYB_TAB_NAME="$tname" TMPDIR="$tmp" bash "$hook" "$@" 2>&1; }  # stdin comes from the caller
 tname='my app'
 expect_eq hook-running "$(hk running)" "tab: osc0 $RUN my app"
 expect_eq hook-done "$(hk done)" "tab: osc0 $DONE my app"
@@ -100,6 +101,52 @@ hk waiting >/dev/null
 expect_eq hook-resume-after-waiting "$(hk resume)" "tab: osc0 $RUN rs"
 expect_eq hook-resume-twice "$(hk resume)" ''
 hk end >/dev/null
+# subagents: Stop keeps the hourglass while an agent marker is live; the last agent-stop paints the check mark
+tname='ag'
+ev() { printf '{"agent_id":"%s","agent_type":"x"}' "$2" | hkin "$1"; }
+hk end >/dev/null
+hk running >/dev/null
+ev agent-start a1 >/dev/null
+expect_eq agent-stop-before-main-stop "$(ev agent-stop a1)" ''
+expect_eq agent-stop-first-then-done "$(hk done)" "tab: osc0 $DONE ag"
+hk running >/dev/null
+ev agent-start a1 >/dev/null; ev agent-start a2 >/dev/null
+expect_eq agent-done-with-live "$(hk done)" ''  # hourglass already shown: no repaint
+expect_eq agent-done-with-live-state "$(cat "$tmp/guyb-tab-ag")" idle-agents
+expect_eq agent-stop-one-of-two "$(ev agent-stop a1)" ''
+expect_eq agent-stop-last-after-done "$(ev agent-stop a2)" "tab: osc0 $DONE ag"
+expect_eq agent-stop-again "$(ev agent-stop a2)" ''
+# Stop with a live agent after a waiting "?" repaints the hourglass
+ev agent-start a3 >/dev/null; hk waiting >/dev/null
+expect_eq agent-ascii "$(GUYB_TAB_ASCII=1 hk done)" 'tab: osc0 * ag'
+ev agent-stop a3 >/dev/null
+# main agent runs again while agents live (background task re-invoked it): last agent-stop must not paint
+hk running >/dev/null; ev agent-start b1 >/dev/null; hk done >/dev/null
+expect_eq agent-main-resumes "$(hk resume)" ''
+expect_eq agent-stop-while-main-runs "$(ev agent-stop b1)" ''
+expect_eq agent-then-done "$(hk done)" "tab: osc0 $DONE ag"
+# a start hook that lands after Stop shows the hourglass; its stop restores the check mark
+expect_eq agent-late-start "$(ev agent-start c1)" "tab: osc0 $RUN ag"
+expect_eq agent-late-stop "$(ev agent-stop c1)" "tab: osc0 $DONE ag"
+# missing or unsafe agent_id
+expect_eq agent-no-id "$(printf '{}' | hkin agent-start)" ''
+hk running >/dev/null
+printf '{"agent_id":"../x y"}' | hkin agent-start >/dev/null
+expect_eq agent-id-sanitized "$(ls "$tmp/guyb-tab-ag.agents")" 'xy'
+printf '{"agent_id":"../x y"}' | hkin agent-stop >/dev/null
+# stale markers (older than 4h) are ignored and deleted
+hk running >/dev/null; ev agent-start old >/dev/null
+touch -t 200001010000 "$tmp/guyb-tab-ag.agents/old"
+expect_eq agent-stale-ignored "$(hk done)" "tab: osc0 $DONE ag"
+expect_eq agent-stale-deleted "$(ls "$tmp/guyb-tab-ag.agents")" ''
+# a waiting "?" is not cleared by a subagent's PostToolUse, but is by the main agent's
+hk waiting >/dev/null
+expect_eq agent-resume-ignored "$(ev resume a9)" ''
+expect_eq agent-resume-main "$(printf '{"tool_name":"Bash"}' | hkin resume)" "tab: osc0 $RUN ag"
+# end clears the markers
+ev agent-start e1 >/dev/null
+hk end >/dev/null
+expect_eq agent-end-clears "$([ -e "$tmp/guyb-tab-ag.agents" ] && echo present)" ''
 # no terminal to reach: never fails, never prints
 out="$(env -u GUYB_DRYRUN GUYB_TAB_NAME=zz TMPDIR="$tmp" TMUX=/nonexistent/sock,1,0 bash "$hook" running </dev/null 2>&1)"; rc=$?
 expect_eq hook-silent "$out" ''
