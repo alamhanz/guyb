@@ -21,6 +21,7 @@
 - **0.3.0** (PR #1): run IDs, waves, progress files
 
 ## Recent Changes
+- 2026-10-05 - Session: PR #10 opened (release workflow + README slim, CI green, guyb-95; rulesets verified, unchanged). Installed plugin updated 0.5.0 -> 0.8.0. 0.8.1 on fix/tab-status-subagents (worktree .claude/worktrees/agent-adac6880fe2a8d8b3, not pushed): 149ad9a tab icon stays busy while subagents run (guyb-98), bdfc97f pipeline rule "finish clean" (agents left background tests running and stayed open in the panel); review guyb-106 approved with one should-fix (stuck ? after Notification + last agent-stop), fix round guyb-107 in progress. 0.8.2 guards rewrite on fix/guards-0.8.2 (worktree .claude/worktrees/guards-0.8.2, uncommitted): plan guyb-96, Q53-Q57 answered (all option a), wave 1: guyb-99 sh guard done, guyb-100 ps1 guard + hooks.json done, guyb-101 case table/smoke and guyb-102 shellcheck/CI/runners/bench still running at session end
 - 2026-10-05 - 0.8.0 merged (PR #9, 0027638); feat/release-workflow: release.yml tags + publishes vX.Y.Z on version bump (guyb-91, f13cb61), README slimmed (d089cf0), main rulesets protect-main + main-merge-admin-only (guyb-92/93), review guyb-94 fixes uncommitted
 - 2026-10-04 - 0.8.0 on fix/parity-a13-a18 (guyb-70..79, guyb-84; guyb-80..83 stopped, superseded by guyb-84..87): 52e66a8 parity A13/A14/A18, 1bc73ae secrets guard hardening, a43bf22 playbook delegation rule, 1970efc tab icon + version 0.8.0, c196a1c read-only guard hardening; README/CONTRIBUTING drift fixed (guyb-85)
 - 2026-10-04 - 0.7.0 merged (PR #8, 1c034fd)
@@ -45,9 +46,12 @@
 - Deferred consider item: A15 (docs note)
 
 ## Next Up
-- Open feat/release-workflow PR (guyb-95), user merges, watch CI (esp. macOS and validate job) and first auto release; update installed plugin (installed is 0.5.0)
-- 0.8.1 perf: guards cost ~1-1.6s per call on Windows (process spawns, not jq); check agent type first with bash builtins so non-read-only agents pay ~0, fewer subshells overall, run test files in parallel, add shellcheck to lint/CI (jq + shellcheck installed locally via scoop)
-- Guard follow-ups (guyb-89 consider): read-only guard blocks git verbs inside string/file text (reviewer worked around it with a placeholder + sed: text-only guards are evadable by runtime substitution); `-c` value with inner quotes passes; gitconfig aliases (`git ci`) not resolved; false positive `git grep "git add"`
+- Check guyb-107 (0.8.1 fix round), guyb-101, guyb-102 results in .claude/guyb/pipeline/reports/; if their agents died with the session, mark them stopped and relaunch from their progress files
+- User merges PR #10 (CI green); watch the first auto release later
+- 0.8.1: after guyb-107, push fix/tab-status-subagents and open PR (git-ops); live check of the tab icon with background agents (hook order on background-task re-invoke is unverified)
+- 0.8.2: wave 2 guyb-103 docs + version 0.8.2, wave 3 guyb-104 review + all checks on 4 shells + bench before/after (also covers the cut-off secrets.sh run); rebase fix/guards-0.8.2 onto 0.8.1 (hooks.json and tests/tabs.sh overlap; tabs.sh SC1010 shellcheck fixes after the merge)
+- Feature request: "I need to go" wrap-up by default - /guyb:end has `disable-model-invocation: true`; allow model invocation with trigger phrases (need to go, done for today, wrap up). Flow (agreed 2026-10-05): ask running agents to checkpoint (progress + report files) and stop; stop leftovers; WIP-commit worktree changes locally (not pushed); write a local handoff file in .claude/guyb/pipeline/ (gitignored: same-machine resume); update and commit/push STATE.md (cross-machine); /guyb:start reads the handoff and offers to resume. Local handoff: .claude/guyb/pipeline/handoff.md
+- Weight audit after 0.8.2 (guyb-105, queued): orchestrator.md tokens per session, tab-status per-call spawns, brief/gh time; budget every change (guyb must stay lightweight)
 - Consider item A15
 - Gather feedback on 0.6.0, then pick next features
 
