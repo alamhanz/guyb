@@ -1,0 +1,41 @@
+name: Release
+
+# Releasing on push is safe: main is protected by a ruleset that requires ci-ok on the PR before merge.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: tag and publish
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Release the plugin version if it has no tag yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          V=$(jq -r '.version' plugins/guyb/.claude-plugin/plugin.json)
+          if ! printf '%s' "$V" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "Malformed version in plugin.json: '$V'" >&2
+            exit 1
+          fi
+          if gh release view "v$V" >/dev/null 2>&1; then
+            echo "Release v$V already exists; nothing to release."
+            exit 0
+          fi
+          pre=()
+          case "$V" in *-*) pre=(--prerelease) ;; esac
+          # An existing tag without a release (manual tag, partial failure) is reused, not moved.
+          gh release create "v$V" --target "$GITHUB_SHA" --title "v$V" --generate-notes "${pre[@]}"
