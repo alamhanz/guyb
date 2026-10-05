@@ -8,6 +8,8 @@
 #   done (main Stop) paints the check mark only when no marker is live; otherwise the state becomes "idle-agents" and the
 #   hourglass stays until the last agent-stop (or until the main agent runs again). Markers older than 4 hours are stale:
 #   ignored and deleted, so a crashed agent cannot pin the hourglass. agent_id is read from stdin without jq.
+#   "waiting-idle" (stored only) = a "?" shown while main is idle and agents run; the last agent-stop still paints the check.
+#   Limit: state and markers are keyed by GUYB_TAB_NAME, so two tabs with the same name share them.
 # Acts only when GUYB_TAB_NAME is set (the guyb launcher exports it). Icons are built from UTF-8 bytes (source stays ASCII).
 # GUYB_TAB_ASCII=1 or TERM=linux/dumb: "* " running, "+ " done, "? " waiting. GUYB_DRYRUN=1 prints "tab: <mode> <title>".
 # Reaching the terminal: tmux ($TMUX) renames the window; Unix/macOS/WSL write OSC 0 to /dev/tty; Windows (Git Bash) hands
@@ -48,7 +50,7 @@ case "$state" in
   resume)
     [[ "$input" =~ $re ]] && exit 0
     if [ "$last" = idle-agents ]; then printf 'running\n' 2>/dev/null >"$stf"; exit 0; fi
-    [ "$last" = waiting ] || exit 0
+    [ "$last" = waiting ] || [ "$last" = waiting-idle ] || exit 0
     state=running; keep=running ;;
   agent-start)
     [ -n "$id" ] || exit 0
@@ -61,8 +63,11 @@ case "$state" in
     [ -n "$id" ] || exit 0
     rm -f "$ad/$id" 2>/dev/null
     agents_live && exit 0
-    [ "$last" = idle-agents ] || exit 0
+    [ "$last" = idle-agents ] || [ "$last" = waiting-idle ] || exit 0
     state=done; keep=done ;;
+  waiting)
+    # a "?" shown after Stop while agents run: remember that main is idle, so the last agent-stop still paints the check
+    if [ "$last" = idle-agents ] || [ "$last" = waiting-idle ]; then keep=waiting-idle; fi ;;
   done)
     if agents_live; then
       keep=idle-agents

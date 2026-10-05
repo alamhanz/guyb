@@ -116,6 +116,15 @@ expect_eq agent-done-with-live-state "$(cat "$tmp/guyb-tab-ag")" idle-agents
 expect_eq agent-stop-one-of-two "$(ev agent-stop a1)" ''
 expect_eq agent-stop-last-after-done "$(ev agent-stop a2)" "tab: osc0 $DONE ag"
 expect_eq agent-stop-again "$(ev agent-stop a2)" ''
+# "?" after Stop while an agent runs: the last agent-stop still paints the check (main is idle)
+hk running >/dev/null; ev agent-start w1 >/dev/null; hk done >/dev/null
+expect_eq agent-idle-notify "$(hk waiting)" "tab: osc0 $WAIT ag"
+expect_eq agent-idle-sub-resume "$(ev resume w1)" ''
+expect_eq agent-idle-last-stop "$(ev agent-stop w1)" "tab: osc0 $DONE ag"
+# ... and a main-agent tool use after that "?" goes back to the hourglass
+hk running >/dev/null; ev agent-start w2 >/dev/null; hk done >/dev/null; hk waiting >/dev/null
+expect_eq agent-idle-main-resume "$(hk resume)" "tab: osc0 $RUN ag"
+ev agent-stop w2 >/dev/null
 # Stop with a live agent after a waiting "?" repaints the hourglass
 ev agent-start a3 >/dev/null; hk waiting >/dev/null
 expect_eq agent-ascii "$(GUYB_TAB_ASCII=1 hk done)" 'tab: osc0 * ag'
