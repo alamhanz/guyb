@@ -68,7 +68,7 @@ guyb myapp        # open GUYB_ROOT/myapp in a new tab
 
 Flags and the `-List` / `--list` format are in the headers of `scripts/launch.ps1` and `scripts/launch.sh`.
 
-**Tabs.** Each launched tab keeps the project name as its title, with a colour derived from the name. The title is `<icon> <project>`: hourglass while Claude works, check mark when done, question mark when it waits for you (`GUYB_TAB_ASCII=1` gives `*` `+` `?`). guyb sets `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`, which is not a documented Claude Code setting; if an update drops it, Claude's own title may show again.
+**Tabs.** Each launched tab keeps the project name as its title, with a colour derived from the name. The title is `<icon> <project>`: hourglass while Claude or any subagent works, check mark when all are done, question mark when it waits for you (`GUYB_TAB_ASCII=1` gives `*` `+` `?`). guyb sets `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`, which is not a documented Claude Code setting; if an update drops it, Claude's own title may show again.
 
 **In a project.** `/guyb:start` gives a briefing (branch, open PRs, next steps from `.claude/guyb/STATE.md`, outdated plugin, stale `STATE.md` entries, environment mismatches), drafts `.claude/CLAUDE.md` on first use, and asks what to work on. Then just talk: "add rate limiting to the API and ship it".
 
