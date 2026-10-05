@@ -51,6 +51,8 @@
 - 0.8.1: after guyb-107, push fix/tab-status-subagents and open PR (git-ops); live check of the tab icon with background agents (hook order on background-task re-invoke is unverified)
 - 0.8.2: wave 2 guyb-103 docs + version 0.8.2, wave 3 guyb-104 review + all checks on 4 shells + bench before/after (also covers the cut-off secrets.sh run); rebase fix/guards-0.8.2 onto 0.8.1 (hooks.json and tests/tabs.sh overlap; tabs.sh SC1010 shellcheck fixes after the merge)
 - Feature request: "I need to go" wrap-up by default - /guyb:end has `disable-model-invocation: true`; allow model invocation with trigger phrases (need to go, done for today, wrap up). Flow (agreed 2026-10-05): ask running agents to checkpoint (progress + report files) and stop; stop leftovers; WIP-commit worktree changes locally (not pushed); write a local handoff file in .claude/guyb/pipeline/ (gitignored: same-machine resume); update and commit/push STATE.md (cross-machine); /guyb:start reads the handoff and offers to resume. Local handoff: .claude/guyb/pipeline/handoff.md
+- Feature request (user, 2026-10-05): "commit" in a wrap-up means commit AND push every work branch (WIP commits included), no PR, so another machine can pull and continue
+- Resume 0.8.2: fix/guards-0.8.2 is pushed as WIP 93b5cf7 (guyb-99/100 done; guyb-101 stopped at checkpoint with 4 failing ps rows; guyb-102 killed mid-task, check bench.ps1/run.ps1). 0.8.1 is pushed on fix/tab-status-subagents (d2ea909, review fixes done) - open its PR
 - Weight audit after 0.8.2 (guyb-105, queued): orchestrator.md tokens per session, tab-status per-call spawns, brief/gh time; budget every change (guyb must stay lightweight)
 - Consider item A15
 - Gather feedback on 0.6.0, then pick next features
