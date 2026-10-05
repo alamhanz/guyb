@@ -424,5 +424,5 @@ try {
             $code = 2
         }
     }
-} catch { $code = 0 }
+} catch { [Console]::Error.WriteLine('DBG ' + $_.ToString() + ' @ ' + $_.InvocationInfo.PositionMessage); $code = 0 }
 exit $code

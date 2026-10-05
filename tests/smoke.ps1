@@ -405,7 +405,7 @@ try {
     }
   }
   $res = Run-Batch @($rows | ForEach-Object { $_.Job })
-  for ($i = 0; $i -lt $rows.Count; $i++) { Expect-Eq ('readonly ' + $rows[$i].Label) $res[$i].Code $rows[$i].Expect }
+  for ($i = 0; $i -lt $rows.Count; $i++) { Expect-Eq ('readonly ' + $rows[$i].Label) $res[$i].Code $rows[$i].Expect; if ("$($res[$i].Code)" -ne $rows[$i].Expect) { Write-Host ('  out: ' + $res[$i].Text) } }
   $bad = Run-Batch @([pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = 'not json' })
   Expect-Eq 'readonly bad json' $bad[0].Code 0
   $emp = Run-Batch @([pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = '{"agent_type":"code-reviewer","tool_input":{"command":""}}' })
