@@ -415,6 +415,9 @@ try {
     if (-not $Raw) { $Raw = [Console]::In.ReadToEnd() }
     $m = [regex]::Match([string]$Raw, '"agent_type"\s*:\s*"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)"')
     if ($m.Success) {
+        # Drop anything before the JSON (a BOM, or one decoded with the OEM code page) so it cannot fail us open.
+        $k = $Raw.IndexOf('{')
+        if ($k -gt 0) { $Raw = $Raw.Substring($k) }
         $data = $Raw | ConvertFrom-Json
         $cmd = [string]$data.tool_input.command
         $Cwd = [string]$data.cwd

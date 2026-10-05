@@ -367,13 +367,19 @@ try {
     return [pscustomobject]@{ Code = $h.P.ExitCode; Text = ($h.Out.Result + $h.Err.Result) }
   }
   function Run-Batch($jobs) { # jobs: objects with Exe, Args, Stdin; returns results in order, $jobsMax at a time
-    $res = @()
-    for ($i = 0; $i -lt $jobs.Count; $i += $jobsMax) {
-      $hs = @()
-      for ($j = $i; $j -lt [Math]::Min($i + $jobsMax, $jobs.Count); $j++) { $hs += , (Start-Proc $jobs[$j].Exe $jobs[$j].Args $jobs[$j].Stdin) }
-      foreach ($h in $hs) { $res += , (Finish-Proc $h) }
-    }
-    return $res
+    # .NET Framework (PS 5.1) wraps child stdin in a writer using Console.InputEncoding with AutoFlush on,
+    # which writes a UTF-8 BOM at Process.Start; a BOM-less input encoding keeps child stdin clean.
+    $ie = [Console]::InputEncoding
+    try { [Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { }
+    try {
+      $res = @()
+      for ($i = 0; $i -lt $jobs.Count; $i += $jobsMax) {
+        $hs = @()
+        for ($j = $i; $j -lt [Math]::Min($i + $jobsMax, $jobs.Count); $j++) { $hs += , (Start-Proc $jobs[$j].Exe $jobs[$j].Args $jobs[$j].Stdin) }
+        foreach ($h in $hs) { $res += , (Finish-Proc $h) }
+      }
+      return $res
+    } finally { try { [Console]::InputEncoding = $ie } catch { } }
   }
 
   $ar = Join-Path $tmp 'aliasrepo'
@@ -411,6 +417,12 @@ try {
   Expect-Eq 'readonly bad json' $bad[0].Code 0
   $emp = Run-Batch @([pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = '{"agent_type":"code-reviewer","tool_input":{"command":""}}' })
   Expect-Eq 'readonly empty command' $emp[0].Code 0
+  $bomJson = '{"agent_type":"code-reviewer","tool_name":"PowerShell","tool_input":{"command":"git add ."}}'
+  $bom = Run-Batch @(
+    [pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = ([string][char]0xFEFF) + $bomJson },
+    [pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = ([string][char]0x2229) + [char]0x2557 + [char]0x2510 + $bomJson })
+  Expect-Eq 'readonly BOM before JSON still blocks' $bom[0].Code 2
+  Expect-Eq 'readonly OEM-decoded BOM before JSON still blocks' $bom[1].Code 2
   $hj = Get-Content -Raw -LiteralPath (Join-Path $root 'plugins/guyb/hooks/hooks.json')
   foreach ($sel in 'Bash(*git*)', 'PowerShell(*git*)') {
     Expect-Eq "hooks.json readonly filter $sel" ($hj.Contains('"if": "' + $sel + '"')) $true
