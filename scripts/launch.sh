@@ -1,4 +1,5 @@
 # guyb launcher for bash/zsh (macOS, Linux, Git Bash).
+# shellcheck shell=bash
 # Source from your ~/.bashrc or ~/.zshrc:   source "<repo>/scripts/launch.sh"
 #
 #   guyb            -> pick a project from $GUYB_ROOT (or the current folder)

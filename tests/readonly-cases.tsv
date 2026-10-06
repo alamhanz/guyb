@@ -1,0 +1,205 @@
+expect	shell	agent	cwd	command	note
+2	both	guyb:code-reviewer	-	git add .	reviewer git add
+2	both	architect	-	git push origin main	bare architect git push
+0	both	guyb:code-reviewer	-	git status	reviewer git status
+0	both	guyb:implementer	-	git add .	implementer git add
+0	both	-	-	git add .	main session git add
+2	both	code-reviewer	-	cd sub && git add .	chained cd && git add
+2	both	code-reviewer	-	pushd sub; git commit -m x	chained pushd; git commit
+2	both	code-reviewer	-	echo hi | git apply	piped echo | git apply
+2	both	code-reviewer	-	true; git push	chained true; git push
+2	both	code-reviewer	-	ls\ngit rm x	chained newline git rm
+2	both	code-reviewer	-	cd a && git -C b reset --hard	chained git -C dir reset
+2	both	code-reviewer	-	git revert HEAD	git revert
+2	both	code-reviewer	-	git am p.patch	git am
+0	both	code-reviewer	-	cd sub && git log -1 | head	chained read-only git
+0	both	code-reviewer	-	cd sub && ls	chained no git
+2	both	code-reviewer	-	git stage .	git stage
+2	both	code-reviewer	-	git -C \"my dir/x\" add .	quoted -C dir with space
+2	both	code-reviewer	-	git -C 'my dir' add .	single-quoted -C dir with space
+2	both	code-reviewer	-	git --git-dir /x/.git add .	--git-dir <dir> add
+2	both	code-reviewer	-	git -p add .	-p add
+2	both	code-reviewer	-	git -P commit -m x	-P commit
+2	both	code-reviewer	-	git --no-pager add .	--no-pager add
+2	both	code-reviewer	-	\"git\" add .	quoted git
+2	both	code-reviewer	-	\"C:/Program Files/Git/cmd/git.exe\" add .	quoted exe path
+2	both	code-reviewer	-	& \"C:/Program Files/Git/cmd/git.exe\" add .	call operator quoted exe path
+2	both	code-reviewer	-	/usr/bin/git add .	/usr/bin/git
+2	both	code-reviewer	-	GIT add .	uppercase GIT add
+2	both	code-reviewer	-	GIT.EXE ADD .	uppercase GIT.EXE
+2	both	code-reviewer	-	git notes add -m x	git notes add
+2	both	code-reviewer	-	git update-ref HEAD x	git update-ref
+2	both	code-reviewer	-	git symbolic-ref HEAD x	git symbolic-ref
+2	both	code-reviewer	-	git replace a b	git replace
+2	both	code-reviewer	-	git gc	git gc
+2	both	code-reviewer	-	git prune	git prune
+2	both	code-reviewer	-	git submodule update	git submodule update
+2	both	code-reviewer	-	git init	git init
+2	both	code-reviewer	-	git clone u d	git clone
+2	both	code-reviewer	-	git filter-branch x	git filter-branch
+2	both	code-reviewer	-	git config user.name x	git config user.name x
+2	both	code-reviewer	-	git config --global user.name x	git config --global write
+2	both	code-reviewer	-	git remote add o u	git remote add
+2	both	code-reviewer	-	git remote set-url o u	git remote set-url
+2	both	code-reviewer	-	git reflog expire --all	git reflog expire
+2	both	code-reviewer	-	git bisect start	git bisect start
+0	both	code-reviewer	-	git config --get user.name	config --get
+0	both	code-reviewer	-	git config --list	config --list
+2	both	code-reviewer	-	git config --get user.name; git config core.hooksPath /tmp/h	config read; config write
+2	both	code-reviewer	-	git config --list && git config user.name x	config list && config write
+0	both	code-reviewer	-	git config --get a; git config --list	config read; config read
+0	both	code-reviewer	-	git config user.name	config single key
+0	both	code-reviewer	-	git remote -v	remote -v
+0	both	code-reviewer	-	git reflog	reflog
+0	both	code-reviewer	-	git -C \"my dir\" log -1	-C dir with space log
+0	both	code-reviewer	-	git --git-dir /x/.git log	--git-dir <dir> log
+0	both	code-reviewer	-	\"git\" status	quoted git status
+0	both	code-reviewer	-	git ls-files	ls-files
+0	both	code-reviewer	-	echo add to .gitignore	word add, no git
+0	both	guyb:code-reviewer	-	git grep -n \"git add\"	quoted text in git grep
+0	both	guyb:code-reviewer	-	echo \"git add .\"	quoted text in echo
+0	both	guyb:code-reviewer	-	git log --format=\"%h; git push\"	separator inside quotes
+0	both	guyb:code-reviewer	-	git status # git add	comment text
+0	sh	guyb:code-reviewer	-	cat <<'EOF' > n.md\ngit add .\nEOF	heredoc body is data
+0	both	guyb:code-reviewer	-	git -c core.pager=\"less -R\" log	-c value with space, read verb
+0	both	guyb:code-reviewer	-	git -c alias.l=log l	-c alias to read verb
+0	both	guyb:code-reviewer	-	git config get user.name	config get
+0	both	guyb:code-reviewer	alias	git st	alias to status
+0	both	guyb:code-reviewer	alias	git nosuchverb	unknown verb, no alias
+0	both	guyb:code-reviewer	-	git add \"x	unbalanced quote fails open
+0	ps	guyb:code-reviewer	-	Select-String -Pattern 'git add' -Path x	ps quoted text is data
+0	ps	guyb:code-reviewer	-	@'\ngit add .\n'@ | Out-File n.md	ps here-string is data
+0	sh	guyb:code-reviewer	-	g=git; $g add .	KNOWN GAP: runtime substitution (D1)
+2	both	guyb:code-reviewer	-	git -c core.pager=\"less -R\" add .	-c value with space, write verb
+2	both	guyb:code-reviewer	-	git -c 'core.pager=less -R' add .	-c single-quoted value, write verb
+2	both	guyb:code-reviewer	-	git -c alias.ci=commit ci -m x	-c alias to commit
+2	both	guyb:code-reviewer	-	git -c alias.x='!git add .' x	-c shell alias
+2	both	guyb:code-reviewer	alias	git ci -m x	config alias to commit
+2	both	guyb:code-reviewer	alias	git c2 -m x	alias chain to commit
+2	both	guyb:code-reviewer	alias	git sh	shell alias in config
+2	both	guyb:code-reviewer	-	bash -c \"git add .\"	bash -c
+2	both	guyb:code-reviewer	-	sh -lc 'git push'	sh -lc
+2	both	guyb:code-reviewer	-	eval \"git add .\"	eval
+2	both	guyb:code-reviewer	-	echo x | xargs git add	xargs
+2	sh	guyb:code-reviewer	-	find . -name x -exec git add {} \;	find -exec
+2	sh	guyb:code-reviewer	-	echo \"$(git add .)\"	command substitution in double quotes
+2	sh	guyb:code-reviewer	-	x=\"`git add .`\"	backticks in double quotes
+2	sh	guyb:code-reviewer	-	bash <<'EOF'\ngit add .\nEOF	heredoc fed to a shell
+2	both	guyb:code-reviewer	-	git config set user.name x	config set
+2	both	guyb:code-reviewer	-	git config --unset a.b	config --unset
+2	both	guyb:code-reviewer	-	git branch -u origin/x	branch -u
+2	both	guyb:code-reviewer	-	git branch --set-upstream-to=origin/x	branch --set-upstream-to
+2	ps	guyb:code-reviewer	-	iex 'git add .'	iex
+2	ps	guyb:code-reviewer	-	Invoke-Expression \"git push\"	Invoke-Expression
+2	ps	guyb:code-reviewer	-	Write-Output \"$(git add .)\"	subexpression in double quotes
+2	both	guyb:code-reviewer	-	cmd /c git add .	cmd /c
+2	both	guyb:code-reviewer	-	& git add .	call operator
+2	ps	guyb:code-reviewer	-	Start-Process git -ArgumentList 'add','.'	Start-Process
+2	both	guyb:code-reviewer	-	git add . <<EOF\nx	unterminated heredoc still blocks the add
+2	sh	guyb:code-reviewer	-	bash <<EOF\ngit add .	unterminated heredoc fed to a shell
+2	sh	guyb:code-reviewer	-	git add . ; echo $((1<<2))	arithmetic shift does not hide an earlier write
+2	both	guyb:code-reviewer	-	git status\r\ngit add .	CRLF separated write
+0	both	guyb:code-reviewer	-	git status\r\n	CRLF read-only
+0	sh	guyb:code-reviewer	-	git \u0061dd .	KNOWN GAP: JSON \u escape stays literal in sh (D6)
+2	ps	guyb:code-reviewer	-	git \u0061dd .	ps decodes JSON \u escapes
+0	both	guyb:code-reviewer	-	\n	blank command
+0	both	guyb:code-reviewer	alias	git la	alias loop a->b->a terminates
+0	both	guyb:code-reviewer	norepo	git nosuchverb	unknown verb outside a repo
+0	both	guyb:code-reviewer	norepo	git st	alias name outside a repo
+2	both	guyb:code-reviewer	alias	git -C . ci -m x	relative -C joined onto cwd for alias lookup
+2	both	guyb:code-reviewer	-	git branch -rd origin/x	clustered branch -rd
+2	both	guyb:code-reviewer	-	git branch -fd x	clustered branch -fd
+2	both	guyb:code-reviewer	-	git tag -fa v1	clustered tag -fa
+2	both	guyb:code-reviewer	-	git tag -ad v1	clustered tag -ad
+0	both	guyb:code-reviewer	-	git branch -vv	branch -vv
+0	both	guyb:code-reviewer	-	git branch -ra	branch -ra
+0	both	guyb:code-reviewer	-	git branch --list -r	branch --list -r
+0	both	guyb:code-reviewer	-	git tag -ln	tag -ln
+0	both	guyb:code-reviewer	-	git tag -l --sort=-v:refname	tag -l --sort
+2	both	guyb:code-reviewer	-	sudo -h host git add .	sudo -h host git add
+2	both	guyb:code-reviewer	-	exec -a n git add .	exec -a name git add
+0	both	guyb:code-reviewer	-	command -v git add	command -v is a lookup
+2	both	guyb:code-reviewer	-	>out.txt git add .	leading redirection
+0	both	guyb:code-reviewer	-	git status 2>&1 > out.txt	read-only with redirections
+2	both	guyb:code-reviewer	-	git add . 2>&1	write with fd redirection
+2	ps	guyb:code-reviewer	-	$x = git add .	ps assignment runs the command
+0	ps	guyb:code-reviewer	-	$x = git status	ps assignment of a read
+2	ps	guyb:code-reviewer	-	$x=git add .	ps assignment without spaces
+2	both	guyb:session-tracker	-	git add .	session-tracker git add
+0	both	brand-designer	-	git status	brand-designer git status
+0	both	guyb:code-reviewer	-	git submodule status	submodule status is a read
+0	both	guyb:code-reviewer	-	git submodule summary	submodule summary is a read
+0	both	guyb:code-reviewer	-	git submodule --quiet	bare submodule is a read
+0	both	guyb:code-reviewer	-	git submodule foreach git status	submodule foreach read command
+0	both	guyb:code-reviewer	-	git notes list	notes list is a read
+0	both	guyb:code-reviewer	-	git notes show HEAD	notes show is a read
+0	both	guyb:code-reviewer	-	git notes	bare notes is a read
+0	both	guyb:code-reviewer	-	git bisect log	bisect log is a read
+0	both	guyb:code-reviewer	-	git bisect visualize	bisect visualize is a read
+0	both	guyb:code-reviewer	-	git bisect	bare bisect is a read
+0	both	guyb:code-reviewer	-	git symbolic-ref HEAD	symbolic-ref read
+0	both	guyb:code-reviewer	-	git symbolic-ref --short HEAD	symbolic-ref --short read
+0	both	guyb:code-reviewer	-	git symbolic-ref -q --short refs/remotes/origin/HEAD	symbolic-ref default branch read
+0	both	guyb:code-reviewer	-	git sparse-checkout list	sparse-checkout list is a read
+0	both	guyb:code-reviewer	-	git replace -l	replace -l is a read
+0	both	guyb:code-reviewer	-	git clean -n	clean -n is a dry run
+0	both	guyb:code-reviewer	-	git clean --dry-run -d	clean --dry-run
+0	both	guyb:code-reviewer	-	git clean -nfd	clean clustered -n
+0	both	guyb:code-reviewer	-	git branch --sort -committerdate	branch --sort separate value
+0	both	guyb:code-reviewer	-	git branch --format '%(refname:short)'	branch --format separate value
+0	both	guyb:code-reviewer	-	git branch --contains HEAD newb	branch --contains implies list
+0	both	guyb:code-reviewer	-	git branch -vv x	branch -v implies list
+0	both	guyb:code-reviewer	-	git branch --show-current	branch --show-current
+0	both	guyb:code-reviewer	-	git branch --merged main	branch --merged value
+0	both	guyb:code-reviewer	-	git tag -v v1	tag -v verifies
+0	both	guyb:code-reviewer	-	git tag -n5 \"v*\"	tag -n lists
+0	both	guyb:code-reviewer	-	git tag --contains HEAD	tag --contains lists
+0	both	guyb:code-reviewer	-	git tag --points-at HEAD	tag --points-at lists
+2	both	guyb:code-reviewer	-	git branch --track x origin/x	branch --track creates
+2	both	guyb:code-reviewer	-	git branch -t x origin/x	branch -t creates
+2	both	guyb:code-reviewer	-	git branch --no-track x origin/x	branch --no-track creates
+2	both	guyb:code-reviewer	-	git branch -q newb	branch -q creates
+2	both	guyb:code-reviewer	-	git branch --create-reflog x	branch --create-reflog creates
+2	both	guyb:code-reviewer	-	git branch -vv -D x	branch list flag with -D
+2	both	guyb:code-reviewer	-	git tag --no-sign v1	tag --no-sign creates
+2	both	guyb:code-reviewer	-	git tag -l -d v1	tag list flag with -d
+2	both	guyb:code-reviewer	-	git submodule update --init	submodule update
+2	both	guyb:code-reviewer	-	git submodule sync	submodule sync
+2	both	guyb:code-reviewer	-	git submodule foreach git add .	submodule foreach write command
+2	both	guyb:code-reviewer	-	git notes --ref x add	notes --ref add
+2	both	guyb:code-reviewer	-	git bisect good	bisect good
+2	both	guyb:code-reviewer	-	git sparse-checkout init	sparse-checkout init
+2	both	guyb:code-reviewer	-	git symbolic-ref HEAD refs/heads/x	symbolic-ref set
+2	both	guyb:code-reviewer	-	git symbolic-ref -d HEAD	symbolic-ref delete
+2	both	guyb:code-reviewer	-	git replace -d x	replace -d
+2	both	guyb:code-reviewer	-	git clean -fdx	clean -fdx
+2	both	guyb:code-reviewer	-	git clean -i	clean interactive
+2	both	guyb:code-reviewer	-	wsl git add .	wsl wrapper
+2	both	guyb:code-reviewer	-	wsl -d ubuntu -e git push	wsl -d -e wrapper
+2	sh	guyb:code-reviewer	-	doas git add .	doas wrapper
+2	sh	guyb:code-reviewer	-	doas -u u git push	doas -u wrapper
+2	sh	guyb:code-reviewer	-	ionice -c3 git gc	ionice attached class
+2	sh	guyb:code-reviewer	-	ionice -c 3 git gc	ionice class value
+2	sh	guyb:code-reviewer	-	git $'add' .	ANSI-C quoted verb
+2	ps	guyb:code-reviewer	-	if ($a) { git status } else { git add . }	ps else block
+2	ps	guyb:code-reviewer	-	try { git push } catch { }	ps try block
+2	ps	guyb:code-reviewer	-	try { git status } catch { git push }	ps catch block
+2	ps	guyb:code-reviewer	-	Get-ChildItem *.md | ForEach-Object { git add $_.FullName }	ps ForEach-Object block
+2	ps	guyb:code-reviewer	-	gci | % { git add $_ }	ps % block
+2	ps	guyb:code-reviewer	-	1..3 | ForEach-Object -Process { git add $_ }	ps -Process block
+2	ps	guyb:code-reviewer	-	Invoke-Command -ScriptBlock { git push }	ps Invoke-Command block
+2	ps	guyb:code-reviewer	-	Start-Job { git push }	ps Start-Job block
+2	ps	guyb:code-reviewer	-	start git push	ps start alias
+0	ps	guyb:code-reviewer	-	Get-ChildItem *.md | ForEach-Object { git log -1 -- $_.FullName }	ps ForEach-Object read
+0	ps	guyb:code-reviewer	-	try { git status } catch { }	ps try read
+0	ps	guyb:code-reviewer	-	Get-ChildItem | Where-Object { $_.Name -like \"*git*\" }	ps Where-Object text
+0	both	guyb:code-reviewer	-	git status -sb	status -sb
+0	both	guyb:code-reviewer	-	git diff --name-only origin/main...HEAD	diff range
+0	both	guyb:code-reviewer	-	git stash list	stash list
+0	both	guyb:code-reviewer	-	git stash show -p	stash show
+0	both	guyb:code-reviewer	-	git worktree list	worktree list
+0	both	guyb:code-reviewer	-	git remote get-url origin	remote get-url
+0	both	guyb:code-reviewer	-	git config --global user.email	config single key read
+0	both	guyb:code-reviewer	-	git rev-parse --show-toplevel	rev-parse
+0	both	guyb:code-reviewer	-	cd \"$(git rev-parse --show-toplevel)\" && git log	substitution read
+0	both	guyb:code-reviewer	-	git log --oneline | head -5 && git status	pipe and chain reads

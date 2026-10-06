@@ -324,16 +324,16 @@ try {
   Git-Quiet -C $g add .env
   Push-Location -LiteralPath $g
   try {
-    $r = Run-Child $guard @() $null
+    $r = Run-Child $guard @() ''
     Expect-Eq 'guard staged .env exit' $r[0] 2
     Expect-Has 'guard staged .env' $r[1] '.env'
     Git-Quiet reset -q
     Git-Quiet add .env.example
-    $r = Run-Child $guard @() $null
+    $r = Run-Child $guard @() ''
     Expect-Eq 'guard staged .env.example exit' $r[0] 0
   } finally { Pop-Location }
   Push-Location -LiteralPath $tmp
-  try { $r = Run-Child $guard @() $null; Expect-Eq 'guard outside a repo exit' $r[0] 0 } finally { Pop-Location }
+  try { $r = Run-Child $guard @() ''; Expect-Eq 'guard outside a repo exit' $r[0] 0 } finally { Pop-Location }
   function SG($cmd) { (Run-Child $guard @() (@{ cwd = $g; tool_input = @{ command = $cmd } } | ConvertTo-Json -Compress))[0] }
   Git-Quiet -C $g reset -q
   Expect-Eq 'guard untracked .env, plain commit' (SG 'git commit -m x') 0
@@ -349,56 +349,107 @@ try {
   Git-Quiet -C $g reset -q
   Expect-Eq 'guard assignment git commit, nothing staged' (SG '$out = git commit -m x') 0
 
-  Write-Host 'guard-readonly.ps1'
+  Write-Host 'guard-readonly.ps1 (tests/readonly-cases.tsv)'
   $ro = Join-Path $root 'plugins/guyb/hooks/guard-readonly.ps1'
-  function Hook($agent, $cmd) { (Run-Child $ro @() ('{"agent_type":"' + $agent + '","tool_name":"PowerShell","tool_input":{"command":"' + $cmd + '"}}'))[0] }
-  Expect-Eq 'readonly reviewer git add' (Hook 'guyb:code-reviewer' 'git add .') 2
-  Expect-Eq 'readonly bare architect git push' (Hook 'architect' 'git push origin main') 2
-  Expect-Eq 'readonly reviewer git status' (Hook 'guyb:code-reviewer' 'git status') 0
-  Expect-Eq 'readonly implementer git add' (Hook 'guyb:implementer' 'git add .') 0
-  Expect-Eq 'readonly main session git add' (Run-Child $ro @() '{"tool_input":{"command":"git add ."}}')[0] 0
-  Expect-Eq 'readonly bad json' (Run-Child $ro @() 'not json')[0] 0
-  Expect-Eq 'readonly chained cd && git add' (Hook 'code-reviewer' 'cd sub && git add .') 2
-  Expect-Eq 'readonly chained pushd; git commit' (Hook 'code-reviewer' 'pushd sub; git commit -m x') 2
-  Expect-Eq 'readonly piped echo | git apply' (Hook 'code-reviewer' 'echo hi | git apply') 2
-  Expect-Eq 'readonly chained true; git push' (Hook 'code-reviewer' 'true; git push') 2
-  Expect-Eq 'readonly chained newline git rm' (Hook 'code-reviewer' 'ls\ngit rm x') 2
-  Expect-Eq 'readonly chained git -C dir reset' (Hook 'code-reviewer' 'cd a && git -C b reset --hard') 2
-  Expect-Eq 'readonly git revert' (Hook 'code-reviewer' 'git revert HEAD') 2
-  Expect-Eq 'readonly git am' (Hook 'code-reviewer' 'git am p.patch') 2
-  Expect-Eq 'readonly chained read-only git' (Hook 'code-reviewer' 'cd sub && git log -1 | head') 0
-  Expect-Eq 'readonly chained no git' (Hook 'code-reviewer' 'cd sub && ls') 0
-  Expect-Eq 'readonly git stage' (Hook 'code-reviewer' 'git stage .') 2
-  Expect-Eq 'readonly quoted -C dir with space' (Hook 'code-reviewer' 'git -C \"my dir/x\" add .') 2
-  Expect-Eq 'readonly single-quoted -C dir with space' (Hook 'code-reviewer' "git -C 'my dir' add .") 2
-  Expect-Eq 'readonly --git-dir <dir> add' (Hook 'code-reviewer' 'git --git-dir /x/.git add .') 2
-  Expect-Eq 'readonly -p add' (Hook 'code-reviewer' 'git -p add .') 2
-  Expect-Eq 'readonly -P add' (Hook 'code-reviewer' 'git -P commit -m x') 2
-  Expect-Eq 'readonly --no-pager add' (Hook 'code-reviewer' 'git --no-pager add .') 2
-  Expect-Eq 'readonly quoted git' (Hook 'code-reviewer' '\"git\" add .') 2
-  Expect-Eq 'readonly quoted exe path' (Hook 'code-reviewer' '& \"C:/Program Files/Git/cmd/git.exe\" add .') 2
-  Expect-Eq 'readonly /usr/bin/git' (Hook 'code-reviewer' '/usr/bin/git add .') 2
-  Expect-Eq 'readonly uppercase GIT add' (Hook 'code-reviewer' 'GIT add .') 2
-  Expect-Eq 'readonly uppercase GIT.EXE' (Hook 'code-reviewer' 'GIT.EXE ADD .') 2
-  foreach ($v in 'notes add -m x', 'update-ref HEAD x', 'symbolic-ref HEAD x', 'replace a b', 'gc', 'prune', 'submodule update', 'init', 'clone u d', 'filter-branch x', 'config user.name x', 'config --global user.name x', 'remote add o u', 'remote set-url o u', 'reflog expire --all', 'bisect start') {
-    Expect-Eq "readonly git $v" (Hook 'code-reviewer' "git $v") 2
+  $jobsMax = if ($env:GUYB_TEST_JOBS) { [int]$env:GUYB_TEST_JOBS } else { 8 }
+  function Start-Proc([string]$exe, [string]$procArgs, [string]$stdin) {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $exe; $psi.Arguments = $procArgs
+    $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+    $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($stdin) # raw bytes: no BOM, whatever the console code page
+    $p.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length); $p.StandardInput.Close()
+    return [pscustomobject]@{ P = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync() }
   }
-  Expect-Eq 'readonly config --get' (Hook 'code-reviewer' 'git config --get user.name') 0
-  Expect-Eq 'readonly config --list' (Hook 'code-reviewer' 'git config --list') 0
-  Expect-Eq 'readonly config read; config write' (Hook 'code-reviewer' 'git config --get user.name; git config core.hooksPath /tmp/h') 2
-  Expect-Eq 'readonly config list && config write' (Hook 'code-reviewer' 'git config --list && git config user.name x') 2
-  Expect-Eq 'readonly config read; config read' (Hook 'code-reviewer' 'git config --get a; git config --list') 0
-  Expect-Eq 'readonly config single key' (Hook 'code-reviewer' 'git config user.name') 0
-  Expect-Eq 'readonly remote -v' (Hook 'code-reviewer' 'git remote -v') 0
-  Expect-Eq 'readonly reflog' (Hook 'code-reviewer' 'git reflog') 0
-  Expect-Eq 'readonly -C dir with space log' (Hook 'code-reviewer' 'git -C \"my dir\" log -1') 0
-  Expect-Eq 'readonly --git-dir <dir> log' (Hook 'code-reviewer' 'git --git-dir /x/.git log') 0
-  Expect-Eq 'readonly quoted git status' (Hook 'code-reviewer' '\"git\" status') 0
-  Expect-Eq 'readonly ls-files' (Hook 'code-reviewer' 'git ls-files') 0
-  Expect-Eq 'readonly word add, no git' (Hook 'code-reviewer' 'echo add to .gitignore') 0
+  function Finish-Proc($h) { # exit code, then combined stdout+stderr text
+    $h.P.WaitForExit()
+    return [pscustomobject]@{ Code = $h.P.ExitCode; Text = ($h.Out.Result + $h.Err.Result) }
+  }
+  function Run-Batch($jobs) { # jobs: objects with Exe, Args, Stdin; returns results in order, $jobsMax at a time
+    # .NET Framework (PS 5.1) wraps child stdin in a writer using Console.InputEncoding with AutoFlush on,
+    # which writes a UTF-8 BOM at Process.Start; a BOM-less input encoding keeps child stdin clean.
+    $ie = [Console]::InputEncoding
+    try { [Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { }
+    try {
+      $res = @()
+      for ($i = 0; $i -lt $jobs.Count; $i += $jobsMax) {
+        $hs = @()
+        for ($j = $i; $j -lt [Math]::Min($i + $jobsMax, $jobs.Count); $j++) { $hs += , (Start-Proc $jobs[$j].Exe $jobs[$j].Args $jobs[$j].Stdin) }
+        foreach ($h in $hs) { $res += , (Finish-Proc $h) }
+      }
+      return $res
+    } finally { try { [Console]::InputEncoding = $ie } catch { } }
+  }
+
+  $ar = Join-Path $tmp 'aliasrepo'
+  New-Item -ItemType Directory -Force -Path $ar | Out-Null
+  Git-Quiet -C $ar init -q
+  Git-Quiet -C $ar config alias.st status
+  Git-Quiet -C $ar config alias.ci commit
+  Git-Quiet -C $ar config alias.c2 ci
+  Git-Quiet -C $ar config alias.sh '!echo hi'
+  Git-Quiet -C $ar config alias.la lb
+  Git-Quiet -C $ar config alias.lb la
+  $nr = Join-Path $tmp 'norepo'
+  New-Item -ItemType Directory -Force -Path $nr | Out-Null
+  $arJson = $ar.Replace('\', '\\')
+  $nrJson = $nr.Replace('\', '\\')
+
+  $lines = [System.IO.File]::ReadAllText((Join-Path $root 'tests/readonly-cases.tsv')).Replace("`r", '').Split("`n")
+  $rows = @()
+  for ($i = 1; $i -lt $lines.Count; $i++) {
+    if (-not $lines[$i]) { continue }
+    $f = $lines[$i].Split("`t")
+    if ($f[1] -ne 'both' -and $f[1] -ne 'ps') { continue }
+    $fields = ''
+    if ($f[2] -ne '-') { $fields += '"agent_type":"' + $f[2] + '",' }
+    if ($f[3] -eq 'norepo') { $fields += '"cwd":"' + $nrJson + '",' }
+    elseif ($f[3] -ne '-') { $fields += '"cwd":"' + $arJson + '",' }
+    $rows += [pscustomobject]@{
+      Expect = $f[0]; Label = $f[5] + ': ' + $f[4]
+      Job = [pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = ('{' + $fields + '"tool_name":"PowerShell","tool_input":{"command":"' + $f[4] + '"}}') }
+    }
+  }
+  $res = Run-Batch @($rows | ForEach-Object { $_.Job })
+  for ($i = 0; $i -lt $rows.Count; $i++) { Expect-Eq ('readonly ' + $rows[$i].Label) $res[$i].Code $rows[$i].Expect }
+  $bad = Run-Batch @([pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = 'not json' })
+  Expect-Eq 'readonly bad json' $bad[0].Code 0
+  $emp = Run-Batch @([pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = '{"agent_type":"code-reviewer","tool_input":{"command":""}}' })
+  Expect-Eq 'readonly empty command' $emp[0].Code 0
+  $bomJson = '{"agent_type":"code-reviewer","tool_name":"PowerShell","tool_input":{"command":"git add ."}}'
+  $bom = Run-Batch @(
+    [pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = ([string][char]0xFEFF) + $bomJson },
+    [pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = ([string][char]0x2229) + [char]0x2557 + [char]0x2510 + $bomJson })
+  Expect-Eq 'readonly BOM before JSON still blocks' $bom[0].Code 2
+  Expect-Eq 'readonly OEM-decoded BOM before JSON still blocks' $bom[1].Code 2
   $hj = Get-Content -Raw -LiteralPath (Join-Path $root 'plugins/guyb/hooks/hooks.json')
   foreach ($sel in 'Bash(*git*)', 'PowerShell(*git*)') {
     Expect-Eq "hooks.json readonly filter $sel" ($hj.Contains('"if": "' + $sel + '"')) $true
+  }
+
+  Write-Host 'hooks.json guard-readonly PowerShell entry, end to end'
+  $entries = @((($hj | ConvertFrom-Json).hooks.PreToolUse | ForEach-Object { $_.hooks }) | Where-Object { $_.shell -eq 'powershell' -and $_.command -like '*guard-readonly*' })
+  Expect-Eq 'hooks.json readonly PowerShell entry count' $entries.Count 1
+  $hcmd = $entries[0].command.Replace('${CLAUDE_PLUGIN_ROOT}', (Join-Path $root 'plugins/guyb'))
+  $enc = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($hcmd))
+  $hosts = @()
+  foreach ($hn in 'powershell', 'pwsh') {
+    $hc = Get-Command $hn -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($hc) { $hosts += , @($hn, $hc.Source) }
+  }
+  $wraps = @(
+    @('reviewer git add', '{"agent_type":"guyb:code-reviewer","tool_name":"PowerShell","tool_input":{"command":"git add ."}}', 2),
+    @('reviewer git status', '{"agent_type":"guyb:code-reviewer","tool_name":"PowerShell","tool_input":{"command":"git status"}}', 0),
+    @('implementer git add', '{"agent_type":"guyb:implementer","tool_name":"PowerShell","tool_input":{"command":"git add ."}}', 0),
+    @('main session git add', '{"tool_name":"PowerShell","tool_input":{"command":"git add ."}}', 0),
+    @('bad json', 'not json', 0)
+  )
+  foreach ($hh in $hosts) {
+    $wj = @($wraps | ForEach-Object { [pscustomobject]@{ Exe = $hh[1]; Args = "-NoProfile -EncodedCommand $enc"; Stdin = $_[1] } })
+    try { $wr = Run-Batch $wj } catch { Write-Host "  skip: cannot start $($hh[0]) ($($hh[1]))"; continue }
+    for ($i = 0; $i -lt $wraps.Count; $i++) { Expect-Eq ("wrapper $($hh[0]) $($wraps[$i][0])") $wr[$i].Code $wraps[$i][2] }
+    Expect-Has "wrapper $($hh[0]) reviewer git add" $wr[0].Text 'guyb: blocked - read-only agent'
   }
 } finally {
   Set-Location -LiteralPath $root

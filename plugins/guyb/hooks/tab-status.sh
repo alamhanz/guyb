@@ -57,14 +57,14 @@ case "$state" in
     [ -d "$ad" ] || mkdir -p "$ad" 2>/dev/null
     : 2>/dev/null >"$ad/$id"
     # a start hook landing after the main Stop: an agent is running, so show it
-    [ "$last" = done ] || exit 0
+    [ "$last" = 'done' ] || exit 0
     state=running; keep=idle-agents ;;
   agent-stop)
     [ -n "$id" ] || exit 0
     rm -f "$ad/$id" 2>/dev/null
     agents_live && exit 0
     [ "$last" = idle-agents ] || [ "$last" = waiting-idle ] || exit 0
-    state=done; keep=done ;;
+    state='done'; keep='done' ;;
   waiting)
     # a "?" shown after Stop while agents run: remember that main is idle, so the last agent-stop still paints the check
     if [ "$last" = idle-agents ] || [ "$last" = waiting-idle ]; then keep=waiting-idle; fi ;;

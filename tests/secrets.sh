@@ -121,7 +121,7 @@ g commit -q -m "rm key"
 rm -f "$r/deploy.key"
 
 echo "new patterns"
-for f in .envrc k.p8 prod.tfvars prod.tfvars.json vault.kdbx .netrc .npmrc .pypirc; do
+for f in .envrc k.p8 prod.tfvars prod.tfvars.json vault.kdbx .netrc .npmrc .pypirc .git-credentials id_dsa putty.ppk .pgpass .htpasswd; do
   printf 'x\n' > "$r/$f"; g add -f "$f"
   chk "staged $f" 2 "$R" 'git commit -m x'
   g reset -q; rm -f "$r/$f"
@@ -129,6 +129,9 @@ done
 printf 'x\n' > "$r/notes.txt"; g add notes.txt
 chk "ordinary file" 0 "$R" 'git commit -m x'
 g reset -q; rm -f "$r/notes.txt"
+printf 'x\n' > "$r/credentials.md"; g add credentials.md
+chk "markdown named credentials" 0 "$R" 'git commit -m x'
+g reset -q; rm -f "$r/credentials.md"
 
 echo "fallback"
 g add .env

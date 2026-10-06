@@ -9,10 +9,12 @@
 - **Owner**: @alamhanz
 
 ## Current Status
-- **Branch**: feat/release-workflow (release workflow + README slim, PR not yet opened); main has 0.8.0 (PR #9 merged, 0027638)
-- **Version**: 0.8.0 (plugins/guyb/.claude-plugin/plugin.json)
+- **Branch**: fix/guards-0.8.2 (PR #12, 0.9.0) = claude/guyb-plugin-cloud-tests-tz6ahs; waiting on CI (Windows PowerShell 5.1 fix pushed)
+- **Version**: 0.9.0 on PR #12 (plugin.json); main has 0.8.1 (PR #11, 55b4842; tags v0.8.0, v0.8.1)
 
 ## Versions
+- **0.9.0** (PR #12): read-only guard rewrite (parsed quotes/chains/substitutions/runners/aliases, shared case table, PS scriptblocks, read subcommands, branch/tag creation), secrets guard names, test runners + bench + shellcheck CI, `/guyb:end` wrap-up (model-invocable on "I need to go": stop agents, handoff, STATE.md, commit + push work branches, no PR), `/guyb:start` resumes from the handoff
+- **0.8.1** (PR #11): tab icon tracks running subagents; release workflow + README slim (PR #10)
 - **0.8.0** (PR #9): tab status icon (hourglass working / check done / ? waiting; async hooks tab-status.sh/.ps1, GUYB_TAB_NAME tabs only); secrets guard covers `git -C`/`-c`, chained commands, `commit -a`, target repo; read-only guard catches chained and `git -C` write commands (also fixed sed-fallback JSON escape bug that made it fail open without jq); playbook: delegate long-running/stateful commands; parity fixes A13 (PS 5.1 UTF-8), A14 (invariant `-List` timestamp), A18 (sh/ps1 parity); tests/secrets.*
 - **0.7.0** (PR #8): GitHub Actions CI (ubuntu/macos/windows; lint, smoke, permission tests, optional plugin validate), PowerShell secrets guard, read-only agent guard hook + prompt rules, brief flags outdated plugin and STATE.md PR drift, agent reports in .claude/pipeline/reports/, merge is the user's step, new brand: "flock in motion" mark (five dots in a V, black + phosphor green)
 - **0.6.0** (PR #7): `max_parallel: N` in project `.claude/CLAUDE.md` or `~/.claude/guyb/profile.md`; cross-platform script fixes
@@ -21,6 +23,7 @@
 - **0.3.0** (PR #1): run IDs, waves, progress files
 
 ## Recent Changes
+- 2026-10-06 - Cloud session (Linux container, pwsh 7.4 + shellcheck installed per session; PS 5.1/Windows only via CI): all checks pass on bash + pwsh. PR #12 5.1 failure root-caused: .NET Framework Process.Start writes a UTF-8 BOM into redirected child stdin (AutoFlush on Console.InputEncoding), so the guard failed open in smoke; harness sets a BOM-less InputEncoding, guard skips pre-JSON junk (5cf1c2e). Edge-case probes (scratch, not committed): read-only guard 315 commands, 35 problems fixed (183280c: read subcommands of submodule/notes/bisect/symbolic-ref/sparse-checkout/replace/clean, branch/tag creation behind flags, PS scriptblocks via { } split, wsl/doas/ionice, $'..'), 76 rows added to readonly-cases.tsv, bench unchanged; secrets guard 50 forms + 39 names (85b0bf0: .git-credentials, id_dsa, *.ppk, .pgpass, .htpasswd; *.md safe; no-input smoke cases hung on a non-tty stdin). sh/ps parity: no differences found. brief/check/launcher sh vs ps: same output
 - 2026-10-05 - Session: PR #10 opened (release workflow + README slim, CI green, guyb-95; rulesets verified, unchanged). Installed plugin updated 0.5.0 -> 0.8.0. 0.8.1 on fix/tab-status-subagents (worktree .claude/worktrees/agent-adac6880fe2a8d8b3, not pushed): 149ad9a tab icon stays busy while subagents run (guyb-98), bdfc97f pipeline rule "finish clean" (agents left background tests running and stayed open in the panel); review guyb-106 approved with one should-fix (stuck ? after Notification + last agent-stop), fix round guyb-107 in progress. 0.8.2 guards rewrite on fix/guards-0.8.2 (worktree .claude/worktrees/guards-0.8.2, uncommitted): plan guyb-96, Q53-Q57 answered (all option a), wave 1: guyb-99 sh guard done, guyb-100 ps1 guard + hooks.json done, guyb-101 case table/smoke and guyb-102 shellcheck/CI/runners/bench still running at session end
 - 2026-10-05 - 0.8.0 merged (PR #9, 0027638); feat/release-workflow: release.yml tags + publishes vX.Y.Z on version bump (guyb-91, f13cb61), README slimmed (d089cf0), main rulesets protect-main + main-merge-admin-only (guyb-92/93), review guyb-94 fixes uncommitted
 - 2026-10-04 - 0.8.0 on fix/parity-a13-a18 (guyb-70..79, guyb-84; guyb-80..83 stopped, superseded by guyb-84..87): 52e66a8 parity A13/A14/A18, 1bc73ae secrets guard hardening, a43bf22 playbook delegation rule, 1970efc tab icon + version 0.8.0, c196a1c read-only guard hardening; README/CONTRIBUTING drift fixed (guyb-85)
@@ -31,6 +34,7 @@
 - 2026-10-03 - Releases 0.3.0-0.5.0 (PRs #1-#5)
 
 ## Decisions
+- **Secrets guard** keeps blocking `git add <other> && git commit` while a non-ignored secret is untracked (add paths may hold unexpandable variables); alias commits (`git ci`) are a known gap (hooks.json filter is *commit*).
 - **Delegation model**: orchestrator plans and delegates; does small changes inline only (PR #3).
 - **Q8**: install.sh without jq warns with install hints and ends "Done (permissions NOT merged)", exit 0.
 - **Q9**: credential-returning AWS get verbs (ecr get-login-password/get-authorization-token, lambda get-function(-configuration), apigateway get-api-key(s)) are ask rules; .env read denies cover 9 read verbs x 4 patterns, symmetric for Bash and PowerShell.
@@ -46,16 +50,11 @@
 - Deferred consider item: A15 (docs note)
 
 ## Next Up
-- Check guyb-107 (0.8.1 fix round), guyb-101, guyb-102 results in .claude/guyb/pipeline/reports/; if their agents died with the session, mark them stopped and relaunch from their progress files
-- User merges PR #10 (CI green); watch the first auto release later
-- 0.8.1: after guyb-107, push fix/tab-status-subagents and open PR (git-ops); live check of the tab icon with background agents (hook order on background-task re-invoke is unverified)
-- 0.8.2: wave 2 guyb-103 docs + version 0.8.2, wave 3 guyb-104 review + all checks on 4 shells + bench before/after (also covers the cut-off secrets.sh run); rebase fix/guards-0.8.2 onto 0.8.1 (hooks.json and tests/tabs.sh overlap; tabs.sh SC1010 shellcheck fixes after the merge)
-- Feature request: "I need to go" wrap-up by default - /guyb:end has `disable-model-invocation: true`; allow model invocation with trigger phrases (need to go, done for today, wrap up). Flow (agreed 2026-10-05): ask running agents to checkpoint (progress + report files) and stop; stop leftovers; WIP-commit worktree changes locally (not pushed); write a local handoff file in .claude/guyb/pipeline/ (gitignored: same-machine resume); update and commit/push STATE.md (cross-machine); /guyb:start reads the handoff and offers to resume. Local handoff: .claude/guyb/pipeline/handoff.md
-- Feature request (user, 2026-10-05): "commit" in a wrap-up means commit AND push every work branch (WIP commits included), no PR, so another machine can pull and continue
-- Resume 0.8.2: fix/guards-0.8.2 is pushed as WIP 93b5cf7 (guyb-99/100 done; guyb-101 stopped at checkpoint with 4 failing ps rows; guyb-102 killed mid-task, check bench.ps1/run.ps1). 0.8.1 is pushed on fix/tab-status-subagents (d2ea909, review fixes done) - open its PR
-- Weight audit after 0.8.2 (guyb-105, queued): orchestrator.md tokens per session, tab-status per-call spawns, brief/gh time; budget every change (guyb must stay lightweight)
+- PR #12 (0.9.0): CI green on all jobs incl. Windows PowerShell 5.1, then user merges; release workflow tags v0.9.0
+- Live check of the wrap-up: say "I need to go" in a session with a running agent (SendMessage checkpoint, TaskStop fallback, git-ops WIP push), then /guyb:start on the same machine (handoff) and on another (STATE.md + WIP branches)
+- Weight audit after the guards (guyb-105, queued): orchestrator.md tokens per session, tab-status per-call spawns, brief/gh time; budget every change (guyb must stay lightweight)
+- Cloud sessions: optional SessionStart hook to install pwsh + shellcheck so the full check list runs without setup
 - Consider item A15
-- Gather feedback on 0.6.0, then pick next features
 
 ---
-**Last updated**: 2026-10-05
+**Last updated**: 2026-10-06

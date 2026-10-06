@@ -37,6 +37,8 @@ docs/                             README images (logo, icon, how-guyb-works.svg)
 
 CI runs these same scripts. They write nothing in the repo (smoke tests use a temp dir and a stubbed `gh`) and need no network.
 
+**Individual test scripts:**
+
 ```
 bash tests/lint.sh                 # bash -n, JSON/SVG validity, ASCII, line endings (sh LF, ps1 CRLF)
 bash tests/smoke.sh                # brief.sh (incl. migration and cleanup detection), check.sh, guard hooks on throwaway repos
@@ -49,6 +51,20 @@ pwsh -File tests/tabs.ps1          # same as tabs.sh
 pwsh -File tests/statusline.ps1    # same as statusline.sh
 pwsh -File tests/secrets.ps1       # same as secrets.sh
 pwsh -File tests/permissions.ps1   # settings/recommended-permissions.json vs tests/permission-cases.json
+```
+
+**Test runners (run shell's checks concurrently):**
+
+```
+bash tests/run.sh                  # run lint, smoke, secrets, tabs, statusline concurrently (bash)
+pwsh -File tests/run.ps1           # run lint, smoke, tabs, statusline, secrets, permissions concurrently (pwsh)
+```
+
+**Benchmark (measure guard performance):**
+
+```
+bash tests/bench.sh [--root PLUGIN_DIR] [-n COUNT]   # measure read-only guard latency (default 10 runs)
+pwsh -File tests/bench.ps1 [[-Root PLUGIN_DIR] [-N COUNT]]
 ```
 
 Run the `.ps1` scripts with `powershell -File` as well to cover Windows PowerShell 5.1. macOS bash 3.2 and BSD tools are only covered by CI.

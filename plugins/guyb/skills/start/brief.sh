@@ -3,12 +3,13 @@
 dir="${1:-$PWD}"
 dir="${dir%/}"
 [ -n "$dir" ] || dir=/
+base="${dir%/}" # no trailing slash: "/" gives /x, never //x (a UNC path on msys)
 export GIT_TERMINAL_PROMPT=0
 
 echo "project: $(basename "$dir")"
 
 max_parallel=5; max_src=default
-for c in "$dir/.claude/CLAUDE.md:project" "$HOME/.claude/guyb/profile.md:profile"; do
+for c in "$base/.claude/CLAUDE.md:project" "$HOME/.claude/guyb/profile.md:profile"; do
   [ -f "${c%:*}" ] || continue
   v=$(sed -nE 's/^[[:space:]]*([-*][[:space:]]+)?[`*]*max_parallel[`*]*[[:space:]]*:[`*[:space:]]*([0-9]{1,2})[`*[:space:]]*$/\2/p' "${c%:*}" | awk '$1 + 0 >= 1 && $1 + 0 <= 20 { print $1 + 0; exit }')
   if [ -n "$v" ]; then max_parallel=$v; max_src=${c##*:}; break; fi
@@ -17,8 +18,8 @@ echo "max parallel: $max_parallel ($max_src)"
 
 # Per-project files live in .claude/guyb/; legacy .claude/STATE.md and .claude/pipeline/ are read as a fallback (never written).
 # A legacy STATE.md counts as guyb's only with the marker line or the four headings Next up, Open issues, Decisions, Recent changes.
-state_new="$dir/.claude/guyb/STATE.md"; state_old="$dir/.claude/STATE.md"
-pipe_new="$dir/.claude/guyb/pipeline"; pipe_old="$dir/.claude/pipeline"
+state_new="$base/.claude/guyb/STATE.md"; state_old="$base/.claude/STATE.md"
+pipe_new="$base/.claude/guyb/pipeline"; pipe_old="$base/.claude/pipeline"
 old_owned=0
 if [ -f "$state_old" ] && tr -d '\r' < "$state_old" | LC_ALL=C awk '
   BEGIN { bom = sprintf("%c%c%c", 239, 187, 191) }
@@ -114,10 +115,10 @@ if [ "$(git -C "$dir" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ]; 
   [ "$n" -gt 0 ] && printf '%s\n' "$dirty" | head -10 | sed 's/^/  /'
   [ "$n" -gt 10 ] && echo "  ... +$((n - 10)) more"
 
-  if grep -qE '^/?\.claude/?[[:space:]]*$' "$dir/.gitignore" 2>/dev/null; then
+  if grep -qE '^/?\.claude/?[[:space:]]*$' "$base/.gitignore" 2>/dev/null; then
     echo "warn: .gitignore ignores .claude/ - guyb STATE.md will not be committed"
-  elif ! grep -qE '^/?\.claude/guyb/pipeline/?[[:space:]]*$' "$dir/.gitignore" 2>/dev/null &&
-    ! { [ "$pipe" = "$pipe_old" ] && grep -qE '^/?\.claude/pipeline/?[[:space:]]*$' "$dir/.gitignore" 2>/dev/null; }; then
+  elif ! grep -qE '^/?\.claude/guyb/pipeline/?[[:space:]]*$' "$base/.gitignore" 2>/dev/null &&
+    ! { [ "$pipe" = "$pipe_old" ] && grep -qE '^/?\.claude/pipeline/?[[:space:]]*$' "$base/.gitignore" 2>/dev/null; }; then
     echo "gitignore: .claude/guyb/pipeline/ not ignored"
   fi
 
@@ -183,7 +184,7 @@ fi
 
 # Cleanup hints. Limits: project .claude/CLAUDE.md, then ~/.claude/guyb/profile.md, then defaults; invalid values are ignored.
 cfgint() { # key default
-  for cf in "$dir/.claude/CLAUDE.md" "$HOME/.claude/guyb/profile.md"; do
+  for cf in "$base/.claude/CLAUDE.md" "$HOME/.claude/guyb/profile.md"; do
     [ -f "$cf" ] || continue
     cv=$(sed -nE 's/^[[:space:]]*([-*][[:space:]]+)?[`*]*'"$1"'[`*]*[[:space:]]*:[`*[:space:]]*([0-9]{1,9})[`*[:space:]]*$/\2/p' "$cf" | awk '$1 + 0 >= 1 { print $1 + 0; exit }')
     if [ -n "$cv" ]; then echo "$cv"; return; fi
@@ -195,11 +196,13 @@ lim_rows=$(cfgint cleanup_rows 200); lim_days=$(cfgint cleanup_days 14)
 # "<lines> <rows>": rows = table lines minus separator rows minus 1 header
 cnt() { tr -d '\r' < "$1" | awk '/^\|/ && !/^\|[ \t|:-]+$/ { r++ } END { print NR, (r > 0 ? r - 1 : 0) }'; }
 cl=""
-if [ -f "$dir/.claude/CLAUDE.md" ]; then
-  set -- $(cnt "$dir/.claude/CLAUDE.md")
+if [ -f "$base/.claude/CLAUDE.md" ]; then
+  # shellcheck disable=SC2046 # cnt prints "lines words"; splitting is intended
+  set -- $(cnt "$base/.claude/CLAUDE.md")
   [ "$1" -gt "$lim_claude" ] && cl="CLAUDE.md $1 lines (>$lim_claude)"
 fi
 if [ -n "$state" ]; then
+  # shellcheck disable=SC2046 # cnt prints "lines words"; splitting is intended
   set -- $(cnt "$state")
   [ "$1" -gt "$lim_state" ] && cl="${cl:+$cl; }STATE.md $1 lines (>$lim_state)"
 fi
@@ -207,6 +210,7 @@ rf=/dev/null; qf=/dev/null; active="|"; allids="|"
 if [ -n "$pipe" ]; then
   for cn in runs.md questions.md; do
     [ -f "$pipe/$cn" ] || continue
+    # shellcheck disable=SC2046 # cnt prints "lines words"; splitting is intended
     set -- $(cnt "$pipe/$cn")
     [ "$2" -gt "$lim_rows" ] && cl="${cl:+$cl; }$cn $2 rows (>$lim_rows)"
   done
@@ -308,17 +312,17 @@ efirst() { head -n1 "$1" 2>/dev/null | tr -d '\r' | sed -e 's/^[[:space:]]*//' -
 
 # python
 epy=0
-for f in "$dir/pyproject.toml" "$dir/.python-version" "$dir/uv.lock"; do [ -f "$f" ] && epy=1; done
-for f in "$dir"/requirements*.txt; do [ -f "$f" ] && epy=1; done
+for f in "$base/pyproject.toml" "$base/.python-version" "$base/uv.lock"; do [ -f "$f" ] && epy=1; done
+for f in "$base"/requirements*.txt; do [ -f "$f" ] && epy=1; done
 if [ "$epy" = 1 ]; then
   ew=""; esrc=""; eop=""
-  if [ -f "$dir/.python-version" ]; then
-    l=$(efirst "$dir/.python-version")
+  if [ -f "$base/.python-version" ]; then
+    l=$(efirst "$base/.python-version")
     ew=$(printf '%s' "$l" | sed -n -E 's/^v?([0-9]+\.[0-9]+).*/\1/p')
     [ -n "$ew" ] && esrc=".python-version"
   fi
-  if [ -z "$ew" ] && [ -f "$dir/pyproject.toml" ]; then
-    l=$(tr -d '\r' < "$dir/pyproject.toml" | grep -m1 -E '^[[:space:]]*requires-python[[:space:]]*=[[:space:]]*["'"'"'][[:space:]]*(>=|==|~=)?[[:space:]]*[0-9]+\.[0-9]+')
+  if [ -z "$ew" ] && [ -f "$base/pyproject.toml" ]; then
+    l=$(tr -d '\r' < "$base/pyproject.toml" | grep -m1 -E '^[[:space:]]*requires-python[[:space:]]*=[[:space:]]*["'"'"'][[:space:]]*(>=|==|~=)?[[:space:]]*[0-9]+\.[0-9]+')
     if [ -n "$l" ]; then
       eop=$(printf '%s' "$l" | sed -E 's/^[^"'"'"']*["'"'"'][[:space:]]*(>=|==|~=)?.*/\1/')
       ew=$(printf '%s' "$l" | grep -oE '[0-9]+\.[0-9]+' | head -n1)
@@ -341,32 +345,32 @@ if [ "$epy" = 1 ]; then
     c=$(evcmp "$ef" "$ew")
     if { [ "$eop" = ">=" ] && [ "$c" = lt ]; } || { [ "$eop" != ">=" ] && [ "$c" != eq ]; }; then ep="python wants $ew ($esrc), found $ef"; fi
   fi
-  if [ ! -d "$dir/.venv" ] && [ ! -d "$dir/venv" ]; then ep="${ep:+$ep; }python .venv missing"; fi
+  if [ ! -d "$base/.venv" ] && [ ! -d "$base/venv" ]; then ep="${ep:+$ep; }python .venv missing"; fi
   [ -n "$ep" ] && echo "env: $ep"
 fi
 
 # node
-if [ -f "$dir/package.json" ]; then
+if [ -f "$base/package.json" ]; then
   ew=""; esrc=""; eop=""
   for nf in .nvmrc .node-version; do
-    [ -f "$dir/$nf" ] || continue
-    ew=$(efirst "$dir/$nf" | sed -n -E 's/^v?([0-9]+).*/\1/p')
+    [ -f "$base/$nf" ] || continue
+    ew=$(efirst "$base/$nf" | sed -n -E 's/^v?([0-9]+).*/\1/p')
     if [ -n "$ew" ]; then esrc=$nf; break; fi
   done
   if [ -z "$ew" ]; then
-    l=$(tr -d '\r' < "$dir/package.json" | sed -n 's/.*"node"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+    l=$(tr -d '\r' < "$base/package.json" | sed -n 's/.*"node"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
     ew=$(printf '%s' "$l" | sed -n -E 's/^[[:space:]]*(>=|\^|~)?[[:space:]]*v?([0-9]+).*/\2/p')
     if [ -n "$ew" ]; then
       esrc="package.json"
       case "$(printf '%s' "$l" | sed 's/^[[:space:]]*//')" in ">="*) eop=">=" ;; esac
     fi
   fi
-  em=$(tr -d '\r' < "$dir/package.json" | sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"\([a-z]*\)@.*/\1/p' | head -n1)
+  em=$(tr -d '\r' < "$base/package.json" | sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"\([a-z]*\)@.*/\1/p' | head -n1)
   case "$em" in npm|pnpm|yarn|bun) ;; *)
     em=npm
-    if [ -f "$dir/pnpm-lock.yaml" ]; then em=pnpm
-    elif [ -f "$dir/yarn.lock" ]; then em=yarn
-    elif [ -f "$dir/bun.lockb" ] || [ -f "$dir/bun.lock" ]; then em=bun; fi ;;
+    if [ -f "$base/pnpm-lock.yaml" ]; then em=pnpm
+    elif [ -f "$base/yarn.lock" ]; then em=yarn
+    elif [ -f "$base/bun.lockb" ] || [ -f "$base/bun.lock" ]; then em=bun; fi ;;
   esac
   ef=""
   command -v node >/dev/null 2>&1 && ef=$(evt node --version 2>&1 </dev/null | tr -d '\r' | sed -n 's/^v\{0,1\}\([0-9][0-9]*\).*/\1/p' | head -n1)
@@ -376,7 +380,7 @@ if [ -f "$dir/package.json" ]; then
   elif [ -n "$ew" ]; then
     if { [ "$eop" = ">=" ] && [ "$ef" -lt "$ew" ]; } || { [ "$eop" != ">=" ] && [ "$ef" -ne "$ew" ]; }; then eparts="node wants $ew ($esrc), found $ef"; fi
   fi
-  [ -d "$dir/node_modules" ] || eparts="${eparts:+$eparts; }node_modules missing ($em)"
+  [ -d "$base/node_modules" ] || eparts="${eparts:+$eparts; }node_modules missing ($em)"
   if ! { [ "$em" = npm ] && [ -z "$ef" ]; } && ! command -v "$em" >/dev/null 2>&1; then eparts="${eparts:+$eparts; }$em not installed"; fi
   [ -n "$eparts" ] && echo "env: $eparts"
 fi
@@ -384,7 +388,7 @@ fi
 # docker / podman
 elabel=""
 for cf in compose.yaml compose.yml docker-compose.yml docker-compose.yaml Dockerfile; do
-  [ -f "$dir/$cf" ] && { elabel=$cf; break; }
+  [ -f "$base/$cf" ] && { elabel=$cf; break; }
 done
 if [ -n "$elabel" ]; then
   eb=""

@@ -53,8 +53,11 @@ jobs:
           node --version || true
           tmux -V || true
           zsh --version || true
+          shellcheck --version || true
       - name: Lint
         run: /bin/bash tests/lint.sh
+        env:
+          GUYB_REQUIRE_SHELLCHECK: ${{ runner.os == 'Linux' && '1' || '' }}
       - name: Smoke
         run: /bin/bash tests/smoke.sh
       - name: Secrets guard

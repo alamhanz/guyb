@@ -1,7 +1,7 @@
 # Static checks for the guyb repo. Read-only; writes nothing. Works on Windows PowerShell 5.1 and PowerShell 7.
 #   pwsh -File tests/lint.ps1
-# Checks: every ps1 parses, JSON/SVG are well-formed, ASCII only, sh files LF, ps1 files CRLF.
-# Bash twin: lint.sh (runs bash -n; keep the file rules in sync).
+# Checks: every ps1 parses, JSON/SVG are well-formed, ASCII only, sh and tsv files LF, ps1 files CRLF.
+# Bash twin: lint.sh (runs bash -n and shellcheck, which only runs there; keep the file rules in sync).
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $root
@@ -18,9 +18,10 @@ function Rel($f) { $f.FullName.Substring($root.Length + 1).Replace('\', '/') }
 $code = @('plugins', 'scripts', 'tests')
 $ps1 = @(Get-Files $code '*.ps1')
 $sh = @(Get-Files $code '*.sh')
+$tsv = @(Get-Files $code '*.tsv')
 $json = @(Get-Files @('plugins', 'scripts', 'tests', 'settings', '.claude-plugin') '*.json')
 $svg = @(Get-Files @('docs') '*.svg')
-$text = @($ps1) + @($sh) + @($json) + @($svg) + @(Get-Files @('.github') '*.yml')
+$text = @($ps1) + @($sh) + @($tsv) + @($json) + @($svg) + @(Get-Files @('.github') '*.yml')
 if (Test-Path -LiteralPath '.gitattributes') { $text += Get-Item -LiteralPath '.gitattributes' -Force }
 
 Write-Host 'parse ps1'
@@ -51,7 +52,7 @@ foreach ($f in $text) {
   if ($n -gt 0) { Bad ("{0}: {1} non-ASCII or control byte(s)" -f (Rel $f), $n) }
 }
 
-Write-Host 'line endings (sh = LF, ps1 = CRLF)'
+Write-Host 'line endings (sh, tsv = LF; ps1 = CRLF)'
 function Count-Eol($path) {
   $lf = 0; $cr = 0; $crlf = 0; $prev = 0
   foreach ($b in [System.IO.File]::ReadAllBytes($path)) {
@@ -60,9 +61,9 @@ function Count-Eol($path) {
   }
   return @($lf, $cr, $crlf)
 }
-foreach ($f in $sh) {
+foreach ($f in @($sh) + @($tsv)) {
   $c = Count-Eol $f.FullName
-  if ($c[1] -gt 0) { Bad ("{0}: sh file contains CR (must be LF)" -f (Rel $f)) }
+  if ($c[1] -gt 0) { Bad ("{0}: file contains CR (must be LF)" -f (Rel $f)) }
 }
 foreach ($f in $ps1) {
   $c = Count-Eol $f.FullName

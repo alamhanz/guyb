@@ -127,7 +127,7 @@ try {
   Remove-Item -LiteralPath (Join-Path $r 'deploy.key') -Force -ErrorAction SilentlyContinue
 
   Write-Host 'new patterns'
-  foreach ($f in @('.envrc', 'k.p8', 'prod.tfvars', 'prod.tfvars.json', 'vault.kdbx', '.netrc', '.npmrc', '.pypirc')) {
+  foreach ($f in @('.envrc', 'k.p8', 'prod.tfvars', 'prod.tfvars.json', 'vault.kdbx', '.netrc', '.npmrc', '.pypirc', '.git-credentials', 'id_dsa', 'putty.ppk', '.pgpass', '.htpasswd')) {
     Write-File (Join-Path $r $f) "x`n"; G add -f $f
     Chk "staged $f" 2 $r 'git commit -m x'
     G reset -q; Remove-Item -LiteralPath (Join-Path $r $f) -Force
@@ -135,6 +135,9 @@ try {
   Write-File (Join-Path $r 'notes.txt') "x`n"; G add notes.txt
   Chk 'ordinary file' 0 $r 'git commit -m x'
   G reset -q; Remove-Item -LiteralPath (Join-Path $r 'notes.txt') -Force
+  Write-File (Join-Path $r 'credentials.md') "x`n"; G add credentials.md
+  Chk 'markdown named credentials' 0 $r 'git commit -m x'
+  G reset -q; Remove-Item -LiteralPath (Join-Path $r 'credentials.md') -Force
 
   Write-Host 'fallback'
   G add .env
