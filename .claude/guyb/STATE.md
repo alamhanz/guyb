@@ -9,10 +9,11 @@
 - **Owner**: @alamhanz
 
 ## Current Status
-- **Branch**: claude/guyb-plugin-cloud-tests-tz6ahs = fix/guards-0.8.2 (PR #12) + 3 fix commits (5cf1c2e, 183280c, 85b0bf0); PR #12 CI red only on Windows PowerShell 5.1 (smoke BOM), fixed here but not yet on the PR head
-- **Version**: 0.8.1 on main (PR #11 merged, 55b4842; tags v0.8.0, v0.8.1); guards rewrite ships as 0.9.0
+- **Branch**: fix/guards-0.8.2 (PR #12, 0.9.0) = claude/guyb-plugin-cloud-tests-tz6ahs; waiting on CI (Windows PowerShell 5.1 fix pushed)
+- **Version**: 0.9.0 on PR #12 (plugin.json); main has 0.8.1 (PR #11, 55b4842; tags v0.8.0, v0.8.1)
 
 ## Versions
+- **0.9.0** (PR #12): read-only guard rewrite (parsed quotes/chains/substitutions/runners/aliases, shared case table, PS scriptblocks, read subcommands, branch/tag creation), secrets guard names, test runners + bench + shellcheck CI, `/guyb:end` wrap-up (model-invocable on "I need to go": stop agents, handoff, STATE.md, commit + push work branches, no PR), `/guyb:start` resumes from the handoff
 - **0.8.1** (PR #11): tab icon tracks running subagents; release workflow + README slim (PR #10)
 - **0.8.0** (PR #9): tab status icon (hourglass working / check done / ? waiting; async hooks tab-status.sh/.ps1, GUYB_TAB_NAME tabs only); secrets guard covers `git -C`/`-c`, chained commands, `commit -a`, target repo; read-only guard catches chained and `git -C` write commands (also fixed sed-fallback JSON escape bug that made it fail open without jq); playbook: delegate long-running/stateful commands; parity fixes A13 (PS 5.1 UTF-8), A14 (invariant `-List` timestamp), A18 (sh/ps1 parity); tests/secrets.*
 - **0.7.0** (PR #8): GitHub Actions CI (ubuntu/macos/windows; lint, smoke, permission tests, optional plugin validate), PowerShell secrets guard, read-only agent guard hook + prompt rules, brief flags outdated plugin and STATE.md PR drift, agent reports in .claude/pipeline/reports/, merge is the user's step, new brand: "flock in motion" mark (five dots in a V, black + phosphor green)
@@ -49,10 +50,8 @@
 - Deferred consider item: A15 (docs note)
 
 ## Next Up
-- Get the 3 fix commits onto PR #12 (push to fix/guards-0.8.2 or replace the PR) and confirm the Windows PowerShell 5.1 job is green
-- 0.9.0: bump plugins/guyb/.claude-plugin/plugin.json, README/CONTRIBUTING notes for the guard changes, merge PR #12; scope beyond the guards to decide (candidates below)
-- Feature request: "I need to go" wrap-up by default - /guyb:end has `disable-model-invocation: true`; allow model invocation with trigger phrases (need to go, done for today, wrap up). Flow (agreed 2026-10-05): ask running agents to checkpoint (progress + report files) and stop; stop leftovers; WIP-commit worktree changes locally (not pushed); write a local handoff file in .claude/guyb/pipeline/ (gitignored: same-machine resume); update and commit/push STATE.md (cross-machine); /guyb:start reads the handoff and offers to resume. Local handoff: .claude/guyb/pipeline/handoff.md
-- Feature request (user, 2026-10-05): "commit" in a wrap-up means commit AND push every work branch (WIP commits included), no PR, so another machine can pull and continue
+- PR #12 (0.9.0): CI green on all jobs incl. Windows PowerShell 5.1, then user merges; release workflow tags v0.9.0
+- Live check of the wrap-up: say "I need to go" in a session with a running agent (SendMessage checkpoint, TaskStop fallback, git-ops WIP push), then /guyb:start on the same machine (handoff) and on another (STATE.md + WIP branches)
 - Weight audit after the guards (guyb-105, queued): orchestrator.md tokens per session, tab-status per-call spawns, brief/gh time; budget every change (guyb must stay lightweight)
 - Cloud sessions: optional SessionStart hook to install pwsh + shellcheck so the full check list runs without setup
 - Consider item A15

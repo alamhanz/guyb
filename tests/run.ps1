@@ -20,13 +20,15 @@ foreach ($n in $names) {
   [void]$p.Start()
   $p.StandardInput.Close()
   # read both streams asynchronously so a full pipe never blocks the child
-  $jobs += [pscustomobject]@{ Name = $n; Proc = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync() }
+  $jobs += [pscustomobject]@{ Name = $n; Proc = $p; Start = [DateTime]::Now; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync() }
 }
 $failed = 0
 foreach ($j in $jobs) {
   $j.Proc.WaitForExit()
   $rc = $j.Proc.ExitCode
-  Write-Host ("=== {0}.ps1: exit {1}, {2} s" -f $j.Name, $rc, [int][math]::Round(($j.Proc.ExitTime - $j.Proc.StartTime).TotalSeconds))
+  # Process.ExitTime throws on Linux .NET; fall back to the time this script saw the exit
+  try { $secs = ($j.Proc.ExitTime - $j.Proc.StartTime).TotalSeconds } catch { $secs = ([DateTime]::Now - $j.Start).TotalSeconds }
+  Write-Host ("=== {0}.ps1: exit {1}, {2} s" -f $j.Name, $rc, [int][math]::Round($secs))
   Write-Host (($j.Out.Result + $j.Err.Result).TrimEnd())
   if ($rc -ne 0) { $failed++ }
 }
