@@ -324,16 +324,16 @@ try {
   Git-Quiet -C $g add .env
   Push-Location -LiteralPath $g
   try {
-    $r = Run-Child $guard @() $null
+    $r = Run-Child $guard @() ''
     Expect-Eq 'guard staged .env exit' $r[0] 2
     Expect-Has 'guard staged .env' $r[1] '.env'
     Git-Quiet reset -q
     Git-Quiet add .env.example
-    $r = Run-Child $guard @() $null
+    $r = Run-Child $guard @() ''
     Expect-Eq 'guard staged .env.example exit' $r[0] 0
   } finally { Pop-Location }
   Push-Location -LiteralPath $tmp
-  try { $r = Run-Child $guard @() $null; Expect-Eq 'guard outside a repo exit' $r[0] 0 } finally { Pop-Location }
+  try { $r = Run-Child $guard @() ''; Expect-Eq 'guard outside a repo exit' $r[0] 0 } finally { Pop-Location }
   function SG($cmd) { (Run-Child $guard @() (@{ cwd = $g; tool_input = @{ command = $cmd } } | ConvertTo-Json -Compress))[0] }
   Git-Quiet -C $g reset -q
   Expect-Eq 'guard untracked .env, plain commit' (SG 'git commit -m x') 0

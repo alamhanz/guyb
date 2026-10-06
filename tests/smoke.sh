@@ -342,13 +342,13 @@ g="$tmp/guarded"; make_fixture "$g"
 guard="$root/plugins/guyb/hooks/guard-secrets.sh"
 printf 'KEY=value\n' > "$g/.env"; printf 'KEY=\n' > "$g/.env.example"
 git -C "$(win "$g")" add .env >/dev/null 2>&1
-err=$(cd "$g" && bash "$guard" 2>&1 >/dev/null); rc=$?
+err=$(cd "$g" && bash "$guard" 2>&1 >/dev/null </dev/null); rc=$?
 expect_eq "guard staged .env exit" "$rc" 2
 expect_has "guard staged .env" "$err" ".env"
 git -C "$(win "$g")" reset -q >/dev/null 2>&1
 git -C "$(win "$g")" add .env.example >/dev/null 2>&1
-(cd "$g" && bash "$guard" >/dev/null 2>&1); expect_eq "guard staged .env.example exit" "$?" 0
-(cd "$tmp" && bash "$guard" >/dev/null 2>&1); expect_eq "guard outside a repo exit" "$?" 0
+(cd "$g" && bash "$guard" >/dev/null 2>&1 </dev/null); expect_eq "guard staged .env.example exit" "$?" 0
+(cd "$tmp" && bash "$guard" >/dev/null 2>&1 </dev/null); expect_eq "guard outside a repo exit" "$?" 0
 sg() { printf '{"cwd":"%s","tool_input":{"command":"%s"}}' "$(win "$g")" "$1" | (cd "$tmp" && bash "$guard" >/dev/null 2>&1); echo $?; }
 git -C "$(win "$g")" reset -q >/dev/null 2>&1
 expect_eq "guard untracked .env, plain commit" "$(sg 'git commit -m x')" 0

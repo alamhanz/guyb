@@ -21,8 +21,8 @@ if ($null -eq $raw) { $raw = '' }
 $hasInput = ($raw.Trim() -ne '')
 if ($hasInput -and $raw.IndexOf('commit') -lt 0) { exit 0 }
 
-$secret = '(^|/)(\.env(\.[^/]*)?|\.envrc|\.netrc|\.npmrc|\.pypirc|[^/]*\.(pem|key|p12|p8|pfx|jks|keystore|kdbx|tfvars|tfvars\.json)|id_(rsa|ed25519|ecdsa)[^/]*|credentials(\.[^/]*)?|[^/]*service[-_]?account[^/]*\.json)$'
-$safe = '\.(example|sample|template|pub)$'
+$secret = '(^|/)(\.env(\.[^/]*)?|\.envrc|\.netrc|\.npmrc|\.pypirc|[^/]*\.(pem|key|p12|p8|pfx|jks|keystore|kdbx|tfvars|tfvars\.json)|id_(rsa|ed25519|ecdsa|dsa)[^/]*|\.git-credentials|\.pgpass|\.htpasswd|[^/]*\.ppk|credentials(\.[^/]*)?|[^/]*service[-_]?account[^/]*\.json)$'
+$safe = '\.(example|sample|template|pub|md)$'
 
 $fbArgs = @(); $fallAll = $false; $fallAdd = $false
 

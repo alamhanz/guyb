@@ -18,8 +18,8 @@ input=
 [ -t 0 ] || IFS= read -r -d '' input
 case "$input" in *commit*) ;; *) [ -n "$input" ] && exit 0 ;; esac
 
-secret='(^|/)(\.env(\.[^/]*)?|\.envrc|\.netrc|\.npmrc|\.pypirc|[^/]*\.(pem|key|p12|p8|pfx|jks|keystore|kdbx|tfvars|tfvars\.json)|id_(rsa|ed25519|ecdsa)[^/]*|credentials(\.[^/]*)?|[^/]*service[-_]?account[^/]*\.json)$'
-safe='\.(example|sample|template|pub)$'
+secret='(^|/)(\.env(\.[^/]*)?|\.envrc|\.netrc|\.npmrc|\.pypirc|[^/]*\.(pem|key|p12|p8|pfx|jks|keystore|kdbx|tfvars|tfvars\.json)|id_(rsa|ed25519|ecdsa|dsa)[^/]*|\.git-credentials|\.pgpass|\.htpasswd|[^/]*\.ppk|credentials(\.[^/]*)?|[^/]*service[-_]?account[^/]*\.json)$'
+safe='\.(example|sample|template|pub|md)$'
 
 gitargs=()
 fall_all=0; fall_add=0
