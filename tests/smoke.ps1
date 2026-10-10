@@ -50,8 +50,12 @@ function Finish-Proc($h) { # exit code, then combined stdout+stderr text
 
 if (-not $Group) {
   # Orchestrator: one child process per group, slowest first (hung probes and the 5 s gh budget), at most $jobsMax at a time.
-  $groups = 'docker', 'ghsleep', 'matrix', 'readonly', 'migration', 'env', 'check', 'cleanup_over', 'cleanup_under', 'overdue', 'formats', 'drift', 'guard', 'plugin', 'gitignore', 'emptysec', 'wrapper'
+  # The timed groups (hung probes, 5 s gh budget) run first and alone: on a 2-core CI runner a full pool slows brief past their limits.
+  $timed = 'docker', 'ghsleep'
+  $groups = 'matrix', 'readonly', 'migration', 'env', 'check', 'cleanup_over', 'cleanup_under', 'overdue', 'formats', 'drift', 'guard', 'plugin', 'gitignore', 'emptysec', 'wrapper'
   $running = New-Object System.Collections.ArrayList
+  foreach ($g in $timed) { [void]$running.Add([pscustomobject]@{ Name = $g; H = (Start-Proc $ps ('-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -Group ' + $g) '') }) }
+  while (@($running | Where-Object { -not $_.H.P.HasExited }).Count -gt 0) { Start-Sleep -Milliseconds 200 }
   foreach ($g in $groups) {
     while (@($running | Where-Object { -not $_.H.P.HasExited }).Count -ge $jobsMax) { Start-Sleep -Milliseconds 200 }
     $h = Start-Proc $ps ('-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -Group ' + $g) ''
