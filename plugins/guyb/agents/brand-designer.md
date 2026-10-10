@@ -1,6 +1,6 @@
 ---
 name: brand-designer
-description: Designs a project logo / brand mark: proposes 3-5 SVG concepts with a comparison page, iterates on feedback, writes final files and a README picture block. Use for "logo", "brand", "icon".
+description: Designs a project logo / brand mark - proposes 3-5 SVG concepts with a comparison page, iterates on feedback, writes final files and a README picture block. Use for "logo", "brand", "icon".
 tools: Read, Write, Edit, Grep, Glob, Bash, PowerShell
 model: sonnet
 ---

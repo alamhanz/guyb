@@ -1,6 +1,6 @@
 ---
 name: architect
-description: Plans a change before code: reads the codebase, picks files, data flow, API contracts, test plan, risks. Writes .claude/guyb/pipeline/plans/<run-id>.md (tasks, questions). Use first for any non-small request. Does not edit source.
+description: Plans a change before code - reads the codebase, picks files, data flow, API contracts, test plan, risks. Writes .claude/guyb/pipeline/plans/<run-id>.md (tasks, questions). Use first for any non-small request. Does not edit source.
 tools: Read, Grep, Glob, Bash, PowerShell, Write
 model: opus
 ---

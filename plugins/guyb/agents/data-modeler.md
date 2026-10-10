@@ -1,6 +1,6 @@
 ---
 name: data-modeler
-description: Designs data models and schemas: entities, SQL vs NoSQL, indexes, migrations, warehouse models (star schema, dbt). Use before building on new data or changing schemas. Recommends; edits schema files only when asked.
+description: Designs data models and schemas - entities, SQL vs NoSQL, indexes, migrations, warehouse models (star schema, dbt). Use before building on new data or changing schemas. Recommends; edits schema files only when asked.
 tools: Read, Grep, Glob, Bash, PowerShell, Write, Edit
 model: opus
 ---

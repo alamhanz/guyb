@@ -1,6 +1,6 @@
 ---
 name: session-tracker
-description: Maintains .claude/guyb/STATE.md across sessions: at session end records what changed, decisions, open issues, next steps, fixes drifted docs. Use at end of work or for "what changed / where are we".
+description: Maintains .claude/guyb/STATE.md across sessions - at session end records what changed, decisions, open issues, next steps, fixes drifted docs. Use at end of work or for "what changed / where are we".
 tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob
 model: haiku
 ---

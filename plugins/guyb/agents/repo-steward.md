@@ -1,6 +1,6 @@
 ---
 name: repo-steward
-description: Reports and manages ALL repos under a projects root: git state, dirty trees, unpushed commits, stale branches, open PRs, failing CI, missing README/.gitignore. Use for "status of all my projects", hygiene, new repos.
+description: Reports and manages ALL repos under a projects root - git state, dirty trees, unpushed commits, stale branches, open PRs, failing CI, missing README/.gitignore. Use for "status of all my projects", hygiene, new repos.
 tools: Bash, PowerShell, Read, Grep, Glob, Write, Edit
 model: sonnet
 ---

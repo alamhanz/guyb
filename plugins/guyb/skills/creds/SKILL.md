@@ -1,6 +1,6 @@
 ---
 name: creds
-description: Set up project credentials: find needed env vars/secrets/cloud accounts, keep .env gitignored, user adds values themselves, verify without printing, record names in .claude/CLAUDE.md.
+description: Set up project credentials - find needed env vars/secrets/cloud accounts, keep .env gitignored, user adds values themselves, verify without printing, record names in .claude/CLAUDE.md.
 argument-hint: "[optional: what is needed, e.g. 'postgres for staging' or 'STRIPE_SECRET_KEY']"
 ---
 

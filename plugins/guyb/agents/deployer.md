@@ -1,6 +1,6 @@
 ---
 name: deployer
-description: Deploys an app/service end to end: test, build, deploy, verify the LIVE system serves the new version, record in .claude/guyb/STATE.md. Use when asked to deploy/ship/release to an environment.
+description: Deploys an app/service end to end - test, build, deploy, verify the LIVE system serves the new version, record in .claude/guyb/STATE.md. Use when asked to deploy/ship/release to an environment.
 tools: Bash, PowerShell, Read, Edit, Grep, Glob
 model: sonnet
 ---

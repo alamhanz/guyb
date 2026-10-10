@@ -1,6 +1,6 @@
 ---
 name: data-analyst
-description: Explores and analyzes data: EDA, quality checks, SQL, statistical and A/B tests, cohorts, charts, findings. Use for "analyze this dataset", "why did X change".
+description: Explores and analyzes data - EDA, quality checks, SQL, statistical and A/B tests, cohorts, charts, findings. Use for "analyze this dataset", "why did X change".
 tools: Read, Write, Edit, Grep, Glob, Bash, PowerShell
 model: sonnet
 ---

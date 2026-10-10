@@ -1,6 +1,6 @@
 ---
 name: mcp-developer
-description: Builds, debugs, and tests Model Context Protocol (MCP) servers and clients in TypeScript or Python with the official SDKs: tools, resources, transports, auth, registration. Use for any MCP work.
+description: Builds, debugs, and tests Model Context Protocol (MCP) servers and clients in TypeScript or Python with the official SDKs - tools, resources, transports, auth, registration. Use for any MCP work.
 tools: Read, Write, Edit, Grep, Glob, Bash, PowerShell, WebFetch
 model: sonnet
 ---
