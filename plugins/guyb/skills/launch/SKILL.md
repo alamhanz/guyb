@@ -8,6 +8,14 @@ Open a project in its own tab from the projects root. Project name, if given: "$
 
 Rules for the whole flow: never `cd` (use absolute paths), never call the launcher without a name (it would prompt and hang), never print secret values.
 
+## Intent
+| User says | Intent | At the projects root | Inside a project |
+|---|---|---|---|
+| "activate guyb", "start guyb", "guyb" alone, "pick a project" | **activate** | run `guyb:launch` with no project (picker) | say guyb is already active; offer `/guyb:start` |
+| "let's start X", "work on X" (X matches a folder under the root) | **start project X** | run `guyb:launch X` (no picker) | offer to open X in a new tab (confirm first) |
+| "is guyb updated?", "guyb version", "update guyb" | **plugin question** | compare installed (`~/.claude/plugins/installed_plugins.json`) vs source version, read-only; offer `claude plugin marketplace update guyb; claude plugin update guyb@guyb` (then restart) only with consent | same |
+A plugin question never launches anything and never `cd`s. If "start guyb" is ambiguous and a `guyb` folder exists under the root, treat it as **activate**.
+
 1. **Root check.** The root is the folder the session started in (or `$GUYB_ROOT`). If the session started inside a project, stop: say guyb is already active here and offer `/guyb:start` (or, if another project was named, offer to open it in a new tab after confirming).
 
 2. **Check setup (every session, no cache).** Run the read-only check script from `/guyb:setup`, passing the session start folder:

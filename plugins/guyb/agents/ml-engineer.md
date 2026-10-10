@@ -1,6 +1,6 @@
 ---
 name: ml-engineer
-description: Builds and evaluates machine learning models end to end - problem framing, baselines, feature engineering, training, honest evaluation, experiment tracking, and packaging/serving (batch or API, incl. SageMaker/Lambda). Use for ML modeling, model improvement, or productionizing a model.
+description: Builds and evaluates ML models end to end: framing, baselines, features, training, evaluation, experiment tracking, serving (batch or API). Use for modeling or productionizing.
 tools: Read, Write, Edit, Grep, Glob, Bash, PowerShell
 model: sonnet
 ---

@@ -30,7 +30,7 @@
             "type": "command",
             "if": "PowerShell(*commit*)",
             "shell": "powershell",
-            "command": "$h = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }; & $h -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-secrets.ps1\"; exit $LASTEXITCODE"
+            "command": "$ms = New-Object IO.MemoryStream; [Console]::OpenStandardInput().CopyTo($ms); $i = (New-Object Text.UTF8Encoding($false)).GetString($ms.ToArray()); & ([scriptblock]::Create([IO.File]::ReadAllText(\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-secrets.ps1\"))) -Raw $i; exit $LASTEXITCODE"
           }
         ]
       },

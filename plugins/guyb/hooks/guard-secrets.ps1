@@ -13,11 +13,25 @@
 # would fail too; a git failure on the computed target is retried against the cwd first.
 # Works on Windows PowerShell 5.1 and PowerShell 7.
 
+param([string]$Raw)
+
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { exit 0 }
 
-$raw = ''
-try { if ([Console]::IsInputRedirected) { $raw = [Console]::In.ReadToEnd() } } catch { $raw = '' }
+# hooks.json runs this file in the hook host as a scriptblock with -Raw <hook json> (`exit` there is the
+# process exit code, verified on pwsh 7 and Windows PowerShell 5.1); without -Raw, stdin is read as UTF-8 bytes.
+$raw = $Raw
+if (-not $raw) {
+    $raw = ''
+    try {
+        if ([Console]::IsInputRedirected) {
+            $ms = New-Object System.IO.MemoryStream
+            [Console]::OpenStandardInput().CopyTo($ms)
+            $raw = (New-Object System.Text.UTF8Encoding($false)).GetString($ms.ToArray())
+        }
+    } catch { $raw = '' }
+}
 if ($null -eq $raw) { $raw = '' }
+$raw = $raw.TrimStart([char]0xFEFF)
 $hasInput = ($raw.Trim() -ne '')
 if ($hasInput -and $raw.IndexOf('commit') -lt 0) { exit 0 }
 

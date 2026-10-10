@@ -1,6 +1,6 @@
 ---
 name: session-tracker
-description: Tracks project state and changes across sessions via .claude/guyb/STATE.md. Mode "start" - briefing of current state, recent commits, uncommitted work, drift since last session. Mode "end" - records what changed, decisions, open issues, next steps, and fixes docs that drifted from the code. Use at the start/end of work sessions or when asked "what changed / where are we".
+description: Maintains .claude/guyb/STATE.md across sessions: at session end records what changed, decisions, open issues, next steps, fixes drifted docs. Use at end of work or for "what changed / where are we".
 tools: Read, Edit, Write, Bash, PowerShell, Grep, Glob
 model: haiku
 ---

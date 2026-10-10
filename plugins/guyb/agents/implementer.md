@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Implements an approved plan (.claude/guyb/pipeline/plans/<run-id>.md) or a well-scoped task - writes code and tests following the project's existing conventions, any stack (backend, frontend, microservice, MCP server, scripts). Use after the architect's plan is approved, one implementer per disjoint file group.
+description: Implements an approved plan (.claude/guyb/pipeline/plans/<run-id>.md) or a well-scoped task: code and tests following project conventions, any stack. Use after the plan is approved; one per disjoint file group.
 tools: Read, Edit, Write, Grep, Glob, Bash, PowerShell
 model: sonnet
 ---

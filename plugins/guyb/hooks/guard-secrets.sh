@@ -37,8 +37,9 @@ scan() {
     wt=$(git "${gitargs[@]}" -c core.quotepath=off ls-files --others --exclude-standard --full-name -- :/ 2>/dev/null) || return 1
     files=$(printf '%s\n%s\n' "$files" "$wt")
   fi
-  [ -n "$3" ] && files=$(printf '%s\n%s\n' "$files" "$(printf '%s\n' "$3" | tr '\\' '/')")
-  printf '%s\n' "$files" | sort -u | grep -iE "$secret" | grep -viE "$safe"
+  [ -n "$3" ] && files=$(printf '%s\n%s\n' "$files" "${3//\\//}")
+  printf '%s\n' "$files" | S="$secret" F="$safe" awk 'BEGIN { s = ENVIRON["S"]; f = ENVIRON["F"] }
+    $0 != "" && !seen[$0]++ { l = tolower($0); if (l ~ s && l !~ f) print }'
   return 0
 }
 
@@ -63,8 +64,8 @@ fallback() {
 
 cmd=; cwd=
 if command -v jq >/dev/null 2>&1; then
-  cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)
-  cwd=$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)
+  # One jq call: command and cwd as NUL-terminated fields (empty when jq fails or a field is not a string).
+  { IFS= read -r -d '' cmd; IFS= read -r -d '' cwd; } < <(printf '%s' "$input" | jq -j '(.tool_input.command // "") + "\u0000" + (.cwd // "") + "\u0000"' 2>/dev/null)
 else
   # JSON string escapes decoded by awk: \\ \" \n \t \/ ; anything else (\uXXXX) is left as is.
   dec='{ s = $0; o = ""; n = length(s)
@@ -88,9 +89,14 @@ fi
 [ "$base" != . ] && gitargs=(-C "$base")
 
 # Loose text checks, used when the parser finds no commit: does it look like a commit that stages or uses -a?
-flat=$(printf '%s' "$cmd" | tr '\n\r' '  ')
-if printf '%s' "$flat" | grep -qiE '(^|[^[:alnum:]_-])(add|stage)([^[:alnum:]_-]|$)'; then fall_add=1; fall_all=1; fi
-if printf '%s' "$flat" | grep -qiE 'commit.*[[:space:]](-[A-Za-z]*[aio][A-Za-z]*|--all|--include|--only)([[:space:]]|$)'; then fall_all=1; fi
+flat=${cmd//[$'\n\r']/ }
+re_add='(^|[^[:alnum:]_-])(add|stage)([^[:alnum:]_-]|$)'
+re_all='commit.*[[:space:]](-[A-Za-z]*[aio][A-Za-z]*|--all|--include|--only)([[:space:]]|$)'
+re_git='git(\.exe)?["'"'"']?[[:space:]].*(commit|alias\.)'
+shopt -s nocasematch
+if [[ $flat =~ $re_add ]]; then fall_add=1; fall_all=1; fi
+if [[ $flat =~ $re_all ]]; then fall_all=1; fi
+shopt -u nocasematch
 
 # One line per git commit invocation: <all>\t<unknown>\t<add>\t_<chain>\t_<addpaths>
 # chain = C:<dir> (cd / -C), G:<dir> (--git-dir), W:<dir> (--work-tree) joined by \037; add = 1 when a
@@ -204,7 +210,8 @@ END {
 lines=$(printf '%s\n' "$cmd" | awk "$prog" 2>/dev/null) || fallback
 if [ -z "$lines" ]; then
   # Parser found no commit: if the text still looks like one, scan the cwd repo rather than allow.
-  printf '%s' "$flat" | grep -qiE 'git(\.exe)?["'"'"']?[[:space:]].*(commit|alias\.)' && fallback
+  shopt -s nocasematch
+  [[ $flat =~ $re_git ]] && fallback
   exit 0
 fi
 
@@ -217,7 +224,7 @@ while IFS= read -r line; do
   else
     IFS=$'\037' read -r -a dirs <<< "$chain"
   fi
-  addp=$(printf '%s' "$addp" | tr '\037' '\n')
+  addp=${addp//$'\037'/$'\n'}
   [ "$add" = 1 ] && all=1
   gitargs=(-C "$base")
   for d in "${dirs[@]}"; do

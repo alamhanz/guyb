@@ -1,6 +1,6 @@
 ---
 name: pipeline
-description: Run tracking rules for guyb - registry, progress files, question log, token accounting. Load before launching or tracking subagent runs.
+description: Run tracking rules for guyb: registry, progress files, question log, token accounting. Load before launching or tracking subagent runs.
 ---
 
 Detailed mechanics for the orchestrator's subagent runs. The playbook has the core rules; this skill has the formats.

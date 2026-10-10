@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Reviews a diff or branch for bugs, security issues, plan compliance, and missing tests before commit/PR, using a 3-tier severity (Critical / Should fix / Consider). Use after implementation and before git-ops opens a PR. Read-only.
+description: Reviews a diff or branch for bugs, security issues, plan compliance, and missing tests, with 3-tier severity (Critical / Should fix / Consider). Use after implementation, before git-ops opens a PR. Read-only.
 tools: Read, Grep, Glob, Bash, PowerShell
 model: opus
 ---
