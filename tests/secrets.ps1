@@ -204,6 +204,38 @@ try {
   Chk '--git-dir --work-tree bad repo' 2 $out "git --git-dir='$r/.git' --work-tree='$r' commit -m x"
   Chk '--git-dir that does not exist falls back to cwd' 2 $r "git --git-dir='$out/none/.git' commit -m x"
   G reset -q
+
+  Write-Host 'hooks.json entry (scriptblock in the hook host, UTF-8 stdin)'
+  $hk = Get-Content -Raw -LiteralPath (Join-Path $root 'plugins/guyb/hooks/hooks.json') | ConvertFrom-Json
+  $entry = ''
+  foreach ($e in $hk.hooks.PreToolUse) { foreach ($h in $e.hooks) { if ($h.command -match 'guard-secrets\.ps1') { $entry = ([string]$h.command).Replace('${CLAUDE_PLUGIN_ROOT}', (Join-Path $root 'plugins/guyb')) } } }
+  Expect-Eq 'hooks.json has a PowerShell secrets entry' ($entry -ne '') $true
+  function Run-Entry([string]$workdir, [string]$stdin) { # returns the entry's exit code; stdin is sent as UTF-8 bytes
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $ps
+    $psi.Arguments = '-NoProfile -Command "' + ($entry -replace '"', '\"') + '"'
+    $psi.WorkingDirectory = $workdir
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $psi
+    [void]$p.Start()
+    $o = $p.StandardOutput.ReadToEndAsync(); $er = $p.StandardError.ReadToEndAsync()
+    $b = (New-Object System.Text.UTF8Encoding($false)).GetBytes($stdin)
+    $p.StandardInput.BaseStream.Write($b, 0, $b.Length); $p.StandardInput.Close()
+    $p.WaitForExit()
+    return $p.ExitCode
+  }
+  $uni = Join-Path $tmp ('caf' + [char]0x00E9 + ' ' + [char]0x65E5 + [char]0x672C)
+  Make-Fixture $uni
+  Write-File (Join-Path $uni '.env') "KEY=value`n"; Git-Quiet -C $uni add .env
+  Expect-Eq 'entry: staged .env, non-ASCII cwd' (Run-Entry $out (Hook-Json $uni 'git commit -m x')) 2
+  Expect-Eq 'entry: nothing staged' (Run-Entry $out (Hook-Json $r 'git commit -m x')) 0
+  Git-Quiet -C $r add .env
+  Expect-Eq 'entry: staged .env, repo' (Run-Entry $out (Hook-Json $r 'git commit -m x')) 2
+  Expect-Eq 'entry: no commit word' (Run-Entry $out (Hook-Json $r 'git status')) 0
+  Expect-Eq 'entry: empty stdin, staged .env' (Run-Entry $r '') 2
+  G reset -q
 } finally {
   Set-Location -LiteralPath $root
   Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue

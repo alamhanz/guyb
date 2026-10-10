@@ -6,14 +6,80 @@ dir="${dir%/}"
 base="${dir%/}" # no trailing slash: "/" gives /x, never //x (a UNC path on msys)
 export GIT_TERMINAL_PROMPT=0
 
-echo "project: $(basename "$dir")"
+# timeout binary (stock macOS has none; callers then poll and kill)
+etmo=
+command -v timeout >/dev/null 2>&1 && etmo=timeout
+[ -z "$etmo" ] && command -v gtimeout >/dev/null 2>&1 && etmo=gtimeout
+# gh capped at s seconds, run in $dir, exit 124 on timeout
+ghb() { # secs args...
+  gs=$1; shift
+  if [ -n "$etmo" ]; then (cd "$dir" 2>/dev/null && exec "$etmo" "$gs" gh "$@") 2>/dev/null </dev/null; return $?; fi
+  gf=$(mktemp "${TMPDIR:-/tmp}/guyb-gh.XXXXXX" 2>/dev/null) || return 1
+  (cd "$dir" 2>/dev/null && exec gh "$@") >"$gf" 2>/dev/null </dev/null &
+  gp=$!; gend=$((SECONDS + gs + 1))
+  while kill -0 "$gp" 2>/dev/null && [ "$SECONDS" -lt "$gend" ]; do sleep 0.1; done
+  if kill -0 "$gp" 2>/dev/null; then
+    command -v pkill >/dev/null 2>&1 && pkill -P "$gp" 2>/dev/null
+    kill "$gp" 2>/dev/null; wait "$gp" 2>/dev/null; rm -f "$gf"; return 124
+  fi
+  wait "$gp"; grc=$?; cat "$gf"; rm -f "$gf"; return $grc
+}
+# One gh call lists the recent PRs (open PRs and drift states); it runs in the background under a 5s budget.
+ghf=""; ghp=""; ghspent=0; ghrc=""; ghlist=""
+gh_start() {
+  [ -z "$ghp" ] || return 0
+  command -v gh >/dev/null 2>&1 || return 0
+  ghf=$(mktemp "${TMPDIR:-/tmp}/guyb-gh.XXXXXX" 2>/dev/null) || { ghf=""; return 0; }
+  ghb 5 pr list --state all --limit 100 --json number,state,title,headRefName -q '.[] | [.number,.state,.title,.headRefName] | @tsv' >"$ghf" &
+  ghp=$!
+}
+gh_collect() {
+  [ -n "$ghp" ] || return 0
+  ghw=$SECONDS
+  wait "$ghp" 2>/dev/null; ghrc=$?
+  ghspent=$((SECONDS - ghw))
+  ghlist=""; read -r -d '' ghlist < "$ghf"; ghlist=${ghlist//$'\r'/}
+  rm -f "$ghf"; ghf=""; ghp=""
+}
+gh_clean() { [ -n "$ghp" ] && kill "$ghp" 2>/dev/null; [ -n "$ghf" ] && rm -f "$ghf"; return 0; }
+trap gh_clean EXIT
+trap 'exit 1' HUP INT TERM
+[ -e "$base/.git" ] && gh_start
 
+pn=${dir##*/}; [ -n "$pn" ] || pn=/
+echo "project: $pn"
+
+# max_parallel and the four cleanup limits in one pass: first file (project, then profile) with a valid value wins per key.
+# Prints "<max_parallel> <src> <claude_md_lines> <state_lines> <rows> <days>"; "-" when unset.
+cfgf=()
+[ -f "$base/.claude/CLAUDE.md" ] && cfgf[${#cfgf[@]}]="$base/.claude/CLAUDE.md"
+[ -f "$HOME/.claude/guyb/profile.md" ] && cfgf[${#cfgf[@]}]="$HOME/.claude/guyb/profile.md"
+cfgout="- - - - - -"
+if [ ${#cfgf[@]} -gt 0 ]; then
+  cfgout=$(awk -v proj="$base/.claude/CLAUDE.md" '
+    BEGIN { split("max_parallel cleanup_claude_md_lines cleanup_state_lines cleanup_rows cleanup_days", ks, " "); for (i = 1; i <= 5; i++) { ix[ks[i]] = i; v[i] = "-" } }
+    {
+      s = $0; sub(/^[ \t]*/, "", s); sub(/^[-*][ \t]+/, "", s); sub(/^[`*]*/, "", s)
+      if (!match(s, /^[a-z_]+/)) next
+      k = substr(s, 1, RLENGTH); if (!(k in ix)) next
+      s = substr(s, RLENGTH + 1)
+      if (s !~ /^[`*]*[ \t]*:[`* \t\r]*[0-9]+[`* \t\r]*$/) next
+      d = s; gsub(/[^0-9]/, "", d); sub(/^0+/, "", d)
+      if (d == "" || length(d) > (k == "max_parallel" ? 2 : 9)) next
+      n = d + 0; if (n < 1 || (k == "max_parallel" && n > 20)) next
+      i = ix[k]; if (v[i] == "-") { v[i] = n; if (i == 1) src = (FILENAME == proj) ? "project" : "profile" }
+    }
+    END { print v[1], (src == "" ? "-" : src), v[2], v[3], v[4], v[5] }' "${cfgf[@]}")
+fi
+# shellcheck disable=SC2086 # six words, splitting is intended
+set -- $cfgout
 max_parallel=5; max_src=default
-for c in "$base/.claude/CLAUDE.md:project" "$HOME/.claude/guyb/profile.md:profile"; do
-  [ -f "${c%:*}" ] || continue
-  v=$(sed -nE 's/^[[:space:]]*([-*][[:space:]]+)?[`*]*max_parallel[`*]*[[:space:]]*:[`*[:space:]]*([0-9]{1,2})[`*[:space:]]*$/\2/p' "${c%:*}" | awk '$1 + 0 >= 1 && $1 + 0 <= 20 { print $1 + 0; exit }')
-  if [ -n "$v" ]; then max_parallel=$v; max_src=${c##*:}; break; fi
-done
+[ "$1" != "-" ] && { max_parallel=$1; max_src=$2; }
+lim_claude=200; lim_state=300; lim_rows=200; lim_days=14
+[ "$3" != "-" ] && lim_claude=$3
+[ "$4" != "-" ] && lim_state=$4
+[ "$5" != "-" ] && lim_rows=$5
+[ "$6" != "-" ] && lim_days=$6
 echo "max parallel: $max_parallel ($max_src)"
 
 # Per-project files live in .claude/guyb/; legacy .claude/STATE.md and .claude/pipeline/ are read as a fallback (never written).
@@ -53,8 +119,8 @@ inst_f="$cfg/plugins/installed_plugins.json"
 mk_f="$cfg/plugins/known_marketplaces.json"
 if [ -f "$inst_f" ] && [ -f "$mk_f" ]; then
   if command -v jq >/dev/null 2>&1; then
-    inst=$(jq -r '.plugins["guyb@guyb"][0].version // empty' "$inst_f" 2>/dev/null | tr -d '\r')
-    srcdir=$(jq -r '.guyb.source.path // empty' "$mk_f" 2>/dev/null | tr -d '\r')
+    inst=$(jq -r '.plugins["guyb@guyb"][0].version // empty' "$inst_f" 2>/dev/null); inst=${inst//$'\r'/}
+    srcdir=$(jq -r '.guyb.source.path // empty' "$mk_f" 2>/dev/null); srcdir=${srcdir//$'\r'/}
   else
     inst=$(tr -d '\r' < "$inst_f" | awk '
       !f { i = index($0, "\"guyb@guyb\""); if (i) { f = 1; $0 = substr($0, i) } }
@@ -71,7 +137,7 @@ if [ -f "$inst_f" ] && [ -f "$mk_f" ]; then
         if (e || index($0, "\"lastUpdated\"")) exit
       }')
   fi
-  case "$srcdir" in *\\*) srcdir=$(printf '%s' "$srcdir" | sed 's/\\\\/\\/g') ;; esac
+  case "$srcdir" in *\\*) srcdir=${srcdir//\\\\/\\} ;; esac
   case "$srcdir" in
     [A-Za-z]:[\\/]*)
       if command -v cygpath >/dev/null 2>&1; then srcdir=$(cygpath -u "$srcdir" 2>/dev/null)
@@ -80,7 +146,7 @@ if [ -f "$inst_f" ] && [ -f "$mk_f" ]; then
   pj="$srcdir/plugins/guyb/.claude-plugin/plugin.json"
   if [ -n "$inst" ] && [ -n "$srcdir" ] && [ -f "$pj" ]; then
     if command -v jq >/dev/null 2>&1; then
-      avail=$(jq -r '.version // empty' "$pj" 2>/dev/null | tr -d '\r')
+      avail=$(jq -r '.version // empty' "$pj" 2>/dev/null); avail=${avail//$'\r'/}
     else
       avail=$(tr -d '\r' < "$pj" | awk 'match($0, /"version"[ \t]*:[ \t]*"[^"]*"/) {
         v = substr($0, RSTART, RLENGTH); sub(/^"version"[ \t]*:[ \t]*"/, "", v); sub(/"$/, "", v); print v; exit }')
@@ -98,6 +164,7 @@ if [ -f "$inst_f" ] && [ -f "$mk_f" ]; then
   fi
 fi
 
+isgit=0
 if [ "$(git -C "$dir" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ]; then
   branch=$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null)
   if ab=$(git -C "$dir" rev-list --left-right --count '@{u}...HEAD' 2>/dev/null); then
@@ -106,6 +173,7 @@ if [ "$(git -C "$dir" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ]; 
   else
     sync="no upstream"
   fi
+  isgit=1
   echo "branch: $branch ($sync)"
 
   dirty=$(git -C "$dir" status --short 2>/dev/null)
@@ -123,13 +191,19 @@ if [ "$(git -C "$dir" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ]; 
   fi
 
   echo "last commits:"
-  git -C "$dir" log --oneline -5 2>/dev/null | sed 's/^/  /'
+  git -C "$dir" log -5 --format='  %h %s' 2>/dev/null
 
   if command -v gh >/dev/null 2>&1; then
-    prs=$(cd "$dir" 2>/dev/null && gh pr list --limit 5 2>/dev/null | cut -f1-3 | awk -F'\t' '{ print $1 " | " $2 " | " $3 }')
+    gh_start; gh_collect
+    prs=""; pc=0
+    while IFS=$'\t' read -r pn_ ps_ pt_ pb_; do
+      [ "$ps_" = OPEN ] || continue
+      prs="${prs:+$prs$'\n'}  $pn_ | $pt_ | $pb_"
+      pc=$((pc + 1)); [ "$pc" -ge 5 ] && break
+    done <<< "$ghlist"
     if [ -n "$prs" ]; then
       echo "open PRs:"
-      printf '%s\n' "$prs" | sed 's/^/  /'
+      printf '%s\n' "$prs"
     fi
   fi
 else
@@ -146,16 +220,27 @@ if [ -n "$state" ]; then
     ' "$state")
     [ -n "$sec" ] && { echo "STATE.md $h:"; printf '%s\n' "$sec"; }
   done
-  # Drift: PRs named in live-state sections of STATE.md (Current Status, Open Issues, Next Up, In progress, Open PRs) that are already merged or closed (max 3 gh calls, silent on failure).
-  if [ "$(git -C "$dir" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ] && command -v gh >/dev/null 2>&1; then
-    tmo=
-    command -v timeout >/dev/null 2>&1 && tmo=timeout
-    [ -z "$tmo" ] && command -v gtimeout >/dev/null 2>&1 && tmo=gtimeout
-    for n in $(tr -d '\r' < "$state" | awk '/^#/ { l = (tolower($0) ~ /^#+[ \t]*(current status|open issues|next up|in progress|open prs)/); next } l' | grep -oiE '(^|[^[:alnum:]])(#|pull/|pr[[:space:]]+#?)[0-9]+' | grep -oE '[0-9]+$' | awk '!s[$0]++' | head -3); do
-      if [ -n "$tmo" ]; then
-        st=$(cd "$dir" 2>/dev/null && "$tmo" 5 gh pr view "$n" --json state -q .state 2>/dev/null | tr -d '\r')
-      else
-        st=$(cd "$dir" 2>/dev/null && gh pr view "$n" --json state -q .state 2>/dev/null | tr -d '\r')
+  # Drift: PRs named in live-state sections of STATE.md (Current Status, Open Issues, Next Up, In progress, Open PRs) that are already merged or closed.
+  # States come from the PR list; a PR missing from it gets one `gh pr view` (max 3, within the 5s budget; none after a timeout; silent on failure).
+  if [ "$isgit" = 1 ] && command -v gh >/dev/null 2>&1 && [ "$ghrc" != 124 ]; then
+    for n in $(awk '
+      { gsub(/\r/, "") }
+      /^#/ { l = (tolower($0) ~ /^#+[ \t]*(current status|open issues|next up|in progress|open prs)/); next }
+      l { s = tolower($0)
+        while (match(s, /(^|[^a-z0-9])(#|pull\/|pr[ \t]+#?)[0-9]+/)) {
+          m = substr(s, RSTART, RLENGTH); sub(/^.*[^0-9]/, "", m); s = substr(s, RSTART + RLENGTH)
+          if (!seen[m]++ && ++c <= 3) print m
+        } }' "$state"); do
+      st=""
+      while IFS=$'\t' read -r pn_ ps_ _; do
+        [ "$pn_" = "$n" ] && { st=$ps_; break; }
+      done <<< "$ghlist"
+      if [ -z "$st" ]; then
+        rem=$((5 - ghspent))
+        [ "$rem" -ge 1 ] || continue
+        ghw=$SECONDS
+        st=$(ghb "$rem" pr view "$n" --json state -q .state | tr -d '\r')
+        ghspent=$((ghspent + SECONDS - ghw))
       fi
       case "$st" in MERGED|CLOSED) echo "STATE.md drift: PR #$n is $st - update STATE.md" ;; esac
     done
@@ -182,66 +267,62 @@ if [ -n "$pipe" ] && [ -f "$qs" ]; then
   fi
 fi
 
-# Cleanup hints. Limits: project .claude/CLAUDE.md, then ~/.claude/guyb/profile.md, then defaults; invalid values are ignored.
-cfgint() { # key default
-  for cf in "$base/.claude/CLAUDE.md" "$HOME/.claude/guyb/profile.md"; do
-    [ -f "$cf" ] || continue
-    cv=$(sed -nE 's/^[[:space:]]*([-*][[:space:]]+)?[`*]*'"$1"'[`*]*[[:space:]]*:[`*[:space:]]*([0-9]{1,9})[`*[:space:]]*$/\2/p' "$cf" | awk '$1 + 0 >= 1 { print $1 + 0; exit }')
-    if [ -n "$cv" ]; then echo "$cv"; return; fi
-  done
-  echo "$2"
-}
-lim_claude=$(cfgint cleanup_claude_md_lines 200); lim_state=$(cfgint cleanup_state_lines 300)
-lim_rows=$(cfgint cleanup_rows 200); lim_days=$(cfgint cleanup_days 14)
-# "<lines> <rows>": rows = table lines minus separator rows minus 1 header
-cnt() { tr -d '\r' < "$1" | awk '/^\|/ && !/^\|[ \t|:-]+$/ { r++ } END { print NR, (r > 0 ? r - 1 : 0) }'; }
+# Cleanup hints. Limits (read above): project .claude/CLAUDE.md, then ~/.claude/guyb/profile.md, then defaults; invalid values are ignored.
+# One awk pass counts lines and table rows (rows = table lines minus separator rows minus 1 header) of the four files and lists the run ids
+# by registry columns (ID, Status): "all|<ids>|" then "act|<running/queued/blocked ids>|".
 cl=""
-if [ -f "$base/.claude/CLAUDE.md" ]; then
-  # shellcheck disable=SC2046 # cnt prints "lines words"; splitting is intended
-  set -- $(cnt "$base/.claude/CLAUDE.md")
-  [ "$1" -gt "$lim_claude" ] && cl="CLAUDE.md $1 lines (>$lim_claude)"
-fi
-if [ -n "$state" ]; then
-  # shellcheck disable=SC2046 # cnt prints "lines words"; splitting is intended
-  set -- $(cnt "$state")
-  [ "$1" -gt "$lim_state" ] && cl="${cl:+$cl; }STATE.md $1 lines (>$lim_state)"
-fi
 rf=/dev/null; qf=/dev/null; active="|"; allids="|"
+cntf=()
+[ -f "$base/.claude/CLAUDE.md" ] && cntf[${#cntf[@]}]="$base/.claude/CLAUDE.md"
+[ -n "$state" ] && cntf[${#cntf[@]}]="$state"
 if [ -n "$pipe" ]; then
-  for cn in runs.md questions.md; do
-    [ -f "$pipe/$cn" ] || continue
-    # shellcheck disable=SC2046 # cnt prints "lines words"; splitting is intended
-    set -- $(cnt "$pipe/$cn")
-    [ "$2" -gt "$lim_rows" ] && cl="${cl:+$cl; }$cn $2 rows (>$lim_rows)"
-  done
-  if [ -f "$pipe/runs.md" ]; then
-    rf="$pipe/runs.md"
-    # registry columns by header name (ID, Status); "all|<ids>|" then "act|<running/queued/blocked ids>|"
-    ids=$(tr -d '\r' < "$rf" | awk -F'|' '
-      function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
-      !h && /^\|/ { for (i = 2; i < NF; i++) { t = trim($i); if (t == "ID") ic = i; else if (t == "Status") sc = i } h = 1; next }
-      h && ic && sc { id = trim($ic); if (id == "" || id ~ /^[-:]+$/) next; al = al id "|"; if (trim($sc) ~ /^(running|queued|blocked)$/) ac = ac id "|" }
-      END { print "|" al; print "|" ac }')
-    allids=$(printf '%s\n' "$ids" | sed -n 1p); active=$(printf '%s\n' "$ids" | sed -n 2p)
-  fi
-  [ -f "$pipe/questions.md" ] && qf="$pipe/questions.md"
-  stale=0
+  [ -f "$pipe/runs.md" ] && { rf="$pipe/runs.md"; cntf[${#cntf[@]}]="$rf"; }
+  [ -f "$pipe/questions.md" ] && { qf="$pipe/questions.md"; cntf[${#cntf[@]}]="$qf"; }
+fi
+if [ ${#cntf[@]} -gt 0 ]; then
+  cnto=$(awk -F'|' -v cm="$base/.claude/CLAUDE.md" -v st="$state" -v rf="$rf" -v qf="$qf" '
+    function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+    { sub(/\r$/, ""); nl[FILENAME] = FNR }
+    /^\|/ && !/^\|[ \t|:-]+$/ { r[FILENAME]++ }
+    FILENAME == rf {
+      if (!h && /^\|/) { for (i = 2; i < NF; i++) { t = trim($i); if (t == "ID") ic = i; else if (t == "Status") sc = i } h = 1; next }
+      if (h && ic && sc) { id = trim($ic); if (id == "" || id ~ /^[-:]+$/) next; al = al id "|"; if (trim($sc) ~ /^(running|queued|blocked)$/) ac = ac id "|" }
+    }
+    END {
+      print nl[cm] + 0, nl[st] + 0, nl[rf] + 0, (r[rf] > 0 ? r[rf] - 1 : 0), nl[qf] + 0, (r[qf] > 0 ? r[qf] - 1 : 0)
+      print "|" al; print "|" ac
+    }' "${cntf[@]}" /dev/null)
+  { read -r c_cl_n c_st_n _ c_rn_r _ c_q_r; IFS= read -r allids; IFS= read -r active; } <<< "$cnto"
+  [ -f "$base/.claude/CLAUDE.md" ] && [ "$c_cl_n" -gt "$lim_claude" ] && cl="CLAUDE.md $c_cl_n lines (>$lim_claude)"
+  [ -n "$state" ] && [ "$c_st_n" -gt "$lim_state" ] && cl="${cl:+$cl; }STATE.md $c_st_n lines (>$lim_state)"
+  [ "$c_rn_r" -gt "$lim_rows" ] && cl="${cl:+$cl; }runs.md $c_rn_r rows (>$lim_rows)"
+  [ "$c_q_r" -gt "$lim_rows" ] && cl="${cl:+$cl; }questions.md $c_q_r rows (>$lim_rows)"
+fi
+if [ -n "$pipe" ]; then
+  fdirs=()
   for sub in progress reports plans brand; do
-    [ -d "$pipe/$sub" ] || continue
-    sn=$(find "$pipe/$sub" -type f -mtime +"$lim_days" 2>/dev/null | awk -v pre="$pipe/$sub/" -v br="$sub" -v act="$active" -v all="$allids" '
-      { f = substr($0, length(pre) + 1)
+    [ -d "$pipe/$sub" ] && fdirs[${#fdirs[@]}]="$pipe/$sub"
+  done
+  stale=0
+  if [ ${#fdirs[@]} -gt 0 ]; then
+    stale=$(find "${fdirs[@]}" -type f -mtime +"$lim_days" 2>/dev/null | awk -v pipe="$pipe/" -v act="$active" -v all="$allids" '
+      BEGIN { split("progress reports plans brand", subs, " ") }
+      { br = ""
+        for (i = 1; i <= 4; i++) if (index($0, pipe subs[i] "/") == 1) { br = subs[i]; break }
+        if (br == "") next
+        f = substr($0, length(pipe br) + 2)
         if (br == "brand" && index(f, "/")) sub(/\/.*/, "", f); else { sub(/^.*\//, "", f); sub(/\.[^.]*$/, "", f) }
         id = ""
         if (index(all, "|" f "|")) id = f; else if (match(f, /^.*-[0-9]+/)) id = substr(f, 1, RLENGTH)
         if (id != "" && index(act, "|" id "|")) next
         n++ }
       END { print n + 0 }')
-    stale=$((stale + sn))
-  done
+  fi
   [ "$stale" -gt 0 ] && cl="${cl:+$cl; }$stale pipeline files older than $lim_days days"
 fi
 # overdue: unfinished runs and open questions (via their run) started more than lim_days ago; date part of Started only
-od=$(awk -F'|' -v rf="$rf" -v today="$(date +%Y-%m-%d)" -v lim="$lim_days" '
+od=""
+[ "$rf" != /dev/null ] && od=$(awk -F'|' -v rf="$rf" -v today="$(date +%Y-%m-%d)" -v lim="$lim_days" '
   function trim(s) { gsub(/^[ \t\r]+|[ \t\r]+$/, "", s); return s }
   function dn(s,   y, m, d, e, yo, doy) {
     if (s !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/) return -1
@@ -277,16 +358,13 @@ od=$(awk -F'|' -v rf="$rf" -v today="$(date +%Y-%m-%d)" -v lim="$lim_days" '
 [ -n "$cl" ] && echo "cleanup: $cl"
 
 # Toolchain check: prints `env:` lines only for gaps. Runs only known tools from PATH (--version / info), never project scripts.
-etmo=
-command -v timeout >/dev/null 2>&1 && etmo=timeout
-[ -z "$etmo" ] && command -v gtimeout >/dev/null 2>&1 && etmo=gtimeout
 # 3s cap on probes; without a timeout binary (stock macOS): background to a temp file, poll, kill
 evt() {
   if [ -n "$etmo" ]; then "$etmo" 3 "$@"; return; fi
   evf=$(mktemp "${TMPDIR:-/tmp}/guyb-probe.XXXXXX" 2>/dev/null) || { "$@"; return; }
   "$@" >"$evf" 2>&1 </dev/null &
-  evp=$!; evn=0
-  while kill -0 "$evp" 2>/dev/null && [ $evn -lt 30 ]; do sleep 0.1; evn=$((evn + 1)); done
+  evp=$!; evend=$((SECONDS + 4))
+  while kill -0 "$evp" 2>/dev/null && [ "$SECONDS" -lt "$evend" ]; do sleep 0.1; done
   if kill -0 "$evp" 2>/dev/null; then
     command -v pkill >/dev/null 2>&1 && pkill -P "$evp" 2>/dev/null
     kill "$evp" 2>/dev/null
@@ -297,8 +375,8 @@ evt() {
 edprobe() {
   if [ -n "$etmo" ]; then "$etmo" 3 "$@" >/dev/null 2>&1 </dev/null; return $?; fi
   "$@" >/dev/null 2>&1 </dev/null &
-  edp=$!; edn=0
-  while kill -0 "$edp" 2>/dev/null && [ $edn -lt 30 ]; do sleep 0.1; edn=$((edn + 1)); done
+  edp=$!; edend=$((SECONDS + 4))
+  while kill -0 "$edp" 2>/dev/null && [ "$SECONDS" -lt "$edend" ]; do sleep 0.1; done
   if kill -0 "$edp" 2>/dev/null; then
     command -v pkill >/dev/null 2>&1 && pkill -P "$edp" 2>/dev/null
     kill "$edp" 2>/dev/null; wait "$edp" 2>/dev/null; return 124

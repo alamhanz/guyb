@@ -9,6 +9,58 @@ if (-not $Dir) { $Dir = $root.Substring(0, [Math]::Min(1, $root.Length)) } elsei
 $out = New-Object System.Collections.Generic.List[string]
 function Add-Line($s) { $out.Add([string]$s) }
 
+# gh with a hard cap: Start-Gh launches it in $Dir with stdout read async, Wait-Gh collects it (kills the tree on timeout).
+# One call lists the recent PRs (open PRs and drift states); it starts now and is collected where the PR lines print. Time spent waiting on gh is capped at 5 s in total.
+function Start-Gh([string]$argStr) {
+  $g = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $g) { return $null }
+  try {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $g.Source; $psi.Arguments = $argStr; $psi.WorkingDirectory = $Dir
+    $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+    $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = New-Object System.Text.UTF8Encoding $false
+    $p = [System.Diagnostics.Process]::Start($psi)
+    return [pscustomobject]@{ Proc = $p; Out = $p.StandardOutput.ReadToEndAsync(); Err = $p.StandardError.ReadToEndAsync() }
+  } catch { return $null }
+}
+function Wait-Gh($h, [int]$ms) {
+  $r = [pscustomobject]@{ Code = -1; Out = ''; TimedOut = $false }
+  if (-not $h) { return $r }
+  try {
+    if ($h.Proc.WaitForExit([Math]::Max(0, $ms))) {
+      $h.Proc.WaitForExit(); $r.Code = $h.Proc.ExitCode
+      if ($h.Out.Wait(1000)) { $r.Out = ([string]$h.Out.Result).Trim() }
+    } else {
+      $r.TimedOut = $true
+      if ($env:OS -eq 'Windows_NT') { & taskkill /PID $h.Proc.Id /T /F *> $null }
+      try { $h.Proc.Kill($true) } catch { try { $h.Proc.Kill() } catch { } }
+    }
+  } catch { }
+  return $r
+}
+$ghWatch = [System.Diagnostics.Stopwatch]::StartNew()
+$ghH = $null; $ghRes = $null; $ghSpent = 0
+function Start-GhList {
+  if ($script:ghH -or $script:ghRes) { return }
+  $script:ghWatch.Restart()
+  $script:ghH = Start-Gh 'pr list --state all --limit 100 --json number,state,title,headRefName -q ".[] | [.number,.state,.title,.headRefName] | @tsv"'
+}
+function Get-GhList {
+  if (-not $script:ghRes) {
+    Start-GhList
+    $rows = New-Object System.Collections.ArrayList
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $w = Wait-Gh $script:ghH (5000 - [int]$script:ghWatch.ElapsedMilliseconds)
+    $script:ghSpent += [int]$sw.ElapsedMilliseconds
+    foreach ($l in @($w.Out -split "`r?`n")) { if ($l) { [void]$rows.Add(@($l -split "`t")) } }
+    $script:ghRes = [pscustomobject]@{ Rows = $rows; TimedOut = $w.TimedOut }
+    $script:ghH = $null
+  }
+  return $script:ghRes
+}
+if (Test-Path -LiteralPath (Join-Path $Dir '.git')) { Start-GhList }
+
 Add-Line "project: $(Split-Path -Leaf $Dir)"
 
 $maxPar = 5; $maxSrc = 'default'
@@ -106,12 +158,10 @@ if ($isGit) {
   git -C $Dir log --oneline -5 2>$null | ForEach-Object { Add-Line "  $_" }
 
   if (Get-Command gh -ErrorAction SilentlyContinue) {
-    Push-Location -LiteralPath $Dir
-    $prs = @(gh pr list --limit 5 2>$null | Where-Object { $_ })
-    Pop-Location
+    $prs = @((Get-GhList).Rows | Where-Object { $_.Count -ge 4 -and $_[1] -eq 'OPEN' } | Select-Object -First 5)
     if ($prs.Count -gt 0) {
       Add-Line 'open PRs:'
-      $prs | ForEach-Object { Add-Line "  $(($_ -split "`t")[0..2] -join ' | ')" }
+      $prs | ForEach-Object { Add-Line "  $($_[0]) | $($_[2]) | $($_[3])" }
     }
   }
 } else {
@@ -132,14 +182,21 @@ if ($state) {
       if ($items.Count -gt 0) { Add-Line "STATE.md ${h}:"; $items | ForEach-Object { Add-Line $_ } }
     }
   }
-  # Drift: PRs named in live-state sections of STATE.md (Current Status, Open Issues, Next Up, In progress, Open PRs) that are already merged or closed (max 3 gh calls, silent on failure).
-  if ($isGit -and (Get-Command gh -ErrorAction SilentlyContinue)) {
+  # Drift: PRs named in live-state sections of STATE.md (Current Status, Open Issues, Next Up, In progress, Open PRs) that are already merged or closed.
+  # States come from the PR list; a PR missing from it gets one `gh pr view` (max 3, within the 5 s budget; none after a timeout; silent on failure).
+  if ($isGit -and (Get-Command gh -ErrorAction SilentlyContinue) -and -not (Get-GhList).TimedOut) {
     $live = $false; $liveText = @(foreach ($ln in $lines) { if ($ln -match '^#') { $live = $ln -match '(?i)^#+\s*(current status|open issues|next up|in progress|open prs)' } elseif ($live) { $ln } })
     $nums = @([regex]::Matches(($liveText -join "`n"), '(?i)(?:^|[^A-Za-z0-9])(?:#|pull/|pr[ \t]+#?)(\d+)') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique | Select-Object -First 3)
     foreach ($num in $nums) {
-      Push-Location -LiteralPath $Dir
-      $st = [string](gh pr view $num --json state -q .state 2>$null)
-      Pop-Location
+      $row = @((Get-GhList).Rows | Where-Object { $_[0] -eq $num } | Select-Object -First 1)
+      if ($row.Count -gt 0) { $st = [string]$row[0][1] }
+      else {
+        $rem = 5000 - $ghSpent
+        if ($rem -lt 1) { continue }
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        $st = [string](Wait-Gh (Start-Gh "pr view $num --json state -q .state") $rem).Out
+        $ghSpent += [int]$sw.ElapsedMilliseconds
+      }
       $st = $st.Trim()
       if ($st -eq 'MERGED' -or $st -eq 'CLOSED') { Add-Line "STATE.md drift: PR #$num is $st - update STATE.md" }
     }

@@ -9,8 +9,8 @@
 - **Owner**: @alamhanz
 
 ## Current Status
-- **Branch**: fix/guards-0.8.2 (PR #12, 0.9.0) = claude/guyb-plugin-cloud-tests-tz6ahs; waiting on CI (Windows PowerShell 5.1 fix pushed)
-- **Version**: 0.9.0 on PR #12 (plugin.json); main has 0.8.1 (PR #11, 55b4842; tags v0.8.0, v0.8.1)
+- **Branch**: fix/weight-0.9.1 (uncommitted, not pushed)
+- **Version**: main has 0.9.0 (ed3075c); see Versions
 
 ## Versions
 - **0.9.0** (PR #12): read-only guard rewrite (parsed quotes/chains/substitutions/runners/aliases, shared case table, PS scriptblocks, read subcommands, branch/tag creation), secrets guard names, test runners + bench + shellcheck CI, `/guyb:end` wrap-up (model-invocable on "I need to go": stop agents, handoff, STATE.md, commit + push work branches, no PR), `/guyb:start` resumes from the handoff
@@ -50,9 +50,9 @@
 - Deferred consider item: A15 (docs note)
 
 ## Next Up
-- PR #12 (0.9.0): CI green on all jobs incl. Windows PowerShell 5.1, then user merges; release workflow tags v0.9.0
+- 0.9.1 weight trims on fix/weight-0.9.1 (plan guyb-119; Tasks 1+3 done guyb-120/122, Task 2 finishing guyb-125), then review guyb-123 + PR guyb-124; budget every change (guyb must stay lightweight)
+- smoke.sh on Git Bash ~8 min (target 240 s): remaining cost is plugin-side forks (readonly guard ~205 cases, brief.sh ~45 runs, check.sh); options: batch mode for guard tests (GUYB_MODE=cmd), fewer forks in brief.sh/check.sh (guyb-126 report)
 - Live check of the wrap-up: say "I need to go" in a session with a running agent (SendMessage checkpoint, TaskStop fallback, git-ops WIP push), then /guyb:start on the same machine (handoff) and on another (STATE.md + WIP branches)
-- Weight audit after the guards (guyb-105, queued): orchestrator.md tokens per session, tab-status per-call spawns, brief/gh time; budget every change (guyb must stay lightweight)
 - Cloud sessions: optional SessionStart hook to install pwsh + shellcheck so the full check list runs without setup
 - Consider item A15
 

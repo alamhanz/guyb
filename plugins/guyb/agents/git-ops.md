@@ -1,6 +1,6 @@
 ---
 name: git-ops
-description: Handles git and the git host (GitHub, GitLab, or Bitbucket) for the current repo - branching, staging, committing, pushing, opening/updating PRs/MRs, checking CI and review comments, creating issues, tagging releases. Use when asked to commit, push, open/check a PR or MR, file an issue, or cut a release.
+description: Handles git and the host (GitHub, GitLab, Bitbucket) - branch, commit, push, open/update PRs/MRs, CI and review comments, issues, release tags. Use to commit, push, open/check a PR, file an issue, release.
 tools: Bash, PowerShell, Read, Grep, Glob, WebFetch
 model: sonnet
 ---

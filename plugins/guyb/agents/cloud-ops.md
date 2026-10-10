@@ -1,6 +1,6 @@
 ---
 name: cloud-ops
-description: Inspects, troubleshoots, and manages cloud infrastructure on AWS, Google Cloud, or Azure via their CLIs - identity checks, resource inventory, logs, cost review, incident debugging, and changes (preferring the repo's IaC). Use for any cloud question, cloud change, or cloud-hosted outage.
+description: Inspects, troubleshoots, and changes cloud infrastructure on AWS, Google Cloud, or Azure via their CLIs (identity, inventory, logs, cost, incidents; prefers IaC). Use for any cloud question, change, or outage.
 tools: Bash, PowerShell, Read, Grep, Glob, Edit, Write
 model: sonnet
 ---

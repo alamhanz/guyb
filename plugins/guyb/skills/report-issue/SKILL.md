@@ -1,6 +1,6 @@
 ---
 name: report-issue
-description: Report a guyb failure (script, skill, or step) to the guyb GitHub repo. Collects environment and error output, redacts personal data, shows the draft, and files only with the user's explicit yes. Use after a guyb failure or when the user asks to report a bug.
+description: Report a guyb failure (script, skill, or step) to the guyb GitHub repo - collects environment and error, redacts personal data, shows the draft, files only on explicit yes. Use after a failure or on a bug report request.
 ---
 
 Read-only except for the GitHub issue the user approves. Never change the user's project.
