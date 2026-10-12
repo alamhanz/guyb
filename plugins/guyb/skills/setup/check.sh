@@ -151,6 +151,23 @@ fi
 if [ -f "$profile_md" ]; then add profile ok false "profile.md exists"
 else add profile warn false "no ~/.claude/guyb/profile.md" "/guyb:setup" user; fi
 
+# --- connections recorded in profile.md (local files only; notices, no fix text) ---
+gc_src="${BASH_SOURCE[0]%/*}/connections.sh"
+if [ -f "$gc_src" ]; then
+  # shellcheck disable=SC1090 # sourced next to this script
+  . "$gc_src" lib
+  gc_list=""; gc_wl=""; gc_pcfg=""; gc_ids="|"
+  guyb_conn check "$start_dir"
+  [ -n "$gc_list" ] && add connections ok false "${gc_list#connections: }"
+  while IFS=$'\037' read -r gc_t gc_n gc_r; do
+    [ -n "$gc_t" ] || continue
+    gc_id="conn-$gc_t-$gc_n"; gc_id=${gc_id//[!A-Za-z0-9._-]/_}; gc_k=1
+    while [[ $gc_ids == *"|$gc_id|"* ]]; do gc_k=$((gc_k + 1)); gc_id="${gc_id%-[0-9]*}-$gc_k"; done
+    gc_ids="$gc_ids$gc_id|"; add "$gc_id" warn false "$gc_r"
+  done <<< "$gc_wl"
+  [ -n "$gc_pcfg" ] && add project-config ok false "${gc_pcfg#project config: }"
+fi
+
 # --- toolchain (never blocking, never installs) ---
 tmo=""
 has timeout && tmo=timeout

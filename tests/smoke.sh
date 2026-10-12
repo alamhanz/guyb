@@ -44,7 +44,7 @@ export HOME="$home"
 export USERPROFILE="$home"
 
 # Stub gh. `pr list` prints $GH_STUB_LIST (tab-separated number, state, title, branch lines; exit 1 with GH_STUB_LISTFAIL);
-# `pr view N` prints $GH_STUB_STATE; anything else fails quietly (no network). GH_STUB_SLEEP delays every call, GH_STUB_LOG records the arguments.
+# GH_STUB_LISTRC makes `pr list` exit with that code (4 = not logged in); `pr view N` prints $GH_STUB_STATE; anything else fails quietly (no network). GH_STUB_SLEEP delays every call, GH_STUB_LOG records the arguments.
 stub="$tmp/stub"; mkdir -p "$stub"
 cat > "$stub/gh" <<'STUB'
 #!/bin/sh
@@ -52,6 +52,7 @@ cat > "$stub/gh" <<'STUB'
 [ -n "$GH_STUB_SLEEP" ] && sleep "$GH_STUB_SLEEP"
 if [ "$1" = pr ] && [ "$2" = list ]; then
   [ -n "$GH_STUB_LISTFAIL" ] && exit 1
+  [ -n "$GH_STUB_LISTRC" ] && exit "$GH_STUB_LISTRC"
   [ -n "$GH_STUB_LIST" ] && printf '%s\n' "$GH_STUB_LIST"
   exit 0
 fi
@@ -561,6 +562,174 @@ g_wrapper() {
   fi
 }
 
+utc_at() { # seconds from now -> UTC "YYYY-MM-DDTHH:MM:SSZ" in $utc (pure bash, civil-from-days; one `date`)
+  ue=$(( $(date +%s) + $1 )); ud=$((ue / 86400)); us=$((ue % 86400))
+  uz=$((ud + 719468)); uera=$((uz / 146097)); udoe=$((uz - uera * 146097))
+  uyoe=$(( (udoe - udoe / 1460 + udoe / 36524 - udoe / 146096) / 365 )); uy=$((uyoe + uera * 400))
+  udoy=$((udoe - (365 * uyoe + uyoe / 4 - uyoe / 100))); ump=$(( (5 * udoy + 2) / 153 ))
+  udd=$((udoy - (153 * ump + 2) / 5 + 1)); if [ "$ump" -lt 10 ]; then um=$((ump + 3)); else um=$((ump - 9)); fi
+  [ "$um" -le 2 ] && uy=$((uy + 1))
+  utc=$(printf '%04d-%02d-%02dT%02d:%02d:%02dZ' "$uy" "$um" "$udd" $((us / 3600)) $((us % 3600 / 60)) $((us % 60)))
+}
+
+g_connections() {
+  echo "connections: lines, warnings, hook (fixture config dirs, stub CLIs)"
+  cx="$HOME/cx"; mkdir -p "$cx/stub" "$cx/claude" "$cx/gh cfg" "$cx/gcloud/configurations" "$cx/az" "$cx/xdg" "$cx/appdata" "$cx/home/.aws/login/cache"
+  conn="$root/plugins/guyb/skills/setup/connections.sh"
+  slog="$cx/gh.log"; clog="$cx/cli.log"; : > "$slog"; : > "$clog"
+  for t in aws gcloud az wrangler glab guyb-stub-cli; do printf '#!/bin/sh\necho "%s $*" >> "%s"\nexit 1\n' "$t" "$clog" > "$cx/stub/$t"; chmod +x "$cx/stub/$t"; done
+  export PATH="$cx/stub:$PATH"
+  export CLAUDE_CONFIG_DIR="$cx/claude" GH_CONFIG_DIR="$cx/gh cfg" AZURE_CONFIG_DIR="$cx/az" XDG_CONFIG_HOME="$cx/xdg" APPDATA="$cx/appdata" GH_STUB_LOG="$slog"
+  export CLOUDSDK_CONFIG="${cx//\//\\}\\gcloud" # backslashes on purpose: the scripts turn them into slashes
+  unset AWS_CONFIG_FILE AWS_SHARED_CREDENTIALS_FILE AWS_ACCESS_KEY_ID AWS_PROFILE GH_TOKEN GITHUB_TOKEN CLOUDFLARE_API_TOKEN BITBUCKET_EMAIL BITBUCKET_API_TOKEN
+  secret_a="SENTINEL-SECRET-1"; secret_b="SENTINEL-AWS-CACHE-2"
+  allout=""
+  # the scripts read $HOME/.aws and $HOME/.claude/guyb/profile.md
+  export HOME="$cx/home"; mkdir -p "$HOME/.claude/guyb"; prof="$HOME/.claude/guyb/profile.md"
+  . "$conn" lib
+  gc_lines=""
+  cn() { guyb_conn brief "$1"; guyb_conn_lines; cnout=$gc_lines; allout="$allout$cnout"; } # dir: the three line kinds in $cnout
+  # fixture state: everything fine
+  utc_at -3600; fresh=$utc
+  printf '{"accessToken":{"secretAccessKey":"%s","expiresAt":"%s"},"refreshToken":"x"}' "$secret_b" "$fresh" > "$HOME/.aws/login/cache/a.json"
+  printf '[default]\nregion = ap-northeast-1\n' > "$HOME/.aws/config"
+  printf 'github.com:\n    users:\n        alamhanz:\n    user: alamhanz\n' > "$GH_CONFIG_DIR/hosts.yml"
+  printf 'x' > "$cx/gcloud/configurations/config_default"; : > "$cx/gcloud/credentials.db"
+  printf '\357\273\277{"subscriptions":[{"id":"SUB-123"}]}' > "$AZURE_CONFIG_DIR/azureProfile.json"
+  printf '{\n  "numStartups": 1,\n  "mcpServers": {\n    "cloudflare": {\n      "type": "http"\n    },\n    "Neon": {\n      "type": "http"\n    }\n  },\n  "projects": {\n    "x": {\n      "mcpServers": {\n        "zzz": {}\n      }\n    }\n  }\n}\n' > "$CLAUDE_CONFIG_DIR/.claude.json"
+  export CLOUDFLARE_API_TOKEN="$secret_a"
+  full='# Profile\r\n\r\n## Git\r\n- github thing\r\n\r\n## Connections\r\n<!-- guyb:connections - "- <type> <name>: key=value ...", no secrets -->\r\n- github alamhanz: cli=gh default=yes\r\n- aws default: region=ap-northeast-1 account=1 login=aws-login\r\n- cloudflare main: auth=env\r\n- mcp cloudflare: url=https://mcp.cloudflare.com/mcp scope=user auth=oauth\r\n- mcp Neon: url=x scope=user\r\n- gcp default: project=p\r\n- azure sub: subscription=SUB-123\r\n- gitlab gl: cli=glab\r\n- foo bar: x=y\r\n\r\n## Other\r\n- aws nothing: region=x\r\n'
+  printf "$full" > "$prof"
+  noproj="$tmp/conn-root"; mkdir -p "$noproj"; noproj_w=${noproj/#"$tmp"/$tmp_w}
+  cn "$noproj_w"
+  want='connections: github alamhanz, aws default (ap-northeast-1), cloudflare main, mcp cloudflare (user), mcp Neon (user), gcp default (p), azure sub, gitlab gl, foo bar'
+  expect_eq "connections all ok (CRLF profile, spaces and backslashes in config paths)" "$cnout" "$want"
+  # AWS
+  printf '[profile other]\nregion = x\n' > "$HOME/.aws/config"; cn "$noproj_w"
+  expect_has "aws profile missing" "$cnout" "warn: connection aws default: profile default missing from ~/.aws/config"
+  printf '[default]\nregion = ap-northeast-1\n' > "$HOME/.aws/config"
+  utc_at -259200; old=$utc
+  printf '{"accessToken":{"secretAccessKey":"%s","expiresAt":"%s"}}' "$secret_b" "$old" > "$HOME/.aws/login/cache/a.json"; cn "$noproj_w"
+  expect_has "aws login cache 3 days old" "$cnout" "warn: connection aws default: login session likely expired (last refresh ${old%%T*})"
+  printf '{"expiresAt":"%s"}' "$fresh" > "$HOME/.aws/login/cache/b.json"; cn "$noproj_w"
+  expect_lacks "aws login: any fresh cache keeps it silent" "$cnout" "login session"
+  rm -f "$HOME/.aws/login/cache/b.json"; (export AWS_ACCESS_KEY_ID=x; cn "$noproj_w"; echo "$cnout" > "$cx/o2")
+  IFS= read -r -d '' o2 < "$cx/o2"
+  expect_lacks "aws login: static keys in env skip the expiry check" "$o2" "login session"
+  printf '{"accessToken":{"secretAccessKey":"%s","expiresAt":"%s"}}' "$secret_b" "$fresh" > "$HOME/.aws/login/cache/a.json"; cn "$noproj_w"
+  expect_eq "aws login cache 1 h left" "$cnout" "$want"
+  # GitHub
+  printf 'github.com:\n    users:\n        someone:\n    user: someone\n' > "$GH_CONFIG_DIR/hosts.yml"; cn "$noproj_w"
+  expect_has "gh other user" "$cnout" "warn: connection github alamhanz: gh not logged in as alamhanz"
+  (export GH_TOKEN=x; cn "$noproj_w"; echo "$cnout" > "$cx/o3")
+  IFS= read -r -d '' o3 < "$cx/o3"; expect_lacks "gh token in env" "$o3" "gh not logged in"
+  printf 'github.com:\n    user: alamhanz\n' > "$GH_CONFIG_DIR/hosts.yml"
+  # MCP, Cloudflare, gcloud, az
+  printf '{"mcpServers": {"cloudflare": {}}}\n' > "$CLAUDE_CONFIG_DIR/.claude.json"; cn "$noproj_w"
+  expect_lacks "mcp inline config: names not read, silent" "$cnout" "MCP server"
+  printf '{\n  "mcpServers": {\n    "cloudflare": {}\n  }\n}\n' > "$CLAUDE_CONFIG_DIR/.claude.json"; cn "$noproj_w"
+  expect_has "mcp name missing" "$cnout" "warn: connection mcp Neon: MCP server not configured at user scope"
+  expect_lacks "mcp name present" "$cnout" "connection mcp cloudflare"
+  printf '{"mcpServers":{"cloudflare":{}}}' > "$CLAUDE_CONFIG_DIR/.claude.json"; cn "$noproj_w"
+  expect_lacks "mcp config not pretty-printed: silent" "$cnout" "MCP server"
+  rm -f "$CLAUDE_CONFIG_DIR/.claude.json"; cn "$noproj_w"; expect_lacks "mcp config missing: silent" "$cnout" "MCP server"
+  (unset CLOUDFLARE_API_TOKEN; cn "$noproj_w"; echo "$cnout" > "$cx/o1")
+  IFS= read -r -d '' o1 < "$cx/o1"
+  expect_has "cloudflare token unset" "$o1" "warn: connection cloudflare main: CLOUDFLARE_API_TOKEN not set in this session"
+  rm -f "$GH_CONFIG_DIR/hosts.yml" "$cx/gcloud/credentials.db" "$AZURE_CONFIG_DIR/azureProfile.json"; cn "$noproj_w"
+  expect_has "gcloud not logged in" "$cnout" "warn: connection gcp default: not logged in"
+  expect_has "az subscription missing" "$cnout" "warn: connection azure sub: subscription SUB-123 not in az profile"
+  rm -f "$cx/gcloud/configurations/config_default"; cn "$noproj_w"
+  expect_has "gcloud configuration missing" "$cnout" "warn: connection gcp default: configuration default missing"
+  # CLI not on PATH, wrangler, bitbucket, unknown type
+  printf '# P\n\n## Connections\n- db pg: cli=guyb-no-such-cli\n- service svc: cli=guyb-stub-cli env=GUYB_SMOKE_NOPE\n- cloudflare w: auth=wrangler\n- bitbucket bb: env=BITBUCKET_EMAIL,BITBUCKET_API_TOKEN\n- zzz yy: k=v\n' > "$prof"; cn "$noproj_w"
+  expect_has "cli missing" "$cnout" "warn: connection db pg: guyb-no-such-cli not on PATH"
+  expect_lacks "cli present (stub, not run)" "$cnout" "guyb-stub-cli not on PATH"
+  expect_has "service env var" "$cnout" "warn: connection service svc: GUYB_SMOKE_NOPE not set in this session"
+  expect_has "wrangler not logged in" "$cnout" "warn: connection cloudflare w: wrangler not logged in"
+  expect_has "bitbucket env vars" "$cnout" "warn: connection bitbucket bb: BITBUCKET_API_TOKEN not set in this session"
+  expect_has "unknown type is listed" "$cnout" ", zzz yy"
+  expect_lacks "unknown type is not checked" "$cnout" "connection zzz"
+  mkdir -p "$XDG_CONFIG_HOME/.wrangler/config"; : > "$XDG_CONFIG_HOME/.wrangler/config/default.toml"; cn "$noproj_w"
+  expect_lacks "wrangler logged in" "$cnout" "wrangler not logged in"
+  # profile without section, empty section
+  printf '# Profile\n\n## Git\n- x\n' > "$prof"; cn "$noproj_w"
+  expect_eq "profile without Connections section" "$cnout" "connections: not recorded in ~/.claude/guyb/profile.md"
+  printf '# Profile\n\n## Connections\n<!-- comment -->\n\n## Other\n' > "$prof"; cn "$noproj_w"
+  expect_eq "empty Connections section" "$cnout" "connections: not recorded in ~/.claude/guyb/profile.md"
+  # project override and project config lines
+  printf "$full" > "$prof"
+  pj="$tmp/conn-proj"; make_fixture "$pj"; pj_w=${pj/#"$tmp"/$tmp_w}
+  rm -f "$pj/.claude/CLAUDE.md"; cn "$pj_w"
+  expect_has "project without CLAUDE.md" "$cnout" "project config: none - follows global (~/.claude/guyb/profile.md)"
+  printf '# fixture\n\n- Cloud: none\n\n## Credentials (names only)\nNone.\n\nmax_parallel: 3\ncleanup_days: 5\n' > "$pj/.claude/CLAUDE.md"; cn "$pj_w"
+  expect_has "project cloud none, credentials none" "$cnout" "project config: cloud none; credentials none; max_parallel 3; cleanup limits"
+  printf '# fixture\n\n## Connections\n- aws prod: region=eu-west-1\n\n## Credentials\n- A: x\n- B: y\n' > "$pj/.claude/CLAUDE.md"; : > "$pj/.mcp.json"; cn "$pj_w"
+  expect_has "project override replaces the global aws entry" "$cnout" "connections: github alamhanz, cloudflare main, mcp cloudflare (user), mcp Neon (user), gcp default (p), azure sub, gitlab gl, foo bar, aws prod (project)"
+  expect_lacks "project override: global aws entry gone" "$cnout" "aws default"
+  expect_has "project config with connections" "$cnout" "project config: connections aws prod; credentials 2 names; .mcp.json"
+  cn "$noproj_w"; expect_lacks "projects root: no project line" "$cnout" "project config:"
+  rm -f "$prof"; cn "$pj_w"
+  expect_lacks "no profile: no connections line" "$cnout" "connections:"
+  expect_has "no profile: project line stays" "$cnout" "project config:"
+  printf "$full" > "$prof"
+  # the real scripts: brief.sh, check.sh, the hook
+  printf '{
+  "mcpServers": {
+    "Neon": {}
+  }
+}
+' > "$CLAUDE_CONFIG_DIR/.claude.json"
+  mkdir -p "$GH_CONFIG_DIR"; printf 'github.com:\n    user: alamhanz\n' > "$GH_CONFIG_DIR/hosts.yml"
+  bout=$(GH_STUB_LISTRC=4 bash "$brief" "$pj_w" 2>&1)
+  expect_has "brief.sh connections line" "$bout" "connections: github alamhanz"
+  expect_has "brief.sh warn line" "$bout" "warn: connection mcp cloudflare: MCP server not configured at user scope"
+  expect_has "brief.sh gh auth failed" "$bout" "warn: connection github alamhanz: gh auth failed"
+  expect_has "brief.sh project config" "$bout" "project config: connections aws prod"
+  cnt "$slog" 'pr list'; expect_eq "brief.sh made the one gh list call" "$cnt_n" 1
+  bout2=$(bash "$brief" "$pj_w" 2>&1)
+  expect_lacks "brief.sh without gh failure" "$bout2" "gh auth failed"
+  cr=${bout//[!$'\r']/}; expect_eq "brief.sh connection lines carry no CR" "${#cr}" 0
+  printf '
+## Connections
+- bitbucket bb: env=BITBUCKET_EMAIL,BITBUCKET_API_TOKEN
+' >> "$prof" # a second section is read too
+  bash "$check" "$pj_w" > "$cx/check.json" 2>/dev/null
+  if json_ok "$(win "$cx/check.json")"; then ok; else no "check.sh with connections: output is not valid JSON"; fi
+  IFS= read -r -d '' cj < "$cx/check.json"
+  expect_has "check.sh connections entry" "$cj" '"id":"connections","status":"ok","blocking":false,"detail":"github alamhanz'
+  expect_has "check.sh conn warn entry" "$cj" '"id":"conn-mcp-cloudflare","status":"warn","blocking":false,"detail":"MCP server not configured at user scope","fix":"","fixBy":"none"'
+  expect_has "check.sh project-config entry" "$cj" '"id":"project-config","status":"ok"'
+  expect_has "check.sh two warnings of one connection get distinct ids" "$cj" '"id":"conn-bitbucket-bb-2"'
+  printf "$full" > "$prof"
+  hk() { # dir: hook output (hooks.json command through bash -c when jq is there)
+    if [ -n "$hcmd" ]; then CLAUDE_PROJECT_DIR="$1" bash -c "$hcmd" </dev/null 2>&1; else CLAUDE_PROJECT_DIR="$1" bash -c ". \"$conn_w\" hook" </dev/null 2>&1; fi
+  }
+  conn_w=$(win "$conn"); hcmd=""
+  if command -v jq >/dev/null 2>&1; then
+    hcmd=$(jq -r '.hooks.SessionStart[] | select(.matcher == "startup") | .hooks[] | select(.shell == "bash") | select(.command | contains("connections.sh")) | .command' "$root/plugins/guyb/hooks/hooks.json" | tr -d '\r')
+    expect_eq "hooks.json startup connections entry" "$(printf '%s\n' "$hcmd" | grep -c .)" 1
+    hcmd=${hcmd//\$\{CLAUDE_PLUGIN_ROOT\}/${root_w}/plugins/guyb}
+  fi
+  hout=$(hk "$pj_w")
+  printf '%s\n' "$hout" > "$cx/hook.json"
+  if json_ok "$(win "$cx/hook.json")"; then ok; else no "hook output is not valid JSON"; fi
+  expect_has "hook systemMessage" "$hout" '{"systemMessage":"guyb connections: github alamhanz'
+  expect_has "hook warn line" "$hout" '\nguyb warn: connection mcp cloudflare: MCP server not configured at user scope'
+  expect_has "hook project line" "$hout" '\nguyb project config: connections aws prod'
+  expect_eq "hook prints one line" "$(printf '%s\n' "$hout" | grep -c .)" 1
+  hroot=$(hk "$noproj_w")
+  expect_lacks "hook at the projects root: no project line" "$hroot" "project config"
+  rm -f "$prof"; expect_eq "hook without profile.md prints nothing" "$(hk "$pj_w")" ""
+  printf '# P\n\n## Connections\n- weird "name\\x: a=b\n' > "$prof"; hweird=$(hk "$pj_w")
+  printf '%s\n' "$hweird" > "$cx/hook2.json"
+  if json_ok "$(win "$cx/hook2.json")"; then ok; else no "hook output with quotes and backslashes in names is not valid JSON"; fi
+  allout="$allout$bout$bout2$cj$hout$hroot$hweird"
+  expect_lacks "no secret value in any output (env token)" "$allout" "$secret_a"
+  expect_lacks "no secret value in any output (aws cache)" "$allout" "$secret_b"
+  if [ -s "$clog" ]; then no "a CLI was run: $(cat "$clog")"; else ok; fi
+}
+
 res="$tmp/res"; mkdir -p "$res"
 gorder=""
 spawn() { # name function args...: run the group in the background, own HOME, output to $res/<name>; at most $jobs_max at once
@@ -610,6 +779,7 @@ spawn gitignore g_gitignore
 spawn overdue g_overdue
 spawn emptysec g_emptysec
 spawn wrapper g_wrapper
+spawn connections g_connections
 wait
 
 for gname in $gorder; do

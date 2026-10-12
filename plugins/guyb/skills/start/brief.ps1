@@ -54,7 +54,7 @@ function Get-GhList {
     $w = Wait-Gh $script:ghH (5000 - [int]$script:ghWatch.ElapsedMilliseconds)
     $script:ghSpent += [int]$sw.ElapsedMilliseconds
     foreach ($l in @($w.Out -split "`r?`n")) { if ($l) { [void]$rows.Add(@($l -split "`t")) } }
-    $script:ghRes = [pscustomobject]@{ Rows = $rows; TimedOut = $w.TimedOut }
+    $script:ghRes = [pscustomobject]@{ Rows = $rows; TimedOut = $w.TimedOut; Code = $w.Code }
     $script:ghH = $null
   }
   return $script:ghRes
@@ -70,6 +70,15 @@ foreach ($c in @(@((Join-Path $Dir '.claude/CLAUDE.md'), 'project'), @((Join-Pat
   if ($m.Count -gt 0) { $maxPar = $m[0]; $maxSrc = $c[1]; break }
 }
 Add-Line "max parallel: $maxPar ($maxSrc)"
+
+# connections (profile.md), broken ones and the project override line: local files only, shared with check.ps1
+$gcConn = $null
+$gcSrc = Join-Path $PSScriptRoot '../setup/connections.ps1'
+if (Test-Path -LiteralPath $gcSrc) {
+  . $gcSrc
+  $gcConn = Get-GuybConnections -Mode brief -Dir $Dir
+  foreach ($gl in (Get-GuybConnLines $gcConn)) { Add-Line $gl }
+}
 
 # Per-project files live in .claude/guyb/; the legacy .claude/STATE.md and .claude/pipeline/ are read as a fallback (never moved here).
 # A legacy STATE.md counts as guyb's only with our marker or our structure; anything else is someone else's file.
@@ -158,6 +167,10 @@ if ($isGit) {
   git -C $Dir log --oneline -5 2>$null | ForEach-Object { Add-Line "  $_" }
 
   if (Get-Command gh -ErrorAction SilentlyContinue) {
+    # exit 4 = gh needs a login; a recorded github connection gets the warning unless the hosts.yml check already raised one
+    if ((Get-GhList).Code -eq 4 -and $gcConn -and $gcConn.Gh1 -and @($gcConn.Warns | Where-Object { $_.Reason -like 'gh not logged in as*' }).Count -eq 0) {
+      Add-Line "warn: connection github $($gcConn.Gh1): gh auth failed"
+    }
     $prs = @((Get-GhList).Rows | Where-Object { $_.Count -ge 4 -and $_[1] -eq 'OPEN' } | Select-Object -First 5)
     if ($prs.Count -gt 0) {
       Add-Line 'open PRs:'

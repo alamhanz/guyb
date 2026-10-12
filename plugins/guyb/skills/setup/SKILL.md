@@ -1,11 +1,10 @@
 ---
 name: setup
-description: First-run global setup wizard - git identity, git host (GitHub/GitLab/Bitbucket), cloud (AWS/GCP/Azure), database clients, and other service logins. Installs missing CLIs after confirmation, guides logins, verifies them, and records a no-secrets profile at ~/.claude/guyb/profile.md. Re-run any time to add or fix a provider.
-disable-model-invocation: true
-argument-hint: "[optional: only one area, e.g. git | cloud | db | other]"
+description: Global guyb setup - list, add, change or remove connections (git host, AWS/GCP/Azure, Cloudflare, MCP servers, DB clients), recorded without secrets in ~/.claude/guyb/profile.md. Use for "add X to my guyb setup" / "connect guyb to X".
+argument-hint: "[connections | add <x> | change <x> | remove <x> | git | cloud | db | other]"
 ---
 
-Run the guyb global setup. Scope: "$ARGUMENTS" (empty = everything). Work through the sections in order, keeping a todo list. Do this in the main session, not in a subagent, because it needs the user's answers and logins.
+Run the guyb global setup. Scope: "$ARGUMENTS" (empty = everything). `connections`, `add`, `change`, `remove`: go to "Connections" below. Otherwise work through the sections in order, keeping a todo list. Do this in the main session, not in a subagent, because it needs the user's answers and logins. If the model invoked this skill from a request, confirm the intent in one line before changing anything.
 
 ## Ground rules (say these to the user once, briefly)
 - guyb never stores secret values. Tools keep their own credentials (`gh`, `glab`, `aws`, `gcloud`, `az` each have their own credential store). guyb only records *which* accounts and profiles exist.
@@ -17,7 +16,7 @@ Run the guyb global setup. Scope: "$ARGUMENTS" (empty = everything). Work throug
 
 - Path: `${CLAUDE_SKILL_DIR}/check.ps1` (PowerShell: `pwsh -NoProfile -File "${CLAUDE_SKILL_DIR}/check.ps1" -StartDir "<session start folder>"`; use `powershell` if `pwsh` is missing) or `bash "${CLAUDE_SKILL_DIR}/check.sh" "<session start folder>"`. `${CLAUDE_SKILL_DIR}` is fine inside this skill; callers outside it (e.g. `/guyb:launch`) use `${CLAUDE_PLUGIN_ROOT}/skills/setup` first. On Windows always use `check.ps1`; `check.sh` is for macOS/Linux. Strip any trailing `\` or `/` from the folder passed as `-StartDir` (a trailing backslash breaks `pwsh -File` quoting). If the variable arrives unexpanded or the file is missing, fall back to `${CLAUDE_PLUGIN_ROOT}/skills/setup/check.ps1`, then to `<repo>/plugins/guyb/skills/setup/` with the repo from `~/.claude/plugins/known_marketplaces.json` (`guyb.source.path`). A freshly added script only exists in the plugin cache after a plugin update.
 - JSON: `{version, os, root, repo, blockingFailures, checks:[{id, status: ok|warn|fail|skip, blocking, detail, fix, fixBy}]}`. `fixBy` is `claude-after-consent` (show the `fix` command, run it only after the user agrees), `user` (the user runs it, with `!` for logins), or `none`.
-- Checks: `claude`, `git`, `git-identity`, `launcher` (blocking: a `fail` here must be fixed or handed to the user before launching); `root` (GUYB_ROOT from process env, user env, then the `$PROFILE`/rc line), `launcher-profile`, `gh-auth`, `git-cred`, `terminal` (wt.exe / tmux), `plugin` (installed vs source version and sha), `profile` (warnings: show them in one line each and continue); `container` (docker/podman and whether the daemon answers within 3 s), `python`, `node`, `uv` (info only, never blocking; a missing runtime is `skip`, because per-project needs are checked by `/guyb:start` and fixed by `/guyb:env`).
+- Checks: `claude`, `git`, `git-identity`, `launcher` (blocking: a `fail` here must be fixed or handed to the user before launching); `root` (GUYB_ROOT from process env, user env, then the `$PROFILE`/rc line), `launcher-profile`, `gh-auth`, `git-cred`, `terminal` (wt.exe / tmux), `plugin` (installed vs source version and sha), `profile`, `conn-<type>-<name>` (recorded connection looks broken, local check only; notice, no fix) (warnings: show them in one line each and continue); `connections` and `project-config` (info); `container` (docker/podman and whether the daemon answers within 3 s), `python`, `node`, `uv` (info only, never blocking; a missing runtime is `skip`, because per-project needs are checked by `/guyb:start` and fixed by `/guyb:env`).
 - For each non-ok check, follow the ground rules above: global changes (`git config --global`, appending to `$PROFILE`, `gh auth setup-git`, plugin update) only after consent; `gh auth login` and other logins are run by the user. Missing git host or cloud logins are handled by the sections below, so offer the full wizard for those.
 - Never print or ask for secret values while fixing a check.
 
@@ -75,6 +74,18 @@ Offers a Claude Code status line: `guyb > <project>  <branch>  N running  M ques
 3. **Present:** show the existing value. Ask keep (default) or replace. Replace only on an explicit yes, and tell the user the previous value so they can restore it. A status line that already runs the guyb script only needs its copy refreshed.
 4. **Uninstall:** remove the `statusLine` key from `~/.claude/settings.json` (or put back the previous value shown earlier) and delete `~/.claude/guyb/statusline.sh` / `statusline.ps1`. After a plugin update, re-run `/guyb:setup status line` to refresh the copy.
 
+## Connections (list, add, change, remove)
+Use for `connections|add|change|remove` or a request like "add Cloudflare to guyb". Every write to `profile.md`, `claude mcp add/remove`, and every install needs consent first; logins and OAuth are done by the user.
+- **list** (local, fast): run the check script (above) and show a table type | name | detail | status from its `connections` and `conn-*` entries. Offer **verify** only on request (network, takes seconds each): `gh auth status`, `aws sts get-caller-identity --profile <p>`, `gcloud auth list`, `az account show`, `wrangler whoami`, `claude mcp list`.
+- **add**: git hosts and clouds as in sections 3-4. Cloudflare, either or both:
+  - Remote MCP: show `claude mcp add --transport http -s user cloudflare https://mcp.cloudflare.com/mcp`, run it after consent, then the user runs `/mcp` and completes OAuth in the browser.
+  - wrangler: install with consent (`npm i -g wrangler`), then the user runs `! wrangler login`, or sets user-level env vars `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` themselves (same method as Bitbucket). Verify with `wrangler whoami`.
+  - Any other MCP server at user scope: `claude mcp add --transport http|sse -s user <name> <url>`, or stdio `claude mcp add -s user <name> -- <cmd> <args>`. Prefer OAuth. A static token never goes in a command or the chat: the user sets a user-level env var and the config references it as `${VAR}` (check the Claude Code docs that user-scope MCP config expands it; if not, the user runs the add command in their own terminal outside Claude).
+- **change**: show the diff of the recorded line (region, profile, account) and edit it after consent; re-run a login only if the user wants.
+- **remove**: MCP: `claude mcp remove -s user <name>` after consent. CLI providers: delete the profile line only. Logouts (`gh auth logout`, `wrangler logout`) only if asked, run by the user.
+- **record**: after each add/change/remove, show the diff and update `## Connections` in `profile.md` (grammar in the template below). Never secret values.
+- **migrate**: if `profile.md` has no `## Connections`, draft it from the prose sections plus local detection (git host login, `~/.aws/config` profiles, `claude mcp list` names the user confirms) and write it on consent. Until then the startup notice says `not recorded`. Providers the prose marks as unused stay out.
+
 ## 7. Record the profile (no secrets)
 Write `~/.claude/guyb/profile.md`:
 ```md
@@ -91,8 +102,15 @@ Updated: <date>
 - psql <ver>, mongosh <ver>
 ## Other services / global env var names
 - vercel (logged in as <user>); OPENAI_API_KEY (user env var)
+## Connections
+<!-- guyb:connections - "- <type> <name>: key=value ...", no secrets; written by /guyb:setup -->
+- github <user>: cli=gh default=yes
+- aws <profile>: region=<r> account=<id> login=sso|aws-login|static
+- cloudflare <name>: account=<id> auth=wrangler|env
+- mcp <name>: url=<url> scope=user auth=oauth
 ## Orchestrator
 - max_parallel: 5
 ```
+`## Connections` is what the startup notice and the brief read; the other sections are notes. One line per connection, `- <type> <name>: <k=v ...>`, no spaces in names or values. Types: github gitlab bitbucket aws gcp azure cloudflare mcp db service. Keys: github/gitlab `cli host default`; bitbucket `env=BITBUCKET_EMAIL,BITBUCKET_API_TOKEN`; aws `region account login`; gcp `project region` (name = gcloud configuration); azure `subscription`; cloudflare `account auth`; mcp `url|cmd transport scope auth`; db `cli`; service `cli|env`. Unknown keys and types are listed, not checked. A project's `.claude/CLAUDE.md` may carry the same section; it overrides the global one per type.
 
 Finish with the table from step 0 updated (all green or what's left), and remind the user that project-specific credentials are added with `/guyb:creds` inside that project.

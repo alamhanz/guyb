@@ -52,7 +52,7 @@ if (-not $Group) {
   # Orchestrator: one child process per group, slowest first (hung probes and the 5 s gh budget), at most $jobsMax at a time.
   # The timed groups (hung probes, 5 s gh budget) run first and alone: on a 2-core CI runner a full pool slows brief past their limits.
   $timed = 'docker', 'ghsleep'
-  $groups = 'matrix', 'readonly', 'migration', 'env', 'check', 'cleanup_over', 'cleanup_under', 'overdue', 'formats', 'drift', 'guard', 'plugin', 'gitignore', 'emptysec', 'wrapper'
+  $groups = 'matrix', 'readonly', 'migration', 'env', 'check', 'cleanup_over', 'cleanup_under', 'overdue', 'formats', 'drift', 'guard', 'plugin', 'gitignore', 'emptysec', 'wrapper', 'connections'
   $running = New-Object System.Collections.ArrayList
   foreach ($g in $timed) { [void]$running.Add([pscustomobject]@{ Name = $g; H = (Start-Proc $ps ('-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -Group ' + $g) '') }) }
   while (@($running | Where-Object { -not $_.H.P.HasExited }).Count -gt 0) { Start-Sleep -Milliseconds 200 }
@@ -87,7 +87,7 @@ try {
   $env:GIT_TERMINAL_PROMPT = '0'
 
   # Stub gh. `pr list` prints the file named by GH_STUB_LISTFILE (tab-separated number, state, title, branch lines; exit 1 with GH_STUB_LISTFAIL);
-  # `pr view N` prints $GH_STUB_STATE (default OPEN); anything else fails quietly. GH_STUB_SLEEP (seconds) delays every call, GH_STUB_LOG records the arguments.
+  # GH_STUB_LISTRC makes `pr list` exit with that code (4 = not logged in); `pr view N` prints $GH_STUB_STATE (default OPEN); anything else fails quietly. GH_STUB_SLEEP (seconds) delays every call, GH_STUB_LOG records the arguments.
   $stub = Join-Path $tmp 'stub'
   New-Item -ItemType Directory -Force -Path $stub | Out-Null
   if ($isWin) {
@@ -103,6 +103,7 @@ try {
       'exit /b 1',
       ':list',
       'if not "%GH_STUB_LISTFAIL%"=="" exit /b 1',
+      'if not "%GH_STUB_LISTRC%"=="" exit /b %GH_STUB_LISTRC%',
       'if not "%GH_STUB_LISTFILE%"=="" type "%GH_STUB_LISTFILE%"',
       'exit /b 0',
       ':view',
@@ -116,6 +117,7 @@ try {
       '[ -n "$GH_STUB_SLEEP" ] && sleep "$GH_STUB_SLEEP"',
       'if [ "$1" = pr ] && [ "$2" = list ]; then',
       '  [ -n "$GH_STUB_LISTFAIL" ] && exit 1',
+      '  [ -n "$GH_STUB_LISTRC" ] && exit "$GH_STUB_LISTRC"',
       '  [ -n "$GH_STUB_LISTFILE" ] && cat "$GH_STUB_LISTFILE"',
       '  exit 0',
       'fi',
@@ -621,6 +623,149 @@ try {
           Expect-Has "wrapper $($hh[0]) reviewer git add" $wr[0].Text 'guyb: blocked - read-only agent'
         }
       } finally { try { [Console]::InputEncoding = $ie } catch { } }
+    }
+
+    'connections' {
+      Write-Host 'connections: lines, warnings (fixture config dirs, stub CLIs)'
+      $cx = Join-Path $tmp 'cx'
+      $cxHome = Join-Path $cx 'home'
+      foreach ($d in 'stub', 'claude', 'gh cfg', 'gcloud/configurations', 'az', 'xdg', 'appdata', 'home/.aws/login/cache', 'home/.claude/guyb') { New-Item -ItemType Directory -Force -Path (Join-Path $cx $d) | Out-Null }
+      $clog = Join-Path $cx 'cli.log'; $glog = Join-Path $cx 'gh.log'
+      Write-File $clog ''; Write-File $glog ''
+      foreach ($t in 'aws', 'gcloud', 'az', 'wrangler', 'glab', 'guyb-stub-cli') {
+        if ($isWin) { Write-File (Join-Path $cx "stub/$t.cmd") ("@echo off`r`necho $t %*>>`"$clog`"`r`nexit /b 1`r`n") }
+        else { Write-File (Join-Path $cx "stub/$t") ("#!/bin/sh`necho `"$t `$*`" >> `"$clog`"`nexit 1`n"); & chmod +x (Join-Path $cx "stub/$t") }
+      }
+      $env:PATH = (Join-Path $cx 'stub') + $sep + $env:PATH
+      $env:CLAUDE_CONFIG_DIR = Join-Path $cx 'claude'; $env:GH_CONFIG_DIR = Join-Path $cx 'gh cfg'; $env:AZURE_CONFIG_DIR = Join-Path $cx 'az'
+      $env:XDG_CONFIG_HOME = Join-Path $cx 'xdg'; $env:APPDATA = Join-Path $cx 'appdata'; $env:CLOUDSDK_CONFIG = Join-Path $cx 'gcloud'
+      $env:GH_STUB_LOG = $glog
+      foreach ($v in 'AWS_CONFIG_FILE', 'AWS_SHARED_CREDENTIALS_FILE', 'AWS_ACCESS_KEY_ID', 'AWS_PROFILE', 'GH_TOKEN', 'GITHUB_TOKEN', 'CLOUDFLARE_API_TOKEN', 'BITBUCKET_EMAIL', 'BITBUCKET_API_TOKEN') { Remove-Item "Env:$v" -ErrorAction SilentlyContinue }
+      $env:HOME = $cxHome; $env:USERPROFILE = $cxHome
+      Set-Variable -Name HOME -Value $cxHome -Force -Scope Global # $HOME is read at startup; the scripts under test read the variable
+      . (Join-Path $root 'plugins/guyb/skills/setup/connections.ps1')
+      $secretA = 'SENTINEL-SECRET-1'; $secretB = 'SENTINEL-AWS-CACHE-2'
+      $prof = Join-Path $cxHome '.claude/guyb/profile.md'
+      $allOut = ''
+      function Cn($dir) { $script:cnOut = (Get-GuybConnLines (Get-GuybConnections -Mode brief -Dir $dir)) -join "`n"; $script:allOut += $script:cnOut }
+      $fresh = [datetime]::UtcNow.AddHours(-1).ToString('yyyy-MM-ddTHH:mm:ssZ')
+      $awsCache = Join-Path $cxHome '.aws/login/cache/a.json'
+      Write-File $awsCache ('{"accessToken":{"secretAccessKey":"' + $secretB + '","expiresAt":"' + $fresh + '"},"refreshToken":"x"}')
+      Write-File (Join-Path $cxHome '.aws/config') "[default]`nregion = ap-northeast-1`n"
+      $hosts = Join-Path $env:GH_CONFIG_DIR 'hosts.yml'
+      Write-File $hosts "github.com:`n    users:`n        alamhanz:`n    user: alamhanz`n"
+      Write-File (Join-Path $cx 'gcloud/configurations/config_default') 'x'; Write-File (Join-Path $cx 'gcloud/credentials.db') ''
+      [System.IO.File]::WriteAllText((Join-Path $cx 'az/azureProfile.json'), '{"subscriptions":[{"id":"SUB-123"}]}', (New-Object System.Text.UTF8Encoding($true)))
+      $cj = Join-Path $cx 'claude/.claude.json'
+      Write-File $cj "{`n  `"numStartups`": 1,`n  `"mcpServers`": {`n    `"cloudflare`": {`n      `"type`": `"http`"`n    },`n    `"Neon`": {`n      `"type`": `"http`"`n    }`n  },`n  `"projects`": {`n    `"x`": {`n      `"mcpServers`": {`n        `"zzz`": {}`n      }`n    }`n  }`n}`n"
+      $env:CLOUDFLARE_API_TOKEN = $secretA
+      $full = "# Profile`r`n`r`n## Git`r`n- github thing`r`n`r`n## Connections`r`n<!-- guyb:connections - `"- <type> <name>: key=value ...`", no secrets -->`r`n- github alamhanz: cli=gh default=yes`r`n- aws default: region=ap-northeast-1 account=1 login=aws-login`r`n- cloudflare main: auth=env`r`n- mcp cloudflare: url=https://mcp.cloudflare.com/mcp scope=user auth=oauth`r`n- mcp Neon: url=x scope=user`r`n- gcp default: project=p`r`n- azure sub: subscription=SUB-123`r`n- gitlab gl: cli=glab`r`n- foo bar: x=y`r`n`r`n## Other`r`n- aws nothing: region=x`r`n"
+      Write-File $prof $full
+      $noproj = Join-Path $tmp 'conn-root'; New-Item -ItemType Directory -Force -Path $noproj | Out-Null
+      Cn $noproj
+      $want = 'connections: github alamhanz, aws default (ap-northeast-1), cloudflare main, mcp cloudflare (user), mcp Neon (user), gcp default (p), azure sub, gitlab gl, foo bar'
+      Expect-Eq 'connections all ok (CRLF profile, spaces in config paths)' $cnOut $want
+      # AWS
+      Write-File (Join-Path $cxHome '.aws/config') "[profile other]`nregion = x`n"; Cn $noproj
+      Expect-Has 'aws profile missing' $cnOut 'warn: connection aws default: profile default missing from ~/.aws/config'
+      Write-File (Join-Path $cxHome '.aws/config') "[default]`nregion = ap-northeast-1`n"
+      $old = [datetime]::UtcNow.AddDays(-3)
+      Write-File $awsCache ('{"accessToken":{"secretAccessKey":"' + $secretB + '","expiresAt":"' + $old.ToString('yyyy-MM-ddTHH:mm:ssZ') + '"}}'); Cn $noproj
+      Expect-Has 'aws login cache 3 days old' $cnOut ('warn: connection aws default: login session likely expired (last refresh ' + $old.ToString('yyyy-MM-dd') + ')')
+      $awsCache2 = Join-Path $cxHome '.aws/login/cache/b.json'
+      Write-File $awsCache2 ('{"expiresAt":"' + $fresh + '"}'); Cn $noproj
+      Expect-Lacks 'aws login: any fresh cache keeps it silent' $cnOut 'login session'
+      Remove-Item -LiteralPath $awsCache2
+      $env:AWS_ACCESS_KEY_ID = 'x'; Cn $noproj; Remove-Item Env:AWS_ACCESS_KEY_ID
+      Expect-Lacks 'aws login: static keys in env skip the expiry check' $cnOut 'login session'
+      Write-File $awsCache ('{"accessToken":{"secretAccessKey":"' + $secretB + '","expiresAt":"' + $fresh + '"}}'); Cn $noproj
+      Expect-Eq 'aws login cache 1 h old' $cnOut $want
+      # GitHub
+      Write-File $hosts "github.com:`n    users:`n        someone:`n    user: someone`n"; Cn $noproj
+      Expect-Has 'gh other user' $cnOut 'warn: connection github alamhanz: gh not logged in as alamhanz'
+      $env:GH_TOKEN = 'x'; Cn $noproj; Remove-Item Env:GH_TOKEN
+      Expect-Lacks 'gh token in env' $cnOut 'gh not logged in'
+      Write-File $hosts "github.com:`n    user: alamhanz`n"
+      # MCP, Cloudflare, gcloud, az
+      Write-File $cj "{`"mcpServers`": {`"cloudflare`": {}}}`n"; Cn $noproj
+      Expect-Lacks 'mcp inline config: names not read, silent' $cnOut 'MCP server'
+      Write-File $cj "{`n  `"mcpServers`": {`n    `"cloudflare`": {}`n  }`n}`n"; Cn $noproj
+      Expect-Has 'mcp name missing' $cnOut 'warn: connection mcp Neon: MCP server not configured at user scope'
+      Expect-Lacks 'mcp name present' $cnOut 'connection mcp cloudflare'
+      Write-File $cj '{"mcpServers":{"cloudflare":{}}}'; Cn $noproj
+      Expect-Lacks 'mcp config not pretty-printed: silent' $cnOut 'MCP server'
+      Remove-Item -LiteralPath $cj; Cn $noproj
+      Expect-Lacks 'mcp config missing: silent' $cnOut 'MCP server'
+      Remove-Item Env:CLOUDFLARE_API_TOKEN; Cn $noproj
+      Expect-Has 'cloudflare token unset' $cnOut 'warn: connection cloudflare main: CLOUDFLARE_API_TOKEN not set in this session'
+      $env:CLOUDFLARE_API_TOKEN = $secretA
+      Remove-Item -LiteralPath $hosts, (Join-Path $cx 'gcloud/credentials.db'), (Join-Path $cx 'az/azureProfile.json'); Cn $noproj
+      Expect-Has 'gcloud not logged in' $cnOut 'warn: connection gcp default: not logged in'
+      Expect-Has 'az subscription missing' $cnOut 'warn: connection azure sub: subscription SUB-123 not in az profile'
+      Remove-Item -LiteralPath (Join-Path $cx 'gcloud/configurations/config_default'); Cn $noproj
+      Expect-Has 'gcloud configuration missing' $cnOut 'warn: connection gcp default: configuration default missing'
+      # CLI not on PATH, wrangler, bitbucket, unknown type
+      Write-File $prof "# P`n`n## Connections`n- db pg: cli=guyb-no-such-cli`n- service svc: cli=guyb-stub-cli env=GUYB_SMOKE_NOPE`n- cloudflare w: auth=wrangler`n- bitbucket bb: env=BITBUCKET_EMAIL,BITBUCKET_API_TOKEN`n- zzz yy: k=v`n"; Cn $noproj
+      Expect-Has 'cli missing' $cnOut 'warn: connection db pg: guyb-no-such-cli not on PATH'
+      Expect-Lacks 'cli present (stub, not run)' $cnOut 'guyb-stub-cli not on PATH'
+      Expect-Has 'service env var' $cnOut 'warn: connection service svc: GUYB_SMOKE_NOPE not set in this session'
+      Expect-Has 'wrangler not logged in' $cnOut 'warn: connection cloudflare w: wrangler not logged in'
+      Expect-Has 'bitbucket env vars' $cnOut 'warn: connection bitbucket bb: BITBUCKET_API_TOKEN not set in this session'
+      Expect-Has 'unknown type is listed' $cnOut ', zzz yy'
+      Expect-Lacks 'unknown type is not checked' $cnOut 'connection zzz'
+      Write-File (Join-Path $env:XDG_CONFIG_HOME '.wrangler/config/default.toml') ''; Cn $noproj
+      Expect-Lacks 'wrangler logged in' $cnOut 'wrangler not logged in'
+      # profile without section, empty section
+      Write-File $prof "# Profile`n`n## Git`n- x`n"; Cn $noproj
+      Expect-Eq 'profile without Connections section' $cnOut 'connections: not recorded in ~/.claude/guyb/profile.md'
+      Write-File $prof "# Profile`n`n## Connections`n<!-- comment -->`n`n## Other`n"; Cn $noproj
+      Expect-Eq 'empty Connections section' $cnOut 'connections: not recorded in ~/.claude/guyb/profile.md'
+      # project override and project config lines
+      Write-File $prof $full
+      $pj = Join-Path $tmp 'conn-proj'; Make-Fixture $pj
+      Remove-Item -LiteralPath (Join-Path $pj '.claude/CLAUDE.md'); Cn $pj
+      Expect-Has 'project without CLAUDE.md' $cnOut 'project config: none - follows global (~/.claude/guyb/profile.md)'
+      Write-File (Join-Path $pj '.claude/CLAUDE.md') "# fixture`n`n- Cloud: none`n`n## Credentials (names only)`nNone.`n`nmax_parallel: 3`ncleanup_days: 5`n"; Cn $pj
+      Expect-Has 'project cloud none, credentials none' $cnOut 'project config: cloud none; credentials none; max_parallel 3; cleanup limits'
+      Write-File (Join-Path $pj '.claude/CLAUDE.md') "# fixture`n`n## Connections`n- aws prod: region=eu-west-1`n`n## Credentials`n- A: x`n- B: y`n"; Write-File (Join-Path $pj '.mcp.json') ''; Cn $pj
+      Expect-Has 'project override replaces the global aws entry' $cnOut 'connections: github alamhanz, cloudflare main, mcp cloudflare (user), mcp Neon (user), gcp default (p), azure sub, gitlab gl, foo bar, aws prod (project)'
+      Expect-Lacks 'project override: global aws entry gone' $cnOut 'aws default'
+      Expect-Has 'project config with connections' $cnOut 'project config: connections aws prod; credentials 2 names; .mcp.json'
+      Cn $noproj; Expect-Lacks 'projects root: no project line' $cnOut 'project config:'
+      Remove-Item -LiteralPath $prof; Cn $pj
+      Expect-Lacks 'no profile: no connections line' $cnOut 'connections:'
+      Expect-Has 'no profile: project line stays' $cnOut 'project config:'
+      Write-File $prof $full
+      # the real scripts: brief.ps1, check.ps1
+      Write-File (Join-Path $cx 'claude/.claude.json') "{`n  `"mcpServers`": {`n    `"Neon`": {}`n  }`n}`n"
+      Write-File $hosts "github.com:`n    user: alamhanz`n"
+      $env:GH_STUB_LISTRC = '4'
+      $r = Run-Child $brief @('-Dir', $pj) $null
+      Remove-Item Env:GH_STUB_LISTRC
+      $bout = $r[1]
+      Expect-Has 'brief.ps1 connections line' $bout 'connections: github alamhanz'
+      Expect-Has 'brief.ps1 warn line' $bout 'warn: connection mcp cloudflare: MCP server not configured at user scope'
+      Expect-Has 'brief.ps1 gh auth failed' $bout 'warn: connection github alamhanz: gh auth failed'
+      Expect-Has 'brief.ps1 project config' $bout 'project config: connections aws prod'
+      Expect-Eq 'brief.ps1 made the one gh list call' (Gh-Calls $glog 'pr list') 1
+      $r = Run-Child $brief @('-Dir', $pj) $null
+      $bout2 = $r[1]
+      Expect-Lacks 'brief.ps1 without gh failure' $bout2 'gh auth failed'
+      Add-Content -LiteralPath $prof -Value "`r`n## Connections`r`n- bitbucket bb: env=BITBUCKET_EMAIL,BITBUCKET_API_TOKEN`r`n" # a second section is read too
+      $r = Run-Child $check @('-StartDir', $pj) $null
+      $cjson = $null
+      try { $cjson = $r[1] | ConvertFrom-Json } catch { }
+      if ($cjson -and $cjson.version -eq 1) { Ok } else { No 'check.ps1 with connections: output is not valid JSON' }
+      $ids = @($cjson.checks | ForEach-Object { $_.id })
+      Expect-Has 'check.ps1 connections entry' (($cjson.checks | Where-Object { $_.id -eq 'connections' } | ForEach-Object { $_.detail }) -join '') 'github alamhanz'
+      $mc = @($cjson.checks | Where-Object { $_.id -eq 'conn-mcp-cloudflare' })
+      Expect-Eq 'check.ps1 conn warn entry' (($mc | ForEach-Object { "$($_.status)|$($_.blocking)|$($_.detail)|$($_.fix)|$($_.fixBy)" }) -join '') 'warn|False|MCP server not configured at user scope||none'
+      Expect-Has 'check.ps1 project-config entry' ($ids -join ' ') 'project-config'
+      Expect-Has 'check.ps1 two warnings of one connection get distinct ids' ($ids -join ' ') 'conn-bitbucket-bb-2'
+      $allOut += $bout + $bout2 + $r[1]
+      Expect-Lacks 'no secret value in any output (env token)' $allOut $secretA
+      Expect-Lacks 'no secret value in any output (aws cache)' $allOut $secretB
+      if ((Get-Item -LiteralPath $clog).Length -gt 0) { No ('a CLI was run: ' + (Get-Content -LiteralPath $clog -Raw)) } else { Ok }
     }
 
     default { No "unknown group '$Group'" }

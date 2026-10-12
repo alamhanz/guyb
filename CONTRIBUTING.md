@@ -29,7 +29,7 @@ docs/                             README images (logo, icon, how-guyb-works.svg)
    ```
    After edits, run `claude plugin marketplace update guyb` and `claude plugin update guyb@guyb`, then start a **fresh session**. The playbook is injected at session start, so old sessions keep the old text.
 3. Validate: `claude plugin validate ./plugins/guyb`.
-4. Run helper scripts directly: `skills/setup/check.ps1` / `check.sh` (setup check JSON), `skills/start/brief.ps1` / `brief.sh` (briefing), and the launchers with `guyb -List` / `guyb --list`.
+4. Run helper scripts directly: `skills/setup/check.ps1` / `check.sh` (setup check JSON; they share `connections.ps1` / `connections.sh` with `brief.*` and the startup hook), `skills/start/brief.ps1` / `brief.sh` (briefing), and the launchers with `guyb -List` / `guyb --list`.
 5. Test scripts on every shell you touched: PowerShell 7, Windows PowerShell 5.1, and bash (macOS/Linux or Git Bash).
 6. This repo keeps its own STATE.md and pipeline files in `.claude/guyb/`, like any project.
 

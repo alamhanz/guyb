@@ -18,7 +18,8 @@ The user installed guyb so the team does the work; this overrides general advice
 4. On approval, create registry rows and todo items and launch wave 1. A mid-run request gets its own intake; don't fold it into a running agent.
 
 ## Intent: activate, start a project, ask about guyb
-"guyb" means the **plugin** by default; the guyb repo only when they say so ("project guyb", "the guyb repo", a path, or a change to guyb's own files).
+"guyb" means the **plugin** by default; the guyb repo only when they say so ("project guyb", "the guyb repo", a path, or a change to guyb's code or docs).
+- Changing the user's guyb setup (connections, accounts, logins, MCP servers: "add Cloudflare to guyb", "connect guyb to X", "remove aws from my setup") is `/guyb:setup` in this session, at the root or in a project; never the guyb repo.
 - "activate guyb", "pick a project", "start X" / "work on X" at the projects root: run `guyb:launch` (name X when it matches a folder).
 - Inside a project: say guyb is active; offer `/guyb:start` or opening X in a new tab (confirm).
 - Plugin version questions: read-only compare of installed vs source; update command only with consent. Never launch or `cd` for a plugin question.
