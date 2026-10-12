@@ -42,6 +42,48 @@
             "if": "Bash(*git*)",
             "shell": "bash",
             "command": ". \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
+          },
+          {
+            "type": "command",
+            "if": "Bash(*giT*)",
+            "shell": "bash",
+            "command": ". \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
+          },
+          {
+            "type": "command",
+            "if": "Bash(*gIt*)",
+            "shell": "bash",
+            "command": ". \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
+          },
+          {
+            "type": "command",
+            "if": "Bash(*gIT*)",
+            "shell": "bash",
+            "command": ". \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
+          },
+          {
+            "type": "command",
+            "if": "Bash(*Git*)",
+            "shell": "bash",
+            "command": ". \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
+          },
+          {
+            "type": "command",
+            "if": "Bash(*GiT*)",
+            "shell": "bash",
+            "command": ". \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
+          },
+          {
+            "type": "command",
+            "if": "Bash(*GIt*)",
+            "shell": "bash",
+            "command": ". \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
+          },
+          {
+            "type": "command",
+            "if": "Bash(*GIT*)",
+            "shell": "bash",
+            "command": ". \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh\""
           }
         ]
       },
@@ -51,6 +93,48 @@
           {
             "type": "command",
             "if": "PowerShell(*git*)",
+            "shell": "powershell",
+            "command": "$i = [Console]::In.ReadToEnd(); if ($i -notmatch '\"agent_type\"\\s*:\\s*\"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)\"') { exit 0 }; & ([scriptblock]::Create([IO.File]::ReadAllText(\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"))) -Raw $i; exit $LASTEXITCODE"
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(*giT*)",
+            "shell": "powershell",
+            "command": "$i = [Console]::In.ReadToEnd(); if ($i -notmatch '\"agent_type\"\\s*:\\s*\"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)\"') { exit 0 }; & ([scriptblock]::Create([IO.File]::ReadAllText(\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"))) -Raw $i; exit $LASTEXITCODE"
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(*gIt*)",
+            "shell": "powershell",
+            "command": "$i = [Console]::In.ReadToEnd(); if ($i -notmatch '\"agent_type\"\\s*:\\s*\"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)\"') { exit 0 }; & ([scriptblock]::Create([IO.File]::ReadAllText(\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"))) -Raw $i; exit $LASTEXITCODE"
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(*gIT*)",
+            "shell": "powershell",
+            "command": "$i = [Console]::In.ReadToEnd(); if ($i -notmatch '\"agent_type\"\\s*:\\s*\"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)\"') { exit 0 }; & ([scriptblock]::Create([IO.File]::ReadAllText(\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"))) -Raw $i; exit $LASTEXITCODE"
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(*Git*)",
+            "shell": "powershell",
+            "command": "$i = [Console]::In.ReadToEnd(); if ($i -notmatch '\"agent_type\"\\s*:\\s*\"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)\"') { exit 0 }; & ([scriptblock]::Create([IO.File]::ReadAllText(\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"))) -Raw $i; exit $LASTEXITCODE"
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(*GiT*)",
+            "shell": "powershell",
+            "command": "$i = [Console]::In.ReadToEnd(); if ($i -notmatch '\"agent_type\"\\s*:\\s*\"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)\"') { exit 0 }; & ([scriptblock]::Create([IO.File]::ReadAllText(\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"))) -Raw $i; exit $LASTEXITCODE"
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(*GIt*)",
+            "shell": "powershell",
+            "command": "$i = [Console]::In.ReadToEnd(); if ($i -notmatch '\"agent_type\"\\s*:\\s*\"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)\"') { exit 0 }; & ([scriptblock]::Create([IO.File]::ReadAllText(\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"))) -Raw $i; exit $LASTEXITCODE"
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(*GIT*)",
             "shell": "powershell",
             "command": "$i = [Console]::In.ReadToEnd(); if ($i -notmatch '\"agent_type\"\\s*:\\s*\"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)\"') { exit 0 }; & ([scriptblock]::Create([IO.File]::ReadAllText(\"${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.ps1\"))) -Raw $i; exit $LASTEXITCODE"
           }
