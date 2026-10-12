@@ -11,12 +11,12 @@ bad() { echo "FAIL: $*"; fail=$((fail + 1)); }
 count() { tr -cd "$1" < "$2" | wc -c | tr -d ' '; }
 
 list() { find "$@" -type f 2>/dev/null | sort; }
-sh_files=$(list plugins scripts tests -name '*.sh')
+sh_files=$(list plugins scripts tests .claude/scripts -name '*.sh')
 ps1_files=$(list plugins scripts tests -name '*.ps1')
-json_files=$(list plugins scripts tests settings .claude-plugin -name '*.json')
+json_files=$( { list plugins scripts tests settings .claude-plugin -name '*.json'; ls .claude/settings.json 2>/dev/null; } )
 tsv_files=$(list tests -name '*.tsv')
 svg_files=$(list docs -name '*.svg')
-text_files=$( { list plugins scripts tests settings .claude-plugin docs .github \( -name '*.sh' -o -name '*.ps1' -o -name '*.json' -o -name '*.svg' -o -name '*.yml' -o -name '*.tsv' \); ls .gitattributes 2>/dev/null; } )
+text_files=$( { ls .claude/settings.json 2>/dev/null; list plugins scripts tests .claude/scripts settings .claude-plugin docs .github \( -name '*.sh' -o -name '*.ps1' -o -name '*.json' -o -name '*.svg' -o -name '*.yml' -o -name '*.tsv' \); ls .gitattributes 2>/dev/null; } )
 
 parse_with() { # kind file: validate JSON or XML with the first tool available; 2 = no tool
   if [ "$1" = json ] && command -v jq >/dev/null 2>&1; then jq empty "$2" >/dev/null 2>&1
