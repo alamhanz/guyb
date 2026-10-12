@@ -143,6 +143,26 @@ else {
 if (Test-Path -LiteralPath $profileMd) { Add-Check 'profile' 'ok' $false 'profile.md exists' }
 else { Add-Check 'profile' 'warn' $false 'no ~/.claude/guyb/profile.md' '/guyb:setup' 'user' }
 
+# --- connections recorded in profile.md (local files only; notices, no fix text) ---
+$gcSrc = Join-Path $PSScriptRoot 'connections.ps1'
+if (Test-Path -LiteralPath $gcSrc) {
+    . $gcSrc
+    $gc = Get-GuybConnections -Mode check -Dir $StartDir
+    if ($gc.List) { Add-Check 'connections' 'ok' $false ($gc.List -replace '^connections: ', '') }
+    $gcIds = @{}
+    foreach ($w in @($gc.Warns)) {
+        $gcId = ("conn-$($w.Type)-$($w.Name)") -replace '[^A-Za-z0-9._-]', '_'; $gcK = 1
+        while ($gcIds.ContainsKey($gcId)) {
+            $gcK++; $gm = [regex]::Matches($gcId, '-\d')
+            if ($gm.Count -gt 0) { $gcId = $gcId.Substring(0, $gm[$gm.Count - 1].Index) }
+            $gcId = "$gcId-$gcK"
+        }
+        $gcIds[$gcId] = $true
+        Add-Check $gcId 'warn' $false $w.Reason
+    }
+    if ($gc.Project) { Add-Check 'project-config' 'ok' $false ($gc.Project -replace '^project config: ', '') }
+}
+
 # --- toolchain (non-blocking, read-only; nothing is installed) ---
 $onMac = [bool]($PSVersionTable.PSVersion.Major -ge 6 -and $IsMacOS)
 $ctr = ''

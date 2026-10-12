@@ -49,30 +49,17 @@ trap 'exit 1' HUP INT TERM
 pn=${dir##*/}; [ -n "$pn" ] || pn=/
 echo "project: $pn"
 
-# max_parallel and the four cleanup limits in one pass: first file (project, then profile) with a valid value wins per key.
-# Prints "<max_parallel> <src> <claude_md_lines> <state_lines> <rows> <days>"; "-" when unset.
-cfgf=()
-[ -f "$base/.claude/CLAUDE.md" ] && cfgf[${#cfgf[@]}]="$base/.claude/CLAUDE.md"
-[ -f "$HOME/.claude/guyb/profile.md" ] && cfgf[${#cfgf[@]}]="$HOME/.claude/guyb/profile.md"
-cfgout="- - - - - -"
-if [ ${#cfgf[@]} -gt 0 ]; then
-  cfgout=$(awk -v proj="$base/.claude/CLAUDE.md" '
-    BEGIN { split("max_parallel cleanup_claude_md_lines cleanup_state_lines cleanup_rows cleanup_days", ks, " "); for (i = 1; i <= 5; i++) { ix[ks[i]] = i; v[i] = "-" } }
-    {
-      s = $0; sub(/^[ \t]*/, "", s); sub(/^[-*][ \t]+/, "", s); sub(/^[`*]*/, "", s)
-      if (!match(s, /^[a-z_]+/)) next
-      k = substr(s, 1, RLENGTH); if (!(k in ix)) next
-      s = substr(s, RLENGTH + 1)
-      if (s !~ /^[`*]*[ \t]*:[`* \t\r]*[0-9]+[`* \t\r]*$/) next
-      d = s; gsub(/[^0-9]/, "", d); sub(/^0+/, "", d)
-      if (d == "" || length(d) > (k == "max_parallel" ? 2 : 9)) next
-      n = d + 0; if (n < 1 || (k == "max_parallel" && n > 20)) next
-      i = ix[k]; if (v[i] == "-") { v[i] = n; if (i == 1) src = (FILENAME == proj) ? "project" : "profile" }
-    }
-    END { print v[1], (src == "" ? "-" : src), v[2], v[3], v[4], v[5] }' "${cfgf[@]}")
+# max_parallel, the four cleanup limits and the connections lines come from one awk in setup/connections.sh:
+# first file (project, then profile) with a valid value wins per key. gc_cfg = "<max_parallel> <src> <claude_md_lines> <state_lines> <rows> <days>"; "-" when unset.
+gc_cfg="- - - - - -"; gc_lines=""; gc_wl=""; gc_gh1=""
+gc_src="${BASH_SOURCE[0]%/*}/../setup/connections.sh"
+if [ -f "$gc_src" ]; then
+  # shellcheck disable=SC1090 # sourced next to this script
+  . "$gc_src" lib
+  guyb_conn brief "$base"; guyb_conn_lines
 fi
 # shellcheck disable=SC2086 # six words, splitting is intended
-set -- $cfgout
+set -- $gc_cfg
 max_parallel=5; max_src=default
 [ "$1" != "-" ] && { max_parallel=$1; max_src=$2; }
 lim_claude=200; lim_state=300; lim_rows=200; lim_days=14
@@ -81,6 +68,7 @@ lim_claude=200; lim_state=300; lim_rows=200; lim_days=14
 [ "$5" != "-" ] && lim_rows=$5
 [ "$6" != "-" ] && lim_days=$6
 echo "max parallel: $max_parallel ($max_src)"
+[ -n "$gc_lines" ] && printf '%s\n' "$gc_lines"
 
 # Per-project files live in .claude/guyb/; legacy .claude/STATE.md and .claude/pipeline/ are read as a fallback (never written).
 # A legacy STATE.md counts as guyb's only with the marker line or the four headings Next up, Open issues, Decisions, Recent changes.
@@ -249,6 +237,10 @@ if [ "$isgit" = 1 ]; then
 
   if command -v gh >/dev/null 2>&1; then
     gh_start; gh_collect
+    # exit 4 = gh needs a login; a recorded github connection gets the warning unless the hosts.yml check already raised one
+    if [ "$ghrc" = 4 ] && [ -n "$gc_gh1" ]; then
+      case "$gc_wl" in *"gh not logged in as"*) ;; *) echo "warn: connection github $gc_gh1: gh auth failed" ;; esac
+    fi
     prs=""; pc=0
     while IFS=$'\t' read -r pn_ ps_ pt_ pb_; do
       [ "$ps_" = OPEN ] || continue
