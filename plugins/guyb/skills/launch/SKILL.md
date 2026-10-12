@@ -14,6 +14,7 @@ Rules for the whole flow: never `cd` (use absolute paths), never call the launch
 | "activate guyb", "start guyb", "guyb" alone, "pick a project" | **activate** | run `guyb:launch` with no project (picker) | say guyb is already active; offer `/guyb:start` |
 | "let's start X", "work on X" (X matches a folder under the root) | **start project X** | run `guyb:launch X` (no picker) | offer to open X in a new tab (confirm first) |
 | "is guyb updated?", "guyb version", "update guyb" | **plugin question** | compare installed (`~/.claude/plugins/installed_plugins.json`) vs source version, read-only; offer `claude plugin marketplace update guyb; claude plugin update guyb@guyb` (then restart) only with consent | same |
+| "add/change/remove a connection", "in my guyb setup", "connect guyb to X" | **setup** | run `/guyb:setup` here; never open the guyb repo or a tab | same |
 A plugin question never launches anything and never `cd`s. If "start guyb" is ambiguous and a `guyb` folder exists under the root, treat it as **activate**.
 
 1. **Root check.** The root is the folder the session started in (or `$GUYB_ROOT`). If the session started inside a project, stop: say guyb is already active here and offer `/guyb:start` (or, if another project was named, offer to open it in a new tab after confirming).
@@ -26,7 +27,7 @@ A plugin question never launches anything and never `cd`s. If "start guyb" is am
 
    It prints JSON with no secrets: `{version, os, root, repo, blockingFailures, checks:[{id, status: ok|warn|fail|skip, blocking, detail, fix, fixBy}]}`.
    - **`blockingFailures > 0`:** stop. Explain each blocking `fail` in one line and offer its `fix` by `fixBy`: `claude-after-consent` (show the command, run it only after the user agrees), `user` (give the user the `! <command>` to type; you never run logins), `none` (nothing to run). Follow `/guyb:setup`'s rules, then re-run the check.
-   - **Warnings** (`warn`, including a missing `gh` login): show them in one short line each and continue.
+   - **Warnings** (`warn`, including a missing `gh` login and `conn-*` connection warnings): show them in one short line each and continue. `conn-*` are notice only: no fix offered.
 
 3. **List projects.** The launcher has a non-interactive list mode: `guyb -List` (PowerShell) / `guyb --list` (bash). Tool shells don't load the profile, so if `guyb` is undefined, dot-source the launcher first (`. <repo>\scripts\launch.ps1` / `source <repo>/scripts/launch.sh`), using `repo` from the check JSON. Set `GUYB_ROOT` to the JSON's `root` for that call. Output is one project per line, tab-separated, most recent first: `name`, absolute path, last activity (ISO UTC), git `y/n`, dirty count, has `.claude/guyb/STATE.md` (or legacy `.claude/STATE.md`) `y/n`.
 

@@ -28,6 +28,7 @@ If the project uses a cloud account different from the global default in `~/.cla
 - AWS: user runs `! aws configure sso --profile <project>-<env>`; record the profile name.
 - GCP: `gcloud config configurations create <project>-<env>` (after confirmation), then the user runs `! gcloud auth login` and you set project/region in that configuration.
 - Azure: record the subscription id; commands pass `--subscription <id>`.
+- Cloudflare: `wrangler` login or `CLOUDFLARE_API_TOKEN` in `.env`; record the account id.
 - Different git identity for this repo (e.g. a work email): `git config user.email ...` (local, after confirmation).
 
 ## 5. Verify without printing
@@ -40,5 +41,10 @@ Add or update a `## Credentials` section in `.claude/CLAUDE.md` with names and l
 - DATABASE_URL: Postgres (Neon, staging), .env - verified <date>
 - STRIPE_SECRET_KEY: Stripe test mode, .env - verified <date>
 - AWS profile: myapp-staging (account 1234..., ap-southeast-1)
+```
+Project cloud accounts also go in a `## Connections` section in the same file, grammar as in `/guyb:setup` (`- <type> <name>: key=value ...`, no secrets); it overrides the global entry of that type:
+```md
+## Connections
+- aws myapp-staging: region=ap-southeast-1 account=<id> login=sso
 ```
 Report what was added, what was verified, and anything still missing.

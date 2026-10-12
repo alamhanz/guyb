@@ -36,5 +36,15 @@
   { "cmd": "cat .env | head", "tool": "both", "expect": "deny", "note": "pipe is split, the cat part is denied" },
   { "cmd": "cat '.env'", "tool": "both", "expect": "none", "note": "KNOWN GAP: closing quote defeats '*.env' (quote handling not modeled; real behavior unverified)" },
   { "cmd": "Get-Content -Path .env", "tool": "both", "expect": "deny", "note": "'Get-Content *.env' matches with options in front" },
-  { "cmd": "aws iam list-users", "tool": "both", "expect": "ask", "note": "allowed by 'aws iam list-*' but asked by 'aws iam * *' (trailing ' *' optional); ask wins" }
+  { "cmd": "aws iam list-users", "tool": "both", "expect": "ask", "note": "allowed by 'aws iam list-*' but asked by 'aws iam * *' (trailing ' *' optional); ask wins" },
+
+  { "cmd": "wrangler whoami", "tool": "both", "expect": "allow", "note": "" },
+  { "cmd": "wrangler deployments list --name w", "tool": "both", "expect": "allow", "note": "" },
+  { "cmd": "wrangler tail my-worker", "tool": "both", "expect": "allow", "note": "" },
+  { "cmd": "claude mcp list", "tool": "both", "expect": "allow", "note": "" },
+  { "cmd": "claude mcp get cloudflare", "tool": "both", "expect": "ask", "note": "prints config incl. env values/headers" },
+  { "cmd": "wrangler delete my-worker", "tool": "both", "expect": "ask", "note": "" },
+  { "cmd": "wrangler secret put API_KEY", "tool": "both", "expect": "ask", "note": "" },
+  { "cmd": "claude mcp add --transport http -s user cloudflare https://mcp.cloudflare.com/mcp", "tool": "both", "expect": "ask", "note": "" },
+  { "cmd": "claude mcp remove -s user cloudflare", "tool": "both", "expect": "ask", "note": "" }
 ]

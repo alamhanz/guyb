@@ -49,6 +49,8 @@ claude plugin install guyb@guyb
 
 Then run `/guyb:setup` once in any project: it detects installed CLIs and logins, installs what you choose (asking first), and records a no-secrets profile in `~/.claude/guyb/profile.md`. It can also install a status line (with consent, never replacing an existing `statusLine` without asking; the old settings are backed up); to remove it, delete the `statusLine` key in `~/.claude/settings.json` and `~/.claude/guyb/statusline.*`.
 
+**Connections.** `~/.claude/guyb/profile.md` can carry a `## Connections` section (git hosts, AWS/GCP/Azure, Cloudflare, MCP servers, DB clients; names and settings only, no secrets). A new session shows them in one line and warns about recorded ones that look broken (CLI missing, AWS profile missing or login likely expired, `gh` not logged in as the recorded user, env var unset, MCP server not configured). The checks read local files only and run no CLI, so they cannot confirm a login works; `/guyb:setup connections` lists them and can verify on request. In a project, `project config:` says whether `.claude/CLAUDE.md` overrides the global setup. Say "add Cloudflare to guyb" (or run `/guyb:setup add|change|remove <x>`) to change them; each write asks first, and logins are done by you.
+
 **Updates and releases.** A tag and GitHub Release are created automatically when the plugin version is bumped on main. Update with:
 
 ```
@@ -76,7 +78,7 @@ Flags and the `-List` / `--list` format are in the headers of `scripts/launch.ps
 |---|---|
 | `/guyb:start [task]` | briefing, bootstrap project config, plan the task |
 | `/guyb:launch [project]` | at the projects root: setup check, picker, open in a new tab |
-| `/guyb:setup [area]` | one-time global setup: git host, cloud, DB clients |
+| `/guyb:setup [connections\|add\|change\|remove\|area]` | global setup: git host, cloud, Cloudflare, MCP servers, DB clients; list and reconfigure connections |
 | `/guyb:build <what>` | architect, implementers, review, PR |
 | `/guyb:ship` | review, commit, push, PR, CI status |
 | `/guyb:status` | status table across all projects |
