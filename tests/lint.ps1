@@ -15,11 +15,12 @@ function Get-Files($dirs, $pattern) {
 }
 function Rel($f) { $f.FullName.Substring($root.Length + 1).Replace('\', '/') }
 
-$code = @('plugins', 'scripts', 'tests')
+$code = @('plugins', 'scripts', 'tests', '.claude/scripts')
 $ps1 = @(Get-Files $code '*.ps1')
 $sh = @(Get-Files $code '*.sh')
 $tsv = @(Get-Files $code '*.tsv')
 $json = @(Get-Files @('plugins', 'scripts', 'tests', 'settings', '.claude-plugin') '*.json')
+if (Test-Path -LiteralPath '.claude/settings.json') { $json += Get-Item -LiteralPath '.claude/settings.json' -Force }
 $svg = @(Get-Files @('docs') '*.svg')
 $text = @($ps1) + @($sh) + @($tsv) + @($json) + @($svg) + @(Get-Files @('.github') '*.yml')
 if (Test-Path -LiteralPath '.gitattributes') { $text += Get-Item -LiteralPath '.gitattributes' -Force }

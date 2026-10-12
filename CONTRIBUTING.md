@@ -73,6 +73,10 @@ Changing `settings/recommended-permissions.json`? Update `tests/permission-cases
 
 The `claude plugin validate` CI job is not required yet; run it locally (step 3 above).
 
+**Cloud and fresh Linux sessions:** `.claude/settings.json` runs `.claude/scripts/cloud-setup.sh` at session start when the machine is Linux (not WSL). The script returns at once if `pwsh` and `shellcheck` exist; otherwise it installs shellcheck (apt, only as root or with `sudo -n`, never a password prompt) and pwsh 7.4 (sha256-pinned, under `~/.local/pwsh`, linked from `~/.local/bin`). It is silent on success, prints one stderr line on failure (details in `$TMPDIR/guyb-cloud-setup.log`), and never blocks the session. A non-cloud Linux box matches too and gets the same user-level install. Windows PowerShell 5.1 stays CI-only. Bump `PWSH_VER` and both sha256 values together.
+
+**WSL dirty counts:** `guyb --list` under WSL can show dirty files for repos on `/mnt/d` that Windows git reports clean, because the two gits differ in `core.autocrlf` and `core.fileMode`. Not a script bug. Compare `git config core.autocrlf` in both; in WSL run `git config core.fileMode false` and align `core.autocrlf` with the Windows value.
+
 ## Conventions
 
 - **Agents** (`agents/*.md`) have frontmatter with `name`, `description` (when to use it), `tools`, and `model`. Keep the body focused on role, approach, and report format.

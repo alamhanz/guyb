@@ -5,7 +5,8 @@ Claude Code plugin + marketplace: orchestrator playbook (hooks/orchestrator.md),
 - Git host: GitHub (alamhanz/guyb), PRs from feat/ fix/ docs/ branches, never push main
 - Validate: `claude plugin validate ./plugins/guyb`
 - Checks: `bash tests/lint.sh; bash tests/smoke.sh; bash tests/tabs.sh; bash tests/statusline.sh; bash tests/secrets.sh; pwsh -File tests/lint.ps1; pwsh -File tests/smoke.ps1; pwsh -File tests/tabs.ps1; pwsh -File tests/statusline.ps1; pwsh -File tests/permissions.ps1; pwsh -File tests/secrets.ps1`; or runners: `bash tests/run.sh` / `pwsh -File tests/run.ps1` (same tests, parallel within shell)
-- Test scripts: run skills/setup/check.*, skills/start/brief.*, `guyb -List` / `guyb --list` on every shell touched (pwsh 7, PS 5.1, Git Bash/bash; WSL available as distro `ubuntu-24`)
+- When to run: implementers and fix rounds run only lint + the tests for what they touched (never smoke.sh / smoke.ps1 / full runners); the full suite runs once per release, right before the PR (git-ops step or final review); CI covers the rest
+- Test scripts: run skills/setup/check.*, skills/start/brief.*, `guyb -List` / `guyb --list` on every shell touched (pwsh 7, PS 5.1, Git Bash/bash; WSL available as distro `ubuntu-24`); fresh Linux/cloud: `.claude/scripts/cloud-setup.sh` installs pwsh + shellcheck at session start
 - Reload after edits: `claude plugin marketplace update guyb; claude plugin update guyb@guyb`, then a fresh session
 - Release: semver bump in plugins/guyb/.claude-plugin/plugin.json (patch fix / minor feature / major breaking; docs-only no bump)
 - Cloud: none

@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "timeout": 180,
+            "command": "[ \"$(uname -s)\" = Linux ] && ! grep -qi microsoft /proc/version 2>/dev/null && bash \"$CLAUDE_PROJECT_DIR/.claude/scripts/cloud-setup.sh\"; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}
