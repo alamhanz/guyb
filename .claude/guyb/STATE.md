@@ -9,10 +9,11 @@
 - **Owner**: @alamhanz
 
 ## Current Status
-- **Branch**: fix/weight-0.9.1 (uncommitted, not pushed)
-- **Version**: main has 0.9.0 (ed3075c); see Versions
+- **Branch**: fix/0.9.2 (uncommitted, not pushed)
+- **Version**: main has 0.9.1 (PR #13); branch is 0.9.2; see Versions
 
 ## Versions
+- **0.9.2** (branch fix/0.9.2): smoke.sh on Git Bash ~8 min -> ~3.5 min (brief.sh/check.sh fork cuts with byte-identical output; read-only guard batch test entry `. guard-readonly.sh batch`, unreachable from hooks.json; fewer brief runs; no-jq brief copy in g_plugin); guard hardening (GUYB_MODE/GUYB_CWD cleared for the production awk call, read-only agent without awk on PATH is blocked); hooks.json guard entries for all 8 casings of "git" (the `if` globs are case-sensitive, no classes/alternation, `*` spans newlines; probed live) plus filter contract test in smoke.sh/smoke.ps1; CI: actions pinned to SHAs (checkout v7.0.1, setup-node v7.1.0, node 24), claude-code npm pinned 2.1.296, GUYB_RO_FULL=1 on Linux/macOS
 - **0.9.0** (PR #12): read-only guard rewrite (parsed quotes/chains/substitutions/runners/aliases, shared case table, PS scriptblocks, read subcommands, branch/tag creation), secrets guard names, test runners + bench + shellcheck CI, `/guyb:end` wrap-up (model-invocable on "I need to go": stop agents, handoff, STATE.md, commit + push work branches, no PR), `/guyb:start` resumes from the handoff
 - **0.8.1** (PR #11): tab icon tracks running subagents; release workflow + README slim (PR #10)
 - **0.8.0** (PR #9): tab status icon (hourglass working / check done / ? waiting; async hooks tab-status.sh/.ps1, GUYB_TAB_NAME tabs only); secrets guard covers `git -C`/`-c`, chained commands, `commit -a`, target repo; read-only guard catches chained and `git -C` write commands (also fixed sed-fallback JSON escape bug that made it fail open without jq); playbook: delegate long-running/stateful commands; parity fixes A13 (PS 5.1 UTF-8), A14 (invariant `-List` timestamp), A18 (sh/ps1 parity); tests/secrets.*
@@ -23,6 +24,7 @@
 - **0.3.0** (PR #1): run IDs, waves, progress files
 
 ## Recent Changes
+- 2026-10-12 - 0.9.2 on fix/0.9.2 (plan guyb-128, uncommitted): runs guyb-129/130 were interrupted, finished and audited in guyb-138. brief.sh/check.sh output verified byte-identical to 0.9.1 on 17 brief fixtures and 10 check variants (Git Bash + WSL); smoke.sh 463 checks, 206 s on Git Bash
 - 2026-10-06 - Cloud session (Linux container, pwsh 7.4 + shellcheck installed per session; PS 5.1/Windows only via CI): all checks pass on bash + pwsh. PR #12 5.1 failure root-caused: .NET Framework Process.Start writes a UTF-8 BOM into redirected child stdin (AutoFlush on Console.InputEncoding), so the guard failed open in smoke; harness sets a BOM-less InputEncoding, guard skips pre-JSON junk (5cf1c2e). Edge-case probes (scratch, not committed): read-only guard 315 commands, 35 problems fixed (183280c: read subcommands of submodule/notes/bisect/symbolic-ref/sparse-checkout/replace/clean, branch/tag creation behind flags, PS scriptblocks via { } split, wsl/doas/ionice, $'..'), 76 rows added to readonly-cases.tsv, bench unchanged; secrets guard 50 forms + 39 names (85b0bf0: .git-credentials, id_dsa, *.ppk, .pgpass, .htpasswd; *.md safe; no-input smoke cases hung on a non-tty stdin). sh/ps parity: no differences found. brief/check/launcher sh vs ps: same output
 - 2026-10-05 - Session: PR #10 opened (release workflow + README slim, CI green, guyb-95; rulesets verified, unchanged). Installed plugin updated 0.5.0 -> 0.8.0. 0.8.1 on fix/tab-status-subagents (worktree .claude/worktrees/agent-adac6880fe2a8d8b3, not pushed): 149ad9a tab icon stays busy while subagents run (guyb-98), bdfc97f pipeline rule "finish clean" (agents left background tests running and stayed open in the panel); review guyb-106 approved with one should-fix (stuck ? after Notification + last agent-stop), fix round guyb-107 in progress. 0.8.2 guards rewrite on fix/guards-0.8.2 (worktree .claude/worktrees/guards-0.8.2, uncommitted): plan guyb-96, Q53-Q57 answered (all option a), wave 1: guyb-99 sh guard done, guyb-100 ps1 guard + hooks.json done, guyb-101 case table/smoke and guyb-102 shellcheck/CI/runners/bench still running at session end
 - 2026-10-05 - 0.8.0 merged (PR #9, 0027638); feat/release-workflow: release.yml tags + publishes vX.Y.Z on version bump (guyb-91, f13cb61), README slimmed (d089cf0), main rulesets protect-main + main-merge-admin-only (guyb-92/93), review guyb-94 fixes uncommitted
@@ -43,18 +45,19 @@
 - **STATE.md** is committed; `.claude/pipeline/` is gitignored.
 
 ## Open Issues
-- Read-only guard hooks.json filter widened to `Bash(*git*)` / `PowerShell(*git*)`: it runs on every Bash call mentioning git (perf); `bash tests/smoke.sh` takes >2 min on Windows
-- CI actions pinned to tags not SHAs; claude-code npm install unpinned; brief.sh gh calls have no timeout on macOS; no-jq paths not exercised in CI
+- Read-only guard hooks.json filter: 8 entries per shell (one per casing of "git"); a call spawns the guard once per casing it contains. Cost measured: 0.2-0.3 s per git-mentioning call on Windows is the hook shell start (guard adds ~0 on the main-session path), ~3 ms on Linux; no cheaper safe filter. Revisit if Claude Code filters hooks by agent type
+- Read-only guard: obfuscated command names (`g\it`, `gi""t`, `g'i't`) have no "git" substring, so the hooks.json filter never runs the guard (widening it costs a spawn per Bash call)
+- Action SHA pins are not auto-bumped (no Dependabot); claude-code npm pin in the validate job needs deliberate bumps
 - macOS behavior verified only by CI (first run pending)
 - install.ps1 settings merge not executed in a test; tmux launch path untested
 - Deferred consider item: A15 (docs note)
 
 ## Next Up
-- 0.9.1 weight trims on fix/weight-0.9.1 (plan guyb-119; Tasks 1+3 done guyb-120/122, Task 2 finishing guyb-125), then review guyb-123 + PR guyb-124; budget every change (guyb must stay lightweight)
-- smoke.sh on Git Bash ~8 min (target 240 s): remaining cost is plugin-side forks (readonly guard ~205 cases, brief.sh ~45 runs, check.sh); options: batch mode for guard tests (GUYB_MODE=cmd), fewer forks in brief.sh/check.sh (guyb-126 report)
+- 0.9.2 on fix/0.9.2 (plan guyb-128): review, commit (one per task), push, PR to main; merge is the user's step. Live check as code-reviewer: `git add --dry-run nonexistent` and `Git add .` must be blocked on Windows Git Bash and PowerShell
+- smoke.sh on Git Bash: 206 s on a loaded box (fork baseline 3.4 s per 20 forks), target 240 s met; remaining cost is hook/brief/check process starts
 - Live check of the wrap-up: say "I need to go" in a session with a running agent (SendMessage checkpoint, TaskStop fallback, git-ops WIP push), then /guyb:start on the same machine (handoff) and on another (STATE.md + WIP branches)
 - Cloud sessions: optional SessionStart hook to install pwsh + shellcheck so the full check list runs without setup
 - Consider item A15
 
 ---
-**Last updated**: 2026-10-06
+**Last updated**: 2026-10-12

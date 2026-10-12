@@ -26,7 +26,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install tmux and zsh (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y tmux zsh
@@ -60,6 +60,8 @@ jobs:
           GUYB_REQUIRE_SHELLCHECK: ${{ runner.os == 'Linux' && '1' || '' }}
       - name: Smoke
         run: /bin/bash tests/smoke.sh
+        env:
+          GUYB_RO_FULL: ${{ runner.os != 'Windows' && '1' || '' }}
       - name: Secrets guard
         run: /bin/bash tests/secrets.sh
       - name: Tabs (launcher colour and title lock; real tmux and zsh)
@@ -83,7 +85,7 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Lint
         run: ./tests/lint.ps1
       - name: Smoke
@@ -106,7 +108,7 @@ jobs:
       run:
         shell: powershell
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Lint
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/lint.ps1
       - name: Smoke
@@ -128,12 +130,12 @@ jobs:
     timeout-minutes: 10
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 24
       - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code
+        run: npm install -g @anthropic-ai/claude-code@2.1.296 # pinned; bump deliberately
       - name: Validate plugin
         run: claude plugin validate ./plugins/guyb
 
