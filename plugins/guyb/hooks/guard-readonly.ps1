@@ -16,6 +16,7 @@
 # not special; Start-Process with -ArgumentList @(...) is only seen for the plain 'a','b' form;
 # $'...' escapes (\x61) are not decoded; GNU parallel and pwsh -EncodedCommand are not unpacked.
 # In PowerShell, { and } split segments, so scriptblocks (ForEach-Object { }, try { }) are checked.
+# Obfuscated command names (g\it, gi""t, g'i't) contain no "git" substring, so hooks.json never runs the guard for them.
 #
 # Verified hook stdin (Claude Code 2.1.288): PreToolUse JSON for a call made inside a subagent
 # carries "agent_id" and "agent_type". Plugin agents report "agent_type":"guyb:<name>"

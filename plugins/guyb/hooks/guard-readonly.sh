@@ -10,13 +10,20 @@
 #
 # Fail open: exit 2 only on a positive match for a read-only guyb subagent. Missing field, parse
 # trouble (unbalanced quotes or substitution), awk failure, any other agent: exit 0.
+# Exception: a read-only agent with no awk on PATH is blocked (the parser cannot run).
 # A heredoc without its terminator is not an error (bash runs it): the body runs to the end of input.
 #
 # Sourced by hooks.json: use `exit`, never rely on $0. No fork happens before the agent check.
+# Test entry (tests/smoke.sh): `( . guard-readonly.sh batch ) < records` takes hook JSON objects each
+# ended by \036 and prints "<n> <rc>" per record, rc 0 or 2. Only the positional argument selects it:
+# hooks.json passes none and stdin or the environment cannot, so it is unreachable from a hook.
+# The production awk call clears GUYB_MODE/GUYB_CWD so an inherited GUYB_MODE cannot switch the parser.
+# hooks.json filters on the text "git" in every casing (the `if` globs are case-sensitive, no classes).
 # The command is tokenized by one awk (quotes, separators, heredocs, substitutions, wrappers,
 # bash -c / eval / find -exec runners). Unknown git verbs are looked up as aliases (git config --get).
 # Known gaps (skipped to stay small): $'...' escapes (\x61) are not decoded, env -S,
 # GNU parallel, arithmetic like $((1<<2)) (reads as a heredoc, so later lines are taken as its body).
+# Obfuscated command names (g\it, gi""t, g'i't) contain no "git" substring, so hooks.json never runs the guard for them.
 #
 # Verified hook stdin (Claude Code 2.1.288): PreToolUse JSON for a call made inside a subagent
 # carries "agent_id" and "agent_type". Plugin agents report "agent_type":"guyb:<name>"
@@ -24,10 +31,15 @@
 
 IFS= read -r -d '' input
 _gro_re='"agent_type"[[:space:]]*:[[:space:]]*"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)"'
-[[ $input =~ $_gro_re ]] || exit 0
+[[ $input =~ $_gro_re ]] || [ "${1-}" = batch ] || exit 0
 _gro_agent=${BASH_REMATCH[2]}
+if ! command -v awk >/dev/null 2>&1; then
+  echo "guyb: blocked - awk not found on PATH, cannot check git commands for read-only agent '$_gro_agent'." >&2
+  exit 2
+fi
 
 # Reads hook JSON (or, with GUYB_MODE=cmd, a bare command) on stdin; GUYB_CWD gives the default dir.
+# GUYB_MODE=batch (test entry only): records separated by \036, each printed as "@<n>" then its lines.
 # Prints BLOCK, or lines ALIAS<US>verb<US>dir<US>quoted args, or nothing.
 _gro_awk() {
   awk '
@@ -330,23 +342,29 @@ function scan(s, stop,   l, i, n, c, c2, inq, par, nhd, j, k, q, d, ds, rest, bo
   LV--
   return i
 }
+# one (raw, cwd) record: prints BLOCK, ALIAS lines or nothing; per-record state is reset first (GEN stays monotonic)
+function evalrec(   cmd) {
+  BAD = 0; PERR = 0; BLK = 0; ALS = ""; LV = 0; DEPTH = 0
+  split("", ALG); split("", ALV)
+  if (MODE == "cmd") cmd = raw
+  else { cmd = jget("command"); cwd = jget("cwd") }
+  if (BAD || cmd == "") return
+  scan(cmd, 0)
+  if (PERR) return
+  if (BLK) print "BLOCK"
+  else printf "%s", ALS
+}
 BEGIN {
   MODE = ENVIRON["GUYB_MODE"]; cwd = ENVIRON["GUYB_CWD"]
+  if (MODE == "batch") RS = "\036"
   WV = "|add|stage|commit|reset|checkout|switch|restore|rebase|merge|push|rm|mv|apply|cherry-pick|pull|fetch|revert|am|update-ref|gc|prune|repack|init|clone|filter-branch|maintenance|read-tree|checkout-index|update-index|"
   RV = "|status|log|diff|show|grep|blame|annotate|ls-files|ls-tree|ls-remote|rev-parse|rev-list|cat-file|describe|shortlog|show-ref|show-branch|for-each-ref|merge-base|name-rev|var|help|version|whatchanged|range-diff|cherry|diff-tree|diff-index|diff-files|check-ignore|check-attr|check-mailmap|count-objects|verify-commit|verify-tag|fsck|format-patch|archive|bundle|request-pull|fast-export|"
   BO = "|--delete|--move|--copy|--force|--set-upstream-to|--unset-upstream|--edit-description|"
   TO = "|--delete|--annotate|--sign|--force|--message|--file|"
 }
+MODE == "batch" { print "@" NR; raw = $0; evalrec(); next }
 { raw = raw (NR > 1 ? "\n" : "") $0 }
-END {
-  if (MODE == "cmd") cmd = raw
-  else { cmd = jget("command"); cwd = jget("cwd") }
-  if (BAD || cmd == "") exit 0
-  scan(cmd, 0)
-  if (PERR) exit 0
-  if (BLK) print "BLOCK"
-  else printf "%s", ALS
-}'
+END { if (MODE != "batch") evalrec() }'
 }
 
 _gro_block() {
@@ -375,6 +393,39 @@ _gro_handle() {
   done <<<"$1"
 }
 
-_gro_out=$(_gro_awk <<<"$input") || exit 0
+# Test entry: records that name a read-only agent go through one awk call; the rest are rc 0 as in production.
+_gro_batch() {
+  local rs=$'\036' rest=$input rec n=0 k=0 sel='' res='' line lines cur=0 rc
+  local -a map brc
+  while :; do
+    case $rest in *"$rs"*) ;; *) break ;; esac
+    rec=${rest%%"$rs"*}; rest=${rest#*"$rs"}
+    n=$((n + 1)); brc[n]=0
+    if [[ $rec =~ $_gro_re ]]; then k=$((k + 1)); map[k]=$n; sel=$sel$rec$rs; fi
+  done
+  _gro_agent="batch"
+  _gro_flush() {
+    [ "$cur" -gt 0 ] && [ -n "${map[cur]-}" ] || return 0
+    case $lines in
+      '') rc=0 ;;
+      BLOCK*) rc=2 ;;
+      *) ( _gro_handle "$lines" 1 ) 2>/dev/null; rc=$? ;;
+    esac
+    k=${map[cur]}; brc[k]=$rc
+  }
+  while IFS= read -r line; do
+    case $line in
+      @*) _gro_flush; cur=${line#@}; lines='' ;;
+      *) lines=${lines:+$lines$'\n'}$line ;;
+    esac
+  done <<<"$(GUYB_MODE=batch GUYB_CWD='' _gro_awk <<<"$sel")"
+  _gro_flush
+  k=0
+  while [ "$k" -lt "$n" ]; do k=$((k + 1)); res=$res$k' '${brc[k]}$'\n'; done
+  printf '%s' "$res"
+}
+[ "${1-}" = batch ] && { _gro_batch; exit 0; }
+
+_gro_out=$(GUYB_MODE='' GUYB_CWD='' _gro_awk <<<"$input") || exit 0
 [ -n "$_gro_out" ] && _gro_handle "$_gro_out" 1
 exit 0

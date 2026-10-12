@@ -3,7 +3,13 @@
 # Usage: check.sh [start-dir]
 start_dir="${1:-}"
 
-esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr '\n\r\t' '   '; }
+# JSON string escape into $escv, no forks: backslash and quote escaped, LF/CR/TAB turned into spaces.
+# Pattern and replacement are quoted variables (an unquoted replacement loses backslashes).
+esc_bs='\'; esc_bs2='\\'; esc_q='"'; esc_aq="'"; esc_q2='\"'; esc_sp=' '; esc_nl=$'\n'; esc_cr=$'\r'; esc_tb=$'\t'
+esc() {
+  escv=${1//"$esc_bs"/"$esc_bs2"}; escv=${escv//"$esc_q"/"$esc_q2"}
+  escv=${escv//"$esc_nl"/"$esc_sp"}; escv=${escv//"$esc_cr"/"$esc_sp"}; escv=${escv//"$esc_tb"/"$esc_sp"}
+}
 has() { command -v "$1" >/dev/null 2>&1; }
 # first string value of "key" in a JSON file (no jq needed)
 jval() { sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$1" 2>/dev/null | head -n1; }
@@ -11,9 +17,10 @@ jval() { sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$1" 
 out=""; blockfail=0
 add() { # id status blocking detail fix fixBy
   [ "$2" = fail ] && [ "$3" = true ] && blockfail=$((blockfail + 1))
+  esc "$4"; add_d=$escv; esc "${5:-}"
   [ -n "$out" ] && out="$out,"
   out="$out
-    {\"id\":\"$1\",\"status\":\"$2\",\"blocking\":$3,\"detail\":\"$(esc "$4")\",\"fix\":\"$(esc "${5:-}")\",\"fixBy\":\"${6:-none}\"}"
+    {\"id\":\"$1\",\"status\":\"$2\",\"blocking\":$3,\"detail\":\"$add_d\",\"fix\":\"$escv\",\"fixBy\":\"${6:-none}\"}"
 }
 
 claude_dir="$HOME/.claude"
@@ -23,25 +30,34 @@ for f in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_profile" "
 $(cat "$f" 2>/dev/null)"
 done
 # rc file to suggest in fix hints: zsh -> .zshrc; macOS bash reads .bash_profile (login shells); else .bashrc
+un=$(uname -s 2>/dev/null)
+shn=${SHELL:-}; shn=${shn%"${shn##*[!/]}"}; shn=${shn##*/}
 # shellcheck disable=SC2088 # rcfile is display text, the tilde is meant literally
-case "$(basename "${SHELL:-}")" in
+case "$shn" in
   zsh) rcfile="~/.zshrc" ;;
-  *) if [ "$(uname -s 2>/dev/null)" = Darwin ]; then rcfile="~/.bash_profile"; else rcfile="~/.bashrc"; fi ;;
+  *) if [ "$un" = Darwin ]; then rcfile="~/.bash_profile"; else rcfile="~/.bashrc"; fi ;;
 esac
+
+# last rc lines that set GUYB_ROOT / source launch.sh (one pass, no forks)
+re_root='^[[:space:]]*(export[[:space:]]+)?GUYB_ROOT='
+re_src='^[[:space:]]*(source|\.)[[:space:]]+.*scripts/launch\.sh'
+rc_root=""; rc_src=""
+while IFS= read -r rcl; do
+  [[ $rcl =~ $re_root ]] && rc_root=$rcl
+  [[ $rcl =~ $re_src ]] && rc_src=$rcl
+done <<< "$rctext"
 
 # GUYB_ROOT: process env -> rc line
 root=""; rootsrc=""
 if [ -n "${GUYB_ROOT:-}" ]; then root="$GUYB_ROOT"; rootsrc="process env"
-else
-  line=$(printf '%s\n' "$rctext" | grep -E '^[[:space:]]*(export[[:space:]]+)?GUYB_ROOT=' | tail -n1)
-  if [ -n "$line" ]; then root=$(printf '%s' "${line#*GUYB_ROOT=}" | sed -e 's/^["'"'"']//' -e 's/["'"'"']$//'); rootsrc="rc line"; fi
+elif [ -n "$rc_root" ]; then
+  root=${rc_root#*GUYB_ROOT=}; root=${root#["$esc_q$esc_aq"]}; root=${root%["$esc_q$esc_aq"]}; rootsrc="rc line"
 fi
 
 # Repo: source line in rc, else known_marketplaces.json
 repo=""; reposrc=""
-line=$(printf '%s\n' "$rctext" | grep -E '^[[:space:]]*(source|\.)[[:space:]]+.*scripts/launch\.sh' | tail -n1)
-if [ -n "$line" ]; then
-  repo=$(printf '%s' "$line" | sed -E 's/^[[:space:]]*(source|\.)[[:space:]]+//; s/^["'"'"']//; s/["'"'"']?[[:space:]]*$//; s#/scripts/launch\.sh.*##'); reposrc="rc line"
+if [ -n "$rc_src" ]; then
+  repo=$(printf '%s' "$rc_src" | sed -E 's/^[[:space:]]*(source|\.)[[:space:]]+//; s/^["'"'"']//; s/["'"'"']?[[:space:]]*$//; s#/scripts/launch\.sh.*##'); reposrc="rc line"
 fi
 mk="$claude_dir/plugins/known_marketplaces.json"
 if [ -z "$repo" ] && [ -f "$mk" ]; then
@@ -79,7 +95,7 @@ else
   add root warn false "GUYB_ROOT not set$fb" "echo 'export GUYB_ROOT=\"$tgt\"' >> $rcfile" claude-after-consent
 fi
 
-if printf '%s\n' "$rctext" | grep -q 'scripts/launch\.sh'; then add launcher-profile ok false "launcher source line present in shell rc"
+if [[ $rctext == *scripts/launch.sh* ]]; then add launcher-profile ok false "launcher source line present in shell rc"
 else
   fx="Run scripts/install.sh"; [ -n "$repo" ] && fx="echo 'source \"$repo/scripts/launch.sh\"' >> $rcfile"
   add launcher-profile warn false "no launcher source line in shell rc (the guyb command is unavailable in your terminals)" "$fx" claude-after-consent
@@ -106,7 +122,7 @@ else
   add git-cred skip false "gh not installed"
 fi
 
-case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) onwin=1 ;; *) onwin=0 ;; esac
+case "$un" in MINGW*|MSYS*|CYGWIN*) onwin=1 ;; *) onwin=0 ;; esac
 if [ $onwin -eq 1 ]; then
   add terminal ok false "bash launcher runs claude in the current terminal; use the PowerShell launcher (launch.ps1) for new tabs"
 elif [ -n "${TMUX:-}" ]; then add terminal ok false "inside tmux"
@@ -164,7 +180,15 @@ dprobe() {
   fi
   wait "$dp"; return $?
 }
-case "$(uname -s 2>/dev/null)" in
+# group 1 of ERE $2 on the first line of $1 that matches (CRs removed), in $vres; no forks
+vver() {
+  vres=""; vo=${1//$'\r'/}
+  while IFS= read -r vl; do
+    if [[ $vl =~ $2 ]]; then vres=${BASH_REMATCH[1]}; return 0; fi
+  done <<< "$vo"
+}
+re_py='^Python ([0-9]+\.[0-9][0-9.]*)'
+case "$un" in
   Darwin) cfix="brew install --cask docker (or brew install podman)"; ufix="brew install uv"; nfix="brew install fnm" ;;
   *) if [ $onwin -eq 1 ]; then
        cfix="winget install Docker.DockerDesktop (needs admin and WSL2; license terms apply to larger companies; alternative: podman)"
@@ -180,7 +204,7 @@ cscan="${root:-$start_dir}"; ncont=0; nscan=0
 if [ -n "$cscan" ] && [ -d "$cscan" ]; then
   for d in "$cscan"/*/; do
     [ -d "$d" ] || continue
-    case "$(basename "$d")" in node_modules) continue ;; esac
+    dbase=${d%/}; case "${dbase##*/}" in node_modules) continue ;; esac
     nscan=$((nscan + 1)); [ $nscan -gt 200 ] && break
     for cf in Dockerfile compose.yaml compose.yml docker-compose.yml docker-compose.yaml; do
       [ -f "${d}$cf" ] && { ncont=$((ncont + 1)); break; }
@@ -191,14 +215,14 @@ fi
 cbin=""
 if has docker; then cbin=docker; elif has podman; then cbin=podman; fi
 if [ -n "$cbin" ]; then
-  cv=$(vt "$cbin" --version 2>/dev/null </dev/null | tr -d '\r' | sed -n 's/.*[Vv]ersion \([0-9][0-9.]*\).*/\1/p' | head -n1)
+  vo=$(vt "$cbin" --version 2>/dev/null </dev/null); vver "$vo" '^.*[Vv]ersion ([0-9][0-9.]*)'; cv=$vres
   cd1="$cbin${cv:+ $cv}"
   if [ "$cbin" = docker ]; then dprobe docker info --format '{{.ServerVersion}}'; crc=$?
   else dprobe podman info --format '{{.Version.Version}}'; crc=$?; fi
   if [ $crc -eq 0 ]; then add container ok false "$cd1, daemon running"
   else
     if [ "$cbin" = podman ]; then dfix="podman machine start"
-    elif [ $onwin -eq 1 ] || [ "$(uname -s 2>/dev/null)" = Darwin ]; then dfix="Start Docker Desktop"
+    elif [ $onwin -eq 1 ] || [ "$un" = Darwin ]; then dfix="Start Docker Desktop"
     else dfix="sudo systemctl start docker"; fi
     dd="daemon not running"; [ $crc -eq 124 ] && dd="daemon not responding"
     add container warn false "$cd1, $dd" "$dfix" user
@@ -210,25 +234,26 @@ else add container skip false "docker/podman not installed; no container project
 pv=""
 for pc in python3 python; do
   has "$pc" || continue
-  pv=$(vt "$pc" --version 2>&1 </dev/null | tr -d '\r' | sed -n 's/^Python \([0-9][0-9]*\.[0-9][0-9.]*\).*/\1/p' | head -n1)
+  vo=$(vt "$pc" --version 2>&1 </dev/null); vver "$vo" "$re_py"; pv=$vres
   [ -n "$pv" ] && break
 done
 if [ -z "$pv" ] && [ $onwin -eq 1 ] && has py; then
-  pv=$(vt py -3 --version 2>&1 </dev/null | tr -d '\r' | sed -n 's/^Python \([0-9][0-9]*\.[0-9][0-9.]*\).*/\1/p' | head -n1)
+  vo=$(vt py -3 --version 2>&1 </dev/null); vver "$vo" "$re_py"; pv=$vres
 fi
 if [ -n "$pv" ]; then add python ok false "python $pv"
 else add python skip false "python not installed" "uv python install <version>" user; fi
 
 nv=""
-has node && nv=$(vt node --version 2>&1 </dev/null | tr -d '\r' | sed -n 's/^v\([0-9][0-9]*\.[0-9][0-9.]*\).*/\1/p' | head -n1)
+if has node; then vo=$(vt node --version 2>&1 </dev/null); vver "$vo" '^v([0-9]+\.[0-9][0-9.]*)'; nv=$vres; fi
 if [ -n "$nv" ]; then add node ok false "node $nv"
 else add node skip false "node not installed" "$nfix" user; fi
 
 uvv=""
-has uv && uvv=$(vt uv --version 2>&1 </dev/null | tr -d '\r' | sed -n 's/^uv \([0-9][0-9]*\.[0-9][0-9.]*\).*/\1/p' | head -n1)
+if has uv; then vo=$(vt uv --version 2>&1 </dev/null); vver "$vo" '^uv ([0-9]+\.[0-9][0-9.]*)'; uvv=$vres; fi
 if [ -n "$uvv" ]; then add uv ok false "uv $uvv"
 else add uv skip false "uv not installed" "$ufix" user; fi
 
 os=unix; [ $onwin -eq 1 ] && os=windows
+esc "$root"; esc_root=$escv; esc "$repo"
 printf '{\n  "version": 1,\n  "os": "%s",\n  "root": "%s",\n  "repo": "%s",\n  "blockingFailures": %s,\n  "checks": [%s\n  ]\n}\n' \
-  "$os" "$(esc "$root")" "$(esc "$repo")" "$blockfail" "$out"
+  "$os" "$esc_root" "$escv" "$blockfail" "$out"

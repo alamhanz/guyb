@@ -1,6 +1,6 @@
 # Static checks for the guyb repo. Read-only; writes nothing. Works on Windows PowerShell 5.1 and PowerShell 7.
 #   pwsh -File tests/lint.ps1
-# Checks: every ps1 parses, JSON/SVG are well-formed, ASCII only, sh and tsv files LF, ps1 files CRLF.
+# Checks: every ps1 parses, JSON/SVG are well-formed, ASCII only, plain frontmatter values, sh and tsv files LF, ps1 files CRLF.
 # Bash twin: lint.sh (runs bash -n and shellcheck, which only runs there; keep the file rules in sync).
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -50,6 +50,19 @@ foreach ($f in $text) {
   $n = 0
   foreach ($b in [System.IO.File]::ReadAllBytes($f.FullName)) { if ($b -gt 126 -or ($b -lt 32 -and $b -ne 9 -and $b -ne 10 -and $b -ne 13)) { $n++ } }
   if ($n -gt 0) { Bad ("{0}: {1} non-ASCII or control byte(s)" -f (Rel $f), $n) }
+}
+
+Write-Host "frontmatter (plain YAML values in plugin Markdown: no ': ' or ' #')"
+# An unquoted value with ': ' or ' #' fails to parse in claude plugin validate (CI) and the agent loads with empty metadata.
+foreach ($f in @(Get-Files @('plugins') '*.md')) {
+  $lines = [System.IO.File]::ReadAllLines($f.FullName)
+  if ($lines.Count -eq 0 -or $lines[0] -ne '---') { continue }
+  for ($i = 1; $i -lt $lines.Count -and $lines[$i] -ne '---'; $i++) {
+    if ($lines[$i] -match '^[A-Za-z_-]+:[ \t]+(.*)$') {
+      $v = $Matches[1]
+      if ($v -notmatch '^["''|>]' -and ($v.Contains(': ') -or $v.Contains(' #'))) { Bad ("{0}:{1}: unquoted frontmatter value contains ': ' or ' #' (quote it or use ' - ')" -f (Rel $f), ($i + 1)) }
+    }
+  }
 }
 
 Write-Host 'line endings (sh, tsv = LF; ps1 = CRLF)'

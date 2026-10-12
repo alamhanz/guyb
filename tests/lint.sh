@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Static checks for the guyb repo. Read-only; writes nothing. Usage: bash tests/lint.sh
-# Checks: bash -n and shellcheck (-S warning) on *.sh, JSON/SVG validity, ASCII only (incl. *.tsv), sh and tsv files LF, ps1 files CRLF, no bash 4+ syntax.
+# Checks: bash -n and shellcheck (-S warning) on *.sh, JSON/SVG validity, ASCII only (incl. *.tsv), plain frontmatter values, sh and tsv files LF, ps1 files CRLF, no bash 4+ syntax.
 # Targets bash 3.2 (macOS /bin/bash): no mapfile, associative arrays, or ${v,,}.
 # Shellcheck step is skipped when not installed, required when GUYB_REQUIRE_SHELLCHECK=1 (CI Linux job).
 # PowerShell twin: lint.ps1 (parses ps1 files; no shellcheck there; keep the file rules in sync).
@@ -65,6 +65,21 @@ for f in $text_files; do
   n=$(LC_ALL=C tr -d '\011\012\015\040-\176' < "$f" | wc -c | tr -d ' ')
   [ "$n" -gt 0 ] && bad "$f: $n non-ASCII or control byte(s)"
 done
+
+echo "frontmatter (plain YAML values in plugin Markdown: no ': ' or ' #')"
+# An unquoted value with ': ' or ' #' fails to parse in claude plugin validate (CI) and the agent loads with empty metadata.
+md_files=$(list plugins -name '*.md')
+if [ -n "$md_files" ]; then
+  # shellcheck disable=SC2086 # md_files is a newline-separated list of paths without spaces
+  fm_bad=$(awk '
+    FNR == 1 { fm = ($0 ~ /^---\r?$/); next }
+    fm && /^---\r?$/ { fm = 0; next }
+    fm && match($0, /^[A-Za-z_-]+:[ \t]+/) {
+      v = substr($0, RLENGTH + 1)
+      if (v !~ /^["\047|>]/ && (index(v, ": ") || index(v, " #"))) print FILENAME ":" FNR
+    }' $md_files)
+  for l in $fm_bad; do bad "$l: unquoted frontmatter value contains ': ' or ' #' (quote it or use ' - ')"; done
+fi
 
 echo "line endings (sh, tsv = LF; ps1 = CRLF)"
 for f in $sh_files $tsv_files; do

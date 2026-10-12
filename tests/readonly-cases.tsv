@@ -22,8 +22,8 @@ expect	shell	agent	cwd	command	note
 2	both	code-reviewer	-	git -P commit -m x	-P commit
 2	both	code-reviewer	-	git --no-pager add .	--no-pager add
 2	both	code-reviewer	-	\"git\" add .	quoted git
-2	both	code-reviewer	-	\"C:/Program Files/Git/cmd/git.exe\" add .	quoted exe path
-2	both	code-reviewer	-	& \"C:/Program Files/Git/cmd/git.exe\" add .	call operator quoted exe path
+2	both	code-reviewer	-	\"C:/Program\\ Files/Git/cmd/git.exe\" add .	quoted exe path
+2	both	code-reviewer	-	& \"C:/Program\\ Files/Git/cmd/git.exe\" add .	call operator quoted exe path
 2	both	code-reviewer	-	/usr/bin/git add .	/usr/bin/git
 2	both	code-reviewer	-	GIT add .	uppercase GIT add
 2	both	code-reviewer	-	GIT.EXE ADD .	uppercase GIT.EXE
@@ -203,3 +203,14 @@ expect	shell	agent	cwd	command	note
 0	both	guyb:code-reviewer	-	git rev-parse --show-toplevel	rev-parse
 0	both	guyb:code-reviewer	-	cd \"$(git rev-parse --show-toplevel)\" && git log	substitution read
 0	both	guyb:code-reviewer	-	git log --oneline | head -5 && git status	pipe and chain reads
+2	both	code-reviewer	-	Git add .	mixed case Git add
+2	both	code-reviewer	-	gIt commit -m x	mixed case gIt commit
+2	both	architect	-	cd x && giT push	mixed case giT push after cd
+2	both	code-reviewer	-	GiT.exe Add .	mixed case GiT.exe
+0	both	code-reviewer	-	Git status	mixed case Git status
+2	both	code-reviewer	-	\"my dir/git\" add .	quoted dir with space
+2	sh	code-reviewer	-	C:/Program\\ Files/Git/cmd/git.exe add .	escaped-space exe path (JSON-escaped backslash)
+2	sh	code-reviewer	-	my\\ dir/git add .	escaped-space dir
+2	both	code-reviewer	-	GIT -C x add .	uppercase GIT -C
+2	both	code-reviewer	-	env GIT_DIR=x Git add .	env assignment + mixed-case Git
+2	ps	code-reviewer	-	C:/Program` Files/Git/cmd/git.exe add .	backtick-escaped space exe path

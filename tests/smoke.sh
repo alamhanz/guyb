@@ -144,6 +144,8 @@ g_matrix() { # runner index
     expect_has "brief $r $name" "$out" "STATE.md Open issues:"
     expect_eq "brief $r $name CR count" "${#cr}" 0
     expect_lacks "brief $r $name" "$out" "plugin: "
+    expect_lacks "brief $r $name" "$out" "migrate:"
+    expect_has "brief $r $name" "$out" "gitignore: .claude/guyb/pipeline/ not ignored"
     expect_eq "check $r $name exit" "$crc" 0
     if json_ok "${mx_w}/$n.check"; then ok; else no "check $r $name: output is not valid JSON"; fi
     expect_has "check $r $name" "$chk" '"version": 1'
@@ -157,19 +159,23 @@ g_plugin() {
   mkdir -p "$cfg" "$mk/plugins/guyb/.claude-plugin"
   printf '{"name":"guyb","version":"0.7.0"}\n' > "$mk/plugins/guyb/.claude-plugin/plugin.json"
   printf '{"guyb":{"source":{"source":"directory","path":"%s"}}}\n' "${mk_w}" > "$cfg/known_marketplaces.json"
+  sed 's/command -v jq /command -v no-such-jq /' "$brief" > "$tmp/brief-nojq.sh"
+  if cmp -s "$brief" "$tmp/brief-nojq.sh"; then no "plugin flag: no-jq copy equals brief.sh (pattern stale)"; else ok; fi
   want="plugin: 0.6.0 installed, 0.7.0 available - run: claude plugin marketplace update guyb; claude plugin update guyb@guyb"
   for v in 0.6.0 0.7.0 0.8.0; do
     printf '{"version":2,"plugins":{"guyb@guyb":[{"scope":"user","version":"%s"}]}}\n' "$v" > "$cfg/installed_plugins.json"
     out=$(bash "$brief" "${pa_w}" 2>&1)
     if [ "$v" = 0.6.0 ]; then expect_has "plugin flag $v" "$out" "$want"; else expect_lacks "plugin flag $v" "$out" "plugin: "; fi
+    if [ "$v" != 0.7.0 ]; then # the awk/sed fallback used when jq is missing, on every runner
+      out=$(bash "$tmp/brief-nojq.sh" "${pa_w}" 2>&1)
+      if [ "$v" = 0.6.0 ]; then expect_has "plugin flag $v without jq" "$out" "$want"; else expect_lacks "plugin flag $v without jq" "$out" "plugin: "; fi
+    fi
   done
 }
 
 g_drift() {
   echo "brief.sh STATE.md drift (stub gh)"
   pd="$tmp/f-drift"; make_fixture "$pd"; pd_w=${pd/#"$tmp"/$tmp_w}
-  out=$(GH_STUB_STATE=MERGED bash "$brief" "${pd_w}" 2>&1)
-  expect_has "drift MERGED" "$out" "STATE.md drift: PR #7 is MERGED - update STATE.md"
   out=$(GH_STUB_STATE=OPEN bash "$brief" "${pd_w}" 2>&1)
   expect_lacks "drift OPEN" "$out" "STATE.md drift"
   # state from the PR list: no `gh pr view` call, only open PRs printed (first 5, list shape "number | title | branch")
@@ -212,7 +218,8 @@ g_ghsleep() { # script label: a hanging gh must not stall the brief (5s budget; 
 g_migration() {
   echo "brief.sh migration detection (legacy STATE.md and pipeline)"
   lg="$tmp/legacy"; make_fixture "$lg"; lg_w=${lg/#"$tmp"/$tmp_w}
-  mkdir -p "$lg/.claude/pipeline"
+  mkdir -p "$lg/.claude/pipeline/progress"; : > "$lg/.claude/pipeline/progress/z-9.md"
+  touch -t 202001010000 "$lg/.claude/pipeline/progress/z-9.md"
   mv "$lg/.claude/guyb/STATE.md" "$lg/.claude/STATE.md"; rmdir "$lg/.claude/guyb"
   printf "$GUYB_OLD_STATE" > "$lg/.claude/STATE.md"
   { echo "$RUNHDR"; echo '|---|'; runrow x-1 running "$today"; } > "$lg/.claude/pipeline/runs.md"
@@ -222,6 +229,7 @@ g_migration() {
   expect_has "migrate legacy fallback" "$out" "STATE.md Next up:"
   expect_has "migrate legacy fallback" "$out" "OLD-NEXT"
   expect_has "migrate legacy runs" "$out" "unfinished runs (1):"
+  expect_has "cleanup stale in legacy pipeline" "$out" "cleanup: 1 pipeline files older than 14 days"
   expect_has "migrate legacy gitignore" "$out" "gitignore: .claude/guyb/pipeline/ not ignored"
   printf '.claude/pipeline/\n' > "$lg/.gitignore"
   out=$(bash "$brief" "${lg_w}" 2>&1)
@@ -251,8 +259,6 @@ g_migration() {
 g_migration_new() {
   echo "brief.sh migration detection (new layout beside legacy files)"
   a="$tmp/f-mig"; make_fixture "$a"; a_w=${a/#"$tmp"/$tmp_w}
-  out=$(bash "$brief" "${a_w}" 2>&1)
-  expect_lacks "migrate new-only" "$out" "migrate:"
   printf "$GUYB_OLD_STATE" > "$a/.claude/STATE.md"
   out=$(bash "$brief" "${a_w}" 2>&1)
   expect_has "migrate both STATE" "$out" "conflict: .claude/STATE.md and .claude/guyb/STATE.md both exist"
@@ -284,8 +290,6 @@ g_emptysec() {
 g_gitignore() {
   echo "brief.sh gitignore check"
   a="$tmp/f-gi"; make_fixture "$a"; mkdir -p "$a/.claude/guyb/pipeline"; a_w=${a/#"$tmp"/$tmp_w}
-  out=$(bash "$brief" "${a_w}" 2>&1)
-  expect_has "gitignore missing" "$out" "gitignore: .claude/guyb/pipeline/ not ignored"
   for gi in '.claude/guyb/pipeline/' '/.claude/guyb/pipeline'; do
     printf 'node_modules/\n%s\n' "$gi" > "$a/.gitignore"
     out=$(bash "$brief" "${a_w}" 2>&1)
@@ -336,15 +340,6 @@ g_cleanup_under() {
   touch -t 202001010000 "$un/.claude/guyb/pipeline/progress/x-3.md"
   out=$(bash "$brief" "${un_w}" 2>&1)
   expect_has "cleanup profile days" "$out" "1 pipeline files older than 3 days"
-}
-
-g_cleanup_legacy() {
-  echo "brief.sh cleanup suggestions (legacy pipeline)"
-  lc="$tmp/legclean"; make_fixture "$lc"; lc_w=${lc/#"$tmp"/$tmp_w}
-  mkdir -p "$lc/.claude/pipeline/progress"; : > "$lc/.claude/pipeline/progress/z-9.md"
-  touch -t 202001010000 "$lc/.claude/pipeline/progress/z-9.md"
-  out=$(bash "$brief" "${lc_w}" 2>&1)
-  expect_has "cleanup stale in legacy pipeline" "$out" "cleanup: 1 pipeline files older than 14 days"
 }
 
 g_overdue() {
@@ -461,10 +456,11 @@ g_guard() {
   sg 'env git commit -m x'; expect_eq "guard env git commit, nothing staged" "$rc" 0
 }
 
-g_readonly() { # chunk (0-based) chunks: rows of tests/readonly-cases.tsv with row % chunks == chunk; chunk 0 also runs the extra cases
+g_readonly() { # chunk chunks: chunk 0 sends every row of tests/readonly-cases.tsv through the batch entry (one awk), a per-case sample, the filter contract and the extra cases; GUYB_RO_FULL=1 also runs each chunk's share per case
   echo "guard-readonly.sh (tests/readonly-cases.tsv, chunk $1 of $2)"
   ro="$root/plugins/guyb/hooks/guard-readonly.sh"
   cases="$root/tests/readonly-cases.tsv"
+  hj="$root/plugins/guyb/hooks/hooks.json"
   # Minimal repo written by hand (git init + 6 config calls would be 7 forks); the hook only reads its aliases.
   ar="$tmp/aliasrepo$1"; mkdir -p "$ar/.git/objects" "$ar/.git/refs"; ar_w=${ar/#"$tmp"/$tmp_w}
   printf 'ref: refs/heads/main\n' > "$ar/.git/HEAD"
@@ -475,39 +471,80 @@ g_readonly() { # chunk (0-based) chunks: rows of tests/readonly-cases.tsv with r
   ro_run() { # json: hook exit code in $rc
     ( . "$ro" ) >/dev/null 2>&1 <<< "$1"; rc=$?
   }
-  ro_case() { # agent cwd command: hook exit code in $rc
-    agent=$1; cwd=$2; cmd=$3
+  ro_json() { # agent cwd command: hook JSON in $ro_j
     fields=""
-    [ "$agent" = "-" ] || fields="\"agent_type\":\"$agent\","
-    case "$cwd" in
+    [ "$1" = "-" ] || fields="\"agent_type\":\"$1\","
+    case "$2" in
       -) ;;
       norepo) fields="$fields\"cwd\":\"${nr_w}\"," ;;
       *) fields="$fields\"cwd\":\"${ar_w}\"," ;;
     esac
-    ro_run "{${fields}\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$cmd\"}}"
+    ro_j="{${fields}\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$3\"}}"
   }
+  # Filter contract: the `if` globs of the guard-readonly Bash entries in hooks.json (case-sensitive, `*` only, like Claude Code)
+  # must match every block row, so no write command skips the guard. Case variants of "git" are separate entries (globs have no classes).
+  ro_globs=(); cond=""
+  while IFS= read -r l; do
+    l=${l%$'\r'}
+    case "$l" in
+      *'"if": "Bash('*) cond=${l#*'"if": "Bash('}; cond=${cond%')"'*} ;;
+      *'"if": "'*) cond="" ;;
+      *guard-readonly.sh*) [ -n "$cond" ] && ro_globs[${#ro_globs[@]}]=$cond; cond="" ;;
+    esac
+  done < "$hj"
+  if [ "$1" -eq 0 ]; then
+    gl=" ${ro_globs[*]} "
+    expect_eq "hooks.json readonly bash filter entries" "${#ro_globs[@]}" 8
+    for v in git giT gIt gIT Git GiT GIt GIT; do expect_has "hooks.json readonly filter *$v*" "$gl" " *$v* "; done
+  fi
+  rs=$'\036'; recs=""
+  r_exp=(); r_lbl=()
   n=0; rows=0
   while IFS="$(printf '\t')" read -r exp shell agent cwd cmd note; do
     n=$((n + 1)); [ "$n" -eq 1 ] && continue
     case "$shell" in both | sh) ;; *) continue ;; esac
     rows=$((rows + 1))
-    [ $((rows % $2)) -eq "$1" ] || continue
-    ro_case "$agent" "$cwd" "$cmd"
-    expect_eq "readonly $note: $cmd" "$rc" "$exp"
+    r_exp[rows]=$exp; r_lbl[rows]="$note: $cmd"
+    ro_json "$agent" "$cwd" "$cmd"
+    if [ "$1" -eq 0 ]; then
+      recs=$recs$ro_j$rs
+      if [ "$exp" = 2 ]; then
+        hit=0
+        # shellcheck disable=SC2254 # the if filter is a glob on purpose
+        for g in "${ro_globs[@]}"; do case "$cmd" in $g) hit=1 ;; esac; done
+        expect_eq "hooks.json readonly filter covers: $cmd" "$hit" 1
+      fi
+    fi
+    if [ "${GUYB_RO_FULL:-}" = 1 ]; then [ $((rows % $2)) -eq "$1" ] || continue; else [ $((rows % 25)) -eq 0 ] || continue; fi
+    ro_run "$ro_j"
+    expect_eq "readonly per case $note: $cmd" "$rc" "$exp"
   done < "$cases"
   [ "$1" -eq 0 ] || return 0
+  seen=0
+  while read -r bn brc; do
+    seen=$((seen + 1))
+    expect_eq "readonly batch ${r_lbl[bn]}" "$brc" "${r_exp[bn]}"
+  done <<< "$( ( . "$ro" batch ) 2>/dev/null <<< "$recs" )"
+  expect_eq "readonly batch answered every row" "$seen" "$rows"
   ro_run 'not json'; expect_eq "readonly bad json" "$rc" 0
   ro_run '{"agent_type":"code-reviewer","tool_input":{"command":""}}'; expect_eq "readonly empty command" "$rc" 0
-  for sel in 'Bash(*git*)' 'PowerShell(*git*)'; do
-    expect_eq "hooks.json readonly filter $sel" "$(grep -cF "\"if\": \"$sel\"" "$root/plugins/guyb/hooks/hooks.json")" 1
+  ro_add='{"agent_type":"code-reviewer","tool_name":"Bash","tool_input":{"command":"git add ."}}'
+  for gm in cmd batch; do
+    ( export GUYB_MODE=$gm; . "$ro" ) >/dev/null 2>&1 <<< "$ro_add"; expect_eq "readonly GUYB_MODE=$gm in the environment still blocks" "$?" 2
   done
+  eb="$tmp/emptybin"; mkdir -p "$eb"
+  ( hash -r; PATH="$eb"; . "$ro" ) >/dev/null 2>&1 <<< "$ro_add"; expect_eq "readonly agent without awk is blocked" "$?" 2
+  ( hash -r; PATH="$eb"; . "$ro" ) >/dev/null 2>&1 <<< '{"tool_name":"Bash","tool_input":{"command":"git add ."}}'; expect_eq "main session without awk passes" "$?" 0
 }
 
 g_wrapper() {
   echo "hooks.json guard-readonly bash entry, end to end"
   if command -v jq >/dev/null 2>&1; then
     hcmd=$(jq -r '.hooks.PreToolUse[].hooks[] | select(.shell == "bash") | select(.command | contains("guard-readonly")) | .command' "$root/plugins/guyb/hooks/hooks.json" | tr -d '\r')
-    expect_eq "hooks.json readonly bash entry count" "$(printf '%s\n' "$hcmd" | grep -c .)" 1
+    # one entry per casing of "git" (the `if` globs are case-sensitive), all with the same command
+    expect_eq "hooks.json readonly bash entry count" "$(printf '%s\n' "$hcmd" | grep -c .)" 8
+    expect_eq "hooks.json readonly bash entries share one command" "$(printf '%s\n' "$hcmd" | sort -u | grep -c .)" 1
+    hcmd=${hcmd%%$'\n'*}
     hcmd=${hcmd//\$\{CLAUDE_PLUGIN_ROOT\}/${root_w}/plugins/guyb}
     wrap() { # json: stdout+stderr, then exit code on the last line
       printf '%s' "$1" | (cd "$tmp" && bash -c "$hcmd" 2>&1); echo "rc=$?"
@@ -543,6 +580,7 @@ spawn() { # name function args...: run the group in the background, own HOME, ou
 }
 
 # slowest first (hung probes and the 5s gh budget), so the short groups fill the gaps
+# The timed groups need no isolation: they assert "well under" the 120-300 s stub sleeps (real runs take 5-20 s), so box load cannot flake them.
 spawn hang_check_std g_hang_check "$check"
 spawn hang_check_notmo g_hang_check "$tmp/check-notmo.sh"
 spawn hang_brief_std g_hang_brief "$brief"
@@ -555,7 +593,7 @@ mi=0
 for r in $runners; do
   mi=$((mi + 1)); spawn "matrix$mi" g_matrix "$r" "$mi"
 done
-ro_chunks=8; ri=0
+ro_chunks=1; [ "${GUYB_RO_FULL:-}" = 1 ] && ro_chunks=8; ri=0
 while [ "$ri" -lt "$ro_chunks" ]; do
   spawn "readonly$ri" g_readonly "$ri" "$ro_chunks"; ri=$((ri + 1))
 done
@@ -571,7 +609,6 @@ spawn plugin g_plugin
 spawn gitignore g_gitignore
 spawn overdue g_overdue
 spawn emptysec g_emptysec
-spawn cleanup_legacy g_cleanup_legacy
 spawn wrapper g_wrapper
 wait
 

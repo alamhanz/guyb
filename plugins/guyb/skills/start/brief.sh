@@ -164,29 +164,83 @@ if [ -f "$inst_f" ] && [ -f "$mk_f" ]; then
   fi
 fi
 
-isgit=0
-if [ "$(git -C "$dir" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ]; then
+# Branch, upstream sync and changed files from one `git status --short --branch`; parsed in bash, no other git or text-tool call.
+# Fallback to separate git calls when the call fails or the header is not understood (not a repo, unborn branch, unusual config).
+isgit=0; branch=""; sync=""; gbody=""; gnl=$'\n'
+git_slow() {
+  [ "$(git -C "$dir" rev-parse --is-inside-work-tree 2>/dev/null)" = "true" ] || return 1
+  git_slow_ref
+  gbody=$(git -C "$dir" status --short 2>/dev/null)
+}
+git_slow_ref() {
   branch=$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null)
   if ab=$(git -C "$dir" rev-list --left-right --count '@{u}...HEAD' 2>/dev/null); then
+    # shellcheck disable=SC2086 # two numbers, splitting is intended
     set -- $ab
     sync="ahead $2, behind $1"
   else
     sync="no upstream"
   fi
-  isgit=1
+}
+# sets branch and sync from a status header (without "## "); returns 1 when the form is not understood
+git_head() {
+  ga=0; gb=0
+  case "$1" in
+    "HEAD (no branch)") branch=HEAD; sync="no upstream" ;;
+    "No commits yet on "* | "Initial commit on "*) git_slow_ref ;;
+    *...*)
+      branch=${1%%...*}; gr=${1#*...}
+      case "$gr" in
+        *" ["*"]") gt=${gr#* \[}; gt=${gt%\]} ;;
+        *" "*) return 1 ;;
+        *) gt="" ;;
+      esac
+      if [ "$gt" = gone ]; then sync="no upstream"; return 0; fi
+      case "$gt" in "ahead "*) gt=${gt#ahead }; ga=${gt%%[!0-9]*}; gt=${gt#"$ga"}; gt=${gt#, } ;; esac
+      case "$gt" in "behind "*) gt=${gt#behind }; gb=${gt%%[!0-9]*}; gt=${gt#"$gb"} ;; esac
+      [ -z "$gt" ] && [ -n "$ga" ] && [ -n "$gb" ] || return 1
+      sync="ahead $ga, behind $gb" ;;
+    *\ *) return 1 ;;
+    *) branch=$1; sync="no upstream" ;;
+  esac
+}
+if gst=$(git -C "$dir" -c status.aheadBehind=true status --short --branch 2>/dev/null) && [[ $gst == "## "* ]]; then
+  gh1=${gst%%"$gnl"*}
+  if git_head "${gh1:3}"; then
+    isgit=1
+    case "$gst" in *"$gnl"*) gbody=${gst#*"$gnl"} ;; esac
+  fi
+fi
+if [ "$isgit" = 0 ] && git_slow; then isgit=1; fi
+if [ "$isgit" = 1 ]; then
   echo "branch: $branch ($sync)"
 
-  dirty=$(git -C "$dir" status --short 2>/dev/null)
   n=0
-  [ -n "$dirty" ] && n=$(printf '%s\n' "$dirty" | wc -l | tr -d ' ')
+  if [ -n "$gbody" ]; then
+    gt=${gbody//"$gnl"/}; n=$((${#gbody} - ${#gt} + 1))
+  fi
   echo "uncommitted: $n file(s)"
-  [ "$n" -gt 0 ] && printf '%s\n' "$dirty" | head -10 | sed 's/^/  /'
+  gi=0; gr=$gbody
+  while [ "$gi" -lt 10 ] && [ "$gi" -lt "$n" ]; do
+    gl=${gr%%"$gnl"*}; printf '  %s\n' "$gl"
+    case "$gr" in *"$gnl"*) gr=${gr#*"$gnl"} ;; esac
+    gi=$((gi + 1))
+  done
   [ "$n" -gt 10 ] && echo "  ... +$((n - 10)) more"
 
-  if grep -qE '^/?\.claude/?[[:space:]]*$' "$base/.gitignore" 2>/dev/null; then
+  # .gitignore: .claude/ ignored (1), guyb pipeline ignored (2), legacy pipeline ignored (3)
+  gi1=0; gi2=0; gi3=0
+  if [ -f "$base/.gitignore" ] && [ -r "$base/.gitignore" ]; then
+    re1='^/?\.claude/?[[:space:]]*$'; re2='^/?\.claude/guyb/pipeline/?[[:space:]]*$'; re3='^/?\.claude/pipeline/?[[:space:]]*$'
+    while IFS= read -r gl || [ -n "$gl" ]; do
+      [[ $gl =~ $re1 ]] && gi1=1
+      [[ $gl =~ $re2 ]] && gi2=1
+      [[ $gl =~ $re3 ]] && gi3=1
+    done < "$base/.gitignore"
+  fi
+  if [ "$gi1" = 1 ]; then
     echo "warn: .gitignore ignores .claude/ - guyb STATE.md will not be committed"
-  elif ! grep -qE '^/?\.claude/guyb/pipeline/?[[:space:]]*$' "$base/.gitignore" 2>/dev/null &&
-    ! { [ "$pipe" = "$pipe_old" ] && grep -qE '^/?\.claude/pipeline/?[[:space:]]*$' "$base/.gitignore" 2>/dev/null; }; then
+  elif [ "$gi2" != 1 ] && ! { [ "$pipe" = "$pipe_old" ] && [ "$gi3" = 1 ]; }; then
     echo "gitignore: .claude/guyb/pipeline/ not ignored"
   fi
 
@@ -211,26 +265,38 @@ else
 fi
 
 if [ -n "$state" ]; then
-  for h in "Next up" "Open issues"; do
-    sec=$(awk -v h="$h" '
-      { sub(/\r$/, "") }
-      found && /^#/ { exit }
-      found && NF { gsub(/^[ \t]+|[ \t]+$/, ""); print "  " $0; if (++c >= 5) exit }
-      !found && tolower($0) ~ "^#+[ \t]*" tolower(h) { found = 1 }
-    ' "$state")
-    [ -n "$sec" ] && { echo "STATE.md $h:"; printf '%s\n' "$sec"; }
-  done
-  # Drift: PRs named in live-state sections of STATE.md (Current Status, Open Issues, Next Up, In progress, Open PRs) that are already merged or closed.
+  # One awk pass over STATE.md: "1:"/"2:" lines are the first 5 non-blank lines of the Next up / Open issues sections,
+  # "P:" lines are PR numbers named in live-state sections (Current Status, Open Issues, Next Up, In progress, Open PRs; max 3).
+  sec1=""; sec2=""; prn=""
+  while IFS= read -r stl; do
+    case "$stl" in
+      1:*) sec1="${sec1:+$sec1$gnl}${stl:2}" ;;
+      2:*) sec2="${sec2:+$sec2$gnl}${stl:2}" ;;
+      P:*) prn="$prn ${stl:2}" ;;
+    esac
+  done <<< "$(awk '
+    BEGIN { hs[1] = "next up"; hs[2] = "open issues" }
+    { p = $0; gsub(/\r/, "", p); sub(/\r$/, "") }
+    {
+      for (k = 1; k <= 2; k++) {
+        if (dn[k]) continue
+        if (fd[k] && /^#/) { dn[k] = 1; continue }
+        if (fd[k] && NF) { t = $0; gsub(/^[ \t]+|[ \t]+$/, "", t); print k ":  " t; if (++sc[k] >= 5) dn[k] = 1; continue }
+        if (!fd[k] && tolower($0) ~ "^#+[ \t]*" hs[k]) fd[k] = 1
+      }
+    }
+    p ~ /^#/ { l = (tolower(p) ~ /^#+[ \t]*(current status|open issues|next up|in progress|open prs)/); next }
+    l { s = tolower(p)
+      while (match(s, /(^|[^a-z0-9])(#|pull\/|pr[ \t]+#?)[0-9]+/)) {
+        m = substr(s, RSTART, RLENGTH); sub(/^.*[^0-9]/, "", m); s = substr(s, RSTART + RLENGTH)
+        if (!seen[m]++ && ++c <= 3) print "P:" m
+      } }' "$state")"
+  [ -n "$sec1" ] && { echo "STATE.md Next up:"; printf '%s\n' "$sec1"; }
+  [ -n "$sec2" ] && { echo "STATE.md Open issues:"; printf '%s\n' "$sec2"; }
+  # Drift: PRs named in those sections that are already merged or closed.
   # States come from the PR list; a PR missing from it gets one `gh pr view` (max 3, within the 5s budget; none after a timeout; silent on failure).
   if [ "$isgit" = 1 ] && command -v gh >/dev/null 2>&1 && [ "$ghrc" != 124 ]; then
-    for n in $(awk '
-      { gsub(/\r/, "") }
-      /^#/ { l = (tolower($0) ~ /^#+[ \t]*(current status|open issues|next up|in progress|open prs)/); next }
-      l { s = tolower($0)
-        while (match(s, /(^|[^a-z0-9])(#|pull\/|pr[ \t]+#?)[0-9]+/)) {
-          m = substr(s, RSTART, RLENGTH); sub(/^.*[^0-9]/, "", m); s = substr(s, RSTART + RLENGTH)
-          if (!seen[m]++ && ++c <= 3) print m
-        } }' "$state"); do
+    for n in $prn; do
       st=""
       while IFS=$'\t' read -r pn_ ps_ _; do
         [ "$pn_" = "$n" ] && { st=$ps_; break; }
@@ -251,20 +317,24 @@ fi
 
 runs="$pipe/runs.md"
 if [ -n "$pipe" ] && [ -f "$runs" ]; then
-  unf=$(grep -E '^\|.*\|[[:space:]]*(running|queued)[[:space:]]*\|' "$runs")
-  if [ -n "$unf" ]; then
-    echo "unfinished runs ($(printf '%s\n' "$unf" | wc -l | tr -d ' ')):"
-    printf '%s\n' "$unf" | head -5 | sed -E 's/^\|[[:space:]]*//; s/[[:space:]]*\|[[:space:]]*/ | /g; s/ \| $//; s/^/  /'
-  fi
+  awk '
+    /^[|].*[|][ \t\r\f\v]*(running|queued)[ \t\r\f\v]*[|]/ {
+      if (++n <= 5) { s = $0; sub(/^[|][ \t\r\f\v]*/, "", s); gsub(/[ \t\r\f\v]*[|][ \t\r\f\v]*/, " | ", s); sub(/ [|] $/, "", s); r[n] = "  " s }
+    }
+    END { if (n) { print "unfinished runs (" n "):"; for (i = 1; i <= n && i <= 5; i++) print r[i] } }' "$runs"
 fi
 
 qs="$pipe/questions.md"
 if [ -n "$pipe" ] && [ -f "$qs" ]; then
-  open=$(grep -E '^\|[[:space:]]*Q[0-9]+.*\|[[:space:]]*open[[:space:]]*\|' "$qs")
-  if [ -n "$open" ]; then
-    echo "open questions ($(printf '%s\n' "$open" | wc -l | tr -d ' ')):"
-    printf '%s\n' "$open" | head -5 | awk -F'|' '{ n = 0; o = ""; for (i = 1; i <= NF && n < 4; i++) { c = $i; gsub(/^[ \t\r]+|[ \t\r]+$/, "", c); if (c != "") { o = o (n ? " | " : "") c; n++ } } print "  " o }'
-  fi
+  awk -F'|' '
+    /^[|][ \t\r\f\v]*Q[0-9]+.*[|][ \t\r\f\v]*open[ \t\r\f\v]*[|]/ {
+      if (++q <= 5) {
+        n = 0; o = ""
+        for (i = 1; i <= NF && n < 4; i++) { c = $i; gsub(/^[ \t\r]+|[ \t\r]+$/, "", c); if (c != "") { o = o (n ? " | " : "") c; n++ } }
+        r[q] = "  " o
+      }
+    }
+    END { if (q) { print "open questions (" q "):"; for (i = 1; i <= q && i <= 5; i++) print r[i] } }' "$qs"
 fi
 
 # Cleanup hints. Limits (read above): project .claude/CLAUDE.md, then ~/.claude/guyb/profile.md, then defaults; invalid values are ignored.

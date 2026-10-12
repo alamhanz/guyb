@@ -555,7 +555,7 @@ try {
         if ($f[3] -eq 'norepo') { $fields += '"cwd":"' + $nrJson + '",' }
         elseif ($f[3] -ne '-') { $fields += '"cwd":"' + $arJson + '",' }
         $rows += [pscustomobject]@{
-          Expect = $f[0]; Label = $f[5] + ': ' + $f[4]
+          Expect = $f[0]; Cmd = $f[4]; Label = $f[5] + ': ' + $f[4]
           Job = [pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = ('{' + $fields + '"tool_name":"PowerShell","tool_input":{"command":"' + $f[4] + '"}}') }
         }
       }
@@ -571,9 +571,20 @@ try {
         [pscustomobject]@{ Exe = $ps; Args = ('-NoProfile -ExecutionPolicy Bypass -File "' + $ro + '"'); Stdin = ([string][char]0x2229) + [char]0x2557 + [char]0x2510 + $bomJson })
       Expect-Eq 'readonly BOM before JSON still blocks' $bom[0].Code 2
       Expect-Eq 'readonly OEM-decoded BOM before JSON still blocks' $bom[1].Code 2
+      # Filter contract: the `if` globs of the guard-readonly PowerShell entries in hooks.json (case-sensitive, `*` only,
+      # like Claude Code) must match every block row, so no write command skips the guard. Case variants of "git" are
+      # separate entries because the globs have no character classes.
       $hj = Get-Content -Raw -LiteralPath (Join-Path $root 'plugins/guyb/hooks/hooks.json')
-      foreach ($sel in 'Bash(*git*)', 'PowerShell(*git*)') {
-        Expect-Eq "hooks.json readonly filter $sel" ($hj.Contains('"if": "' + $sel + '"')) $true
+      $globs = @((($hj | ConvertFrom-Json).hooks.PreToolUse | ForEach-Object { $_.hooks }) | Where-Object { $_.shell -eq 'powershell' -and $_.command -like '*guard-readonly*' } | ForEach-Object { $_.if })
+      Expect-Eq 'hooks.json readonly PowerShell filter entries' $globs.Count 8
+      foreach ($v in 'git', 'giT', 'gIt', 'gIT', 'Git', 'GiT', 'GIt', 'GIT') {
+        Expect-Eq "hooks.json readonly filter *$v*" ($globs -ccontains "PowerShell(*$v*)") $true
+      }
+      foreach ($r in $rows) {
+        if ($r.Expect -ne 2) { continue }
+        $hit = $false
+        foreach ($g in $globs) { if ($r.Cmd -clike ($g -replace '^PowerShell\((.*)\)$', '$1')) { $hit = $true } }
+        Expect-Eq ('hooks.json readonly filter covers: ' + $r.Cmd) $hit $true
       }
     }
 
@@ -581,7 +592,9 @@ try {
       Write-Host 'hooks.json guard-readonly PowerShell entry, end to end'
       $hj = Get-Content -Raw -LiteralPath (Join-Path $root 'plugins/guyb/hooks/hooks.json')
       $entries = @((($hj | ConvertFrom-Json).hooks.PreToolUse | ForEach-Object { $_.hooks }) | Where-Object { $_.shell -eq 'powershell' -and $_.command -like '*guard-readonly*' })
-      Expect-Eq 'hooks.json readonly PowerShell entry count' $entries.Count 1
+      # one entry per casing of "git" (the `if` globs are case-sensitive), all with the same command
+      Expect-Eq 'hooks.json readonly PowerShell entry count' $entries.Count 8
+      Expect-Eq 'hooks.json readonly PowerShell entries share one command' @($entries | ForEach-Object { $_.command } | Select-Object -Unique).Count 1
       $hcmd = $entries[0].command.Replace('${CLAUDE_PLUGIN_ROOT}', (Join-Path $root 'plugins/guyb'))
       $enc = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($hcmd))
       $hosts = @()
