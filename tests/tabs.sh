@@ -161,6 +161,62 @@ out="$(env -u GUYB_DRYRUN GUYB_TAB_NAME=zz TMPDIR="$tmp" TMUX=/nonexistent/sock,
 expect_eq hook-silent "$out" ''
 expect_eq hook-rc "$rc" 0
 
+# --- usage guard (usage-guard.sh sourced by tab-status.sh; state file written by the status line). GUYB_USAGE_DIR in $tmp.
+# Notice on stderr + exit 2 once per (session, level, window, resets_at); silent otherwise. Runs even without GUYB_TAB_NAME.
+ud="$tmp/usage"; mkdir -p "$ud"
+far=4102444800
+gh() { # mode stdin-json: prints "<rc>|<stdout+stderr>"
+  local o rc
+  o="$(printf '%s' "$2" | GUYB_TAB_NAME="$tname" GUYB_USAGE_DIR="$ud" TMPDIR="$tmp" bash "$hook" "$1" 2>&1)"; rc=$?
+  printf '%s|%s' "$rc" "$o"
+}
+sin='{"session_id":"s-1"}'
+tname='ug'
+expect_eq guard-no-state "$(gh 'done' "$sin")" "0|tab: osc0 $DONE ug"
+printf 'warn 5h 94 %s\n' "$far" > "$ud/state"
+out="$(gh 'done' "$sin")"
+expect_has guard-warn-rc "$out" '2|'
+expect_has guard-warn-text "$out" 'guyb usage guard: 5-hour plan usage at 94% (resets '
+expect_has guard-warn-advice "$out" 'do not start new waves'
+expect_has guard-warn-tab-still-painted "$out" "tab: osc0 $DONE ug"
+expect_has guard-marker "$(cat "$ud/fired.s-1")" "warn 5h $far"
+expect_eq guard-once "$(gh 'done' "$sin")" "0|tab: osc0 $DONE ug"
+expect_eq guard-other-session "$(gh 'done' '{"session_id":"s-2"}' | head -c2)" '2|'
+expect_eq guard-no-session-id "$(gh 'done' '{}')" "0|tab: osc0 $DONE ug"
+printf 'stop 7d 99 %s\n' "$far" > "$ud/state"
+out="$(gh 'done' "$sin")"
+expect_has guard-stop-rc "$out" '2|'
+expect_has guard-stop-text "$out" 'weekly plan usage at 99%'
+expect_has guard-stop-skill "$out" 'follow "Usage limit mode"'
+rm -f "$ud/fired.s-1"
+expect_eq guard-subagent-tool-ignored "$(gh resume '{"session_id":"s-1","agent_id":"a9"}' | head -c2)" '0|'
+expect_eq guard-agent-stop-fires "$(gh agent-stop '{"session_id":"s-1","agent_id":"a9"}' | head -c2)" '2|'
+rm -f "$ud/fired.s-1"
+expect_eq guard-resume-main-fires "$(gh resume "$sin" | head -c2)" '2|'
+expect_eq guard-running-mode-silent "$(gh running '{"session_id":"s-3"}' | head -c2)" '0|'
+expect_eq guard-no-tab-name "$(printf '%s' '{"session_id":"s-4"}' | env -u GUYB_TAB_NAME GUYB_USAGE_DIR="$ud" bash "$hook" 'done' >/dev/null 2>&1; echo $?)" 2
+ev=$(gh end "$sin"); expect_eq guard-end-silent "$(printf '%s' "$ev" | head -c2)" '0|'
+expect_eq guard-end-clears-marker "$([ -f "$ud/fired.s-1" ] && echo present || echo gone)" gone
+printf 'warn 5h 94 100\n' > "$ud/state"
+expect_eq guard-reset-passed "$(gh 'done' '{"session_id":"s-5"}')" "0|tab: osc0 $DONE ug"
+expect_eq guard-reset-deletes-state "$([ -f "$ud/state" ] && echo present || echo gone)" gone
+printf 'garbage\n' > "$ud/state"
+expect_eq guard-garbled-state "$(gh 'done' '{"session_id":"s-6"}')" "0|tab: osc0 $DONE ug"
+# gate (PreToolUse Agent|Task): the inline command from hooks.json; ask only at level stop
+gate() { GUYB_USAGE_DIR="$ud" CLAUDE_PLUGIN_ROOT="$root/plugins/guyb" bash -c '[ -f "${GUYB_USAGE_DIR:-$HOME/.claude/guyb/usage}/state" ] || exit 0; . "${CLAUDE_PLUGIN_ROOT}/hooks/usage-guard.sh" gate' </dev/null 2>&1; echo "rc=$?"; }
+rm -f "$ud/state"
+expect_eq gate-no-state "$(gate)" 'rc=0'
+printf 'warn 5h 94 %s\n' "$far" > "$ud/state"
+expect_eq gate-warn-silent "$(gate)" 'rc=0'
+printf 'stop 5h 99 %s\n' "$far" > "$ud/state"
+out="$(gate)"
+expect_has gate-stop-ask "$out" '"permissionDecision":"ask"'
+expect_has gate-stop-reason "$out" 'guyb: 5-hour plan usage at 99% (resets '
+expect_has gate-stop-rc "$out" 'rc=0'
+printf 'stop 5h 99 100\n' > "$ud/state"
+expect_eq gate-reset-silent "$(gate)" 'rc=0'
+rm -rf "$ud"
+
 # --- Real tmux (bash only; launch.ps1 has no tmux branch). Private server via -L, never the developer's tmux.
 # Skipped when tmux is missing unless GUYB_REQUIRE_TMUX=1 (CI), where a missing tmux is a failure.
 if ! command -v tmux >/dev/null 2>&1; then

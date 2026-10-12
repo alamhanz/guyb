@@ -154,6 +154,15 @@ g_matrix() { # runner index
 }
 
 g_plugin() {
+  echo "hooks.json usage guard contract"
+  hj=$(cat "$root/plugins/guyb/hooks/hooks.json")
+  rw=$(echo "$hj" | grep -A1 '"asyncRewake": true')
+  expect_eq "hooks.json asyncRewake entries" "$(echo "$rw" | grep -c asyncRewake)" 3
+  for m in resume "done" agent-stop; do
+    expect_has "hooks.json asyncRewake on tab-status $m" "$rw" "tab-status.sh\\\" $m\""
+  done
+  expect_has "hooks.json usage gate matcher" "$hj" '"matcher": "Agent|Task"'
+  expect_has "hooks.json usage gate fast path" "$hj" '[ -f \"${GUYB_USAGE_DIR:-$HOME/.claude/guyb/usage}/state\" ] || exit 0; . \"${CLAUDE_PLUGIN_ROOT}/hooks/usage-guard.sh\" gate'
   echo "brief.sh outdated plugin flag"
   pa="$tmp/f-plug"; make_fixture "$pa"; pa_w=${pa/#"$tmp"/$tmp_w}
   cfg="$HOME/.claude/plugins"; mk="$tmp/marketplace"; mk_w=${mk/#"$tmp"/$tmp_w}

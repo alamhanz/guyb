@@ -98,6 +98,16 @@
         ]
       },
       {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "[ -f \"${GUYB_USAGE_DIR:-$HOME/.claude/guyb/usage}/state\" ] || exit 0; . \"${CLAUDE_PLUGIN_ROOT}/hooks/usage-guard.sh\" gate"
+          }
+        ]
+      },
+      {
         "matcher": "PowerShell",
         "hooks": [
           {
@@ -170,6 +180,7 @@
             "type": "command",
             "shell": "bash",
             "async": true,
+            "asyncRewake": true,
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" resume"
           }
         ]
@@ -194,6 +205,7 @@
             "type": "command",
             "shell": "bash",
             "async": true,
+            "asyncRewake": true,
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" done"
           }
         ]
@@ -218,6 +230,7 @@
             "type": "command",
             "shell": "bash",
             "async": true,
+            "asyncRewake": true,
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/tab-status.sh\" agent-stop"
           }
         ]

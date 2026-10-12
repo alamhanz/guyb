@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tab status icon: sets the terminal tab title to "<icon> <project name>" as Claude Code's state changes.
-# Usage: tab-status.sh running|resume|done|waiting|agent-start|agent-stop|end   (async hook; never blocks, never prints, always exits 0)
+# Usage: tab-status.sh running|resume|done|waiting|agent-start|agent-stop|end   (async hook; never blocks, never prints, always exits 0
+#   except exit 2 with a stderr notice from usage-guard.sh, only while a usage tier is active; hooks.json sets asyncRewake)
 #   running = hourglass (U+23F3)   done = check mark (U+2705)   waiting = question mark (U+2753)   end = plain name
 #   resume  = PostToolUse: repaint "running" only if the last state written was "waiting" (cheap no-op otherwise);
 #             ignored when the event comes from a subagent (stdin has agent_id), so a subagent cannot clear a main "waiting"
@@ -16,10 +17,9 @@
 # off to tab-status.ps1, which attaches to the console of the Claude Code process (a hook's own console is hidden).
 state="${1:-}"
 input=""
-case "$state" in
-  resume|agent-start|agent-stop) IFS= read -r -d '' input 2>/dev/null ;;
-  *) cat >/dev/null 2>&1 ;;
-esac
+IFS= read -r -d '' input 2>/dev/null
+# usage guard (status line wrote a state file): may print a notice and make this hook exit 2 (asyncRewake wakes the model)
+[ -f "${GUYB_USAGE_DIR:-$HOME/.claude/guyb/usage}/state" ] && . "${0%/*}/usage-guard.sh"
 [ -n "${GUYB_TAB_NAME:-}" ] || exit 0
 case "$state" in running|resume|done|waiting|agent-start|agent-stop|end) ;; *) exit 0 ;; esac
 

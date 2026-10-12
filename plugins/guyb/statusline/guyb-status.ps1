@@ -1,5 +1,8 @@
 # guyb status line for Claude Code: prints one line "guyb > <project>  <branch>  N running  M question(s)".
-# Read-only, no network, no gh, no git subprocess, ASCII only, never prompts, always exits 0.
+# Read-only except the usage state file (see below), no network, no gh, no git subprocess, ASCII only, never prompts, always exits 0.
+# Usage guard: when rate_limits (5-hour / weekly plan usage) reaches usage_warn (default 93) or usage_stop (default 98) it
+# writes one line to $env:GUYB_USAGE_DIR (default ~/.claude/guyb/usage)/state (removed when usage is back below), read by hooks/usage-guard.sh;
+# keys usage_warn / usage_stop (50-100, 0 = off) come from the project .claude/CLAUDE.md, then ~/.claude/guyb/profile.md.
 # Location independent: Claude Code runs it from settings.json (setup copies it to ~/.claude/guyb/).
 # Reads the session JSON on stdin (workspace.current_dir, then cwd, then the current dir); stdin read is capped and times out.
 # Registry: <root>/.claude/guyb/pipeline/{runs,questions}.md, else the legacy .claude/pipeline/ copy when
@@ -87,6 +90,62 @@ function Find-Up([string]$start, [string[]]$names) {
     return $null
 }
 
+function Get-Usage([string]$raw, [string]$root) {
+    # returns "<level> <window> <pct> <resets_at>" when a tier is reached, else $null; syncs the state file
+    $ud = $env:GUYB_USAGE_DIR
+    if (-not $ud) { $ud = Join-Path $script:userHome '.claude/guyb/usage' }
+    $sf = Join-Path $ud 'state'
+    $lvl = 0; $win = ''; $pc = ''; $rs = ''
+    if ($raw.Contains('"rate_limits"')) {
+        $w = @()
+        foreach ($k in @(@('5h', 'five_hour'), @('7d', 'seven_day'))) {
+            if ($raw -match ('"' + $k[1] + '"\s*:\s*\{([^}]*)\}')) {
+                $t = $Matches[1]
+                if ($t -match '"used_percentage"\s*:\s*([0-9]+)') { $p = [int]$Matches[1] } else { continue }
+                if ($t -match '"resets_at"\s*:\s*([0-9]+)') { $w += , @($k[0], $p, $Matches[1]) }
+            }
+        }
+        $mx = 0; foreach ($x in $w) { if ($x[1] -gt $mx) { $mx = $x[1] } }
+        if ($mx -ge 50) {
+            $cfg = @{}
+            foreach ($f in @((Join-Path $root '.claude/CLAUDE.md'), (Join-Path $script:userHome '.claude/guyb/profile.md'))) {
+                if (-not [IO.File]::Exists($f)) { continue }
+                foreach ($l in [IO.File]::ReadAllLines($f)) {
+                    $l = $l.TrimStart([char]0xFEFF)
+                    if ($l -cmatch '^\s*[-*]?\s*(usage_warn|usage_stop):\s*([0-9]+)\s*$') {
+                        $n = [int]$Matches[2]
+                        if (($n -eq 0 -or ($n -ge 50 -and $n -le 100)) -and -not $cfg.ContainsKey($Matches[1])) { $cfg[$Matches[1]] = $n }
+                    }
+                }
+            }
+            $uw = 93; $us = 98
+            if ($cfg.ContainsKey('usage_warn')) { $uw = $cfg['usage_warn'] }
+            if ($cfg.ContainsKey('usage_stop')) { $us = $cfg['usage_stop'] }
+            if ($uw -gt $us -and $us -gt 0) { $uw = $us }
+            foreach ($x in $w) { # equal level: the later window (7d) wins, it binds longer
+                $l = 0
+                if ($us -gt 0 -and $x[1] -ge $us) { $l = 2 } elseif ($uw -gt 0 -and $x[1] -ge $uw) { $l = 1 }
+                if ($l -gt 0 -and $l -ge $lvl) { $lvl = $l; $win = $x[0]; $pc = $x[1]; $rs = $x[2] }
+            }
+        }
+    }
+    if ($lvl -eq 0) {
+        if ([IO.File]::Exists($sf)) { [IO.File]::Delete($sf) }
+        return $null
+    }
+    $name = if ($lvl -eq 2) { 'stop' } else { 'warn' }
+    $cur = ''
+    if ([IO.File]::Exists($sf)) { $cur = ([IO.File]::ReadAllText($sf) -split "`n")[0].TrimEnd("`r") }
+    $c = $cur -split ' '
+    if (-not ($c.Length -ge 4 -and $c[0] -eq $name -and $c[1] -eq $win -and $c[3] -eq $rs)) {
+        try {
+            [void][IO.Directory]::CreateDirectory($ud)
+            [IO.File]::WriteAllText($sf, "$name $win $pc $rs`n", (New-Object Text.UTF8Encoding($false)))
+        } catch { }
+    }
+    return $(if ($win -eq '5h') { "5h $pc%" } else { "wk $pc%" })
+}
+
 $out = 'guyb'
 $userHome = [Environment]::GetFolderPath('UserProfile')
 try {
@@ -146,10 +205,14 @@ try {
     $running = Get-Count (Get-Reg 'runs.md') 7 @('id') 'running'
     $questions = Get-Count (Get-Reg 'questions.md') 6 @('q', 'id') 'open'
 
+    $useg = $null
+    try { $useg = Get-Usage $raw $root } catch { }
+
     if ($branch) { $out += "  $branch" }
     if ($running -gt 0) { $out += "  $running running" }
     if ($questions -eq 1) { $out += '  1 question' }
     elseif ($questions -gt 1) { $out += "  $questions questions" }
+    if ($useg) { $out += "  $useg" }
 } catch { }
 [Console]::Out.WriteLine($out)
 exit 0

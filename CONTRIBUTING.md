@@ -10,7 +10,7 @@ plugins/guyb/
   .claude-plugin/plugin.json      plugin name, version, description
   agents/*.md                     one subagent per file
   skills/<name>/SKILL.md          slash commands (/guyb:<name>); helper scripts live beside them
-  hooks/                          hooks.json, orchestrator.md (playbook), guard-secrets.*, guard-readonly.*, tab-status.*
+  hooks/                          hooks.json, orchestrator.md (playbook), guard-secrets.*, guard-readonly.*, tab-status.*, usage-guard.sh
 scripts/                          install.ps1/.sh, launch.ps1/.sh (the `guyb` command)
 settings/                         recommended-permissions.json
 plugins/guyb/statusline/          guyb-status.sh/.ps1 (optional status line; setup copies them to ~/.claude/guyb/)
@@ -42,8 +42,8 @@ CI runs these same scripts. They write nothing in the repo (smoke tests use a te
 ```
 bash tests/lint.sh                 # bash -n, JSON/SVG validity, ASCII, line endings (sh LF, ps1 CRLF)
 bash tests/smoke.sh                # brief.sh (incl. migration and cleanup detection), check.sh, guard hooks on throwaway repos
-bash tests/tabs.sh                 # launcher colour table, dry-run tab/tmux commands, title sanitising
-bash tests/statusline.sh           # status line fixtures (registries, branch, worktree, paths)
+bash tests/tabs.sh                 # launcher colour table, dry-run tab/tmux commands, title sanitising, usage guard notices and gate
+bash tests/statusline.sh           # status line fixtures (registries, branch, worktree, paths, usage tiers)
 bash tests/secrets.sh              # secrets guard cases (git -C/-c, chained, commit -a)
 pwsh -File tests/lint.ps1          # ps1 parse, same file rules
 pwsh -File tests/smoke.ps1         # brief.ps1, check.ps1, guard hooks
