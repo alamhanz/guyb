@@ -112,6 +112,43 @@ try {
         Check 'Windows-style path, forward slashes' 'guyb > new  main  2 running  2 questions' (Run $tmp "{`"cwd`":`"$($w.Replace('\', '/'))`"}")
     } else { Write-Host 'skip Windows-style path (not Windows)' }
 
+    # usage guard: rate_limits -> state file + segment (GUYB_USAGE_DIR keeps it inside $tmp)
+    $env:GUYB_USAGE_DIR = Join-Path $tmp 'usage'
+    Proj 'uc' 'ref: refs/heads/main'
+    $uc = Join-Path $tmp 'uc'
+    function UJ([string]$d, $p5, $p7) { # resets_at 4102444800 = year 2100
+        return "{`"cwd`":`"$(Esc $d)`",`"rate_limits`":{`"five_hour`":{`"used_percentage`":$p5,`"resets_at`":4102444800},`"seven_day`":{`"used_percentage`":$p7,`"resets_at`":4102444800}}}"
+    }
+    function UState { $f = Join-Path $env:GUYB_USAGE_DIR 'state'; if ([IO.File]::Exists($f)) { return ([IO.File]::ReadAllText($f)).TrimEnd("`n") } return 'none' }
+    function UCheck([string]$n, [string]$want, [string]$stdin) { Check $n $want ("$(Run $tmp $stdin)|$(UState)") }
+    UCheck 'usage below 50: plain, no state' 'guyb > uc  main|none' (UJ $uc 10 20)
+    UCheck 'usage 50-92: no segment, no state' 'guyb > uc  main|none' (UJ $uc 60 92)
+    UCheck 'warn on 5h (float pct)' 'guyb > uc  main  5h 93%|warn 5h 93 4102444800' (UJ $uc 93.4 20)
+    Put (Join-Path $env:GUYB_USAGE_DIR 'state') @('warn 5h 99 4102444800')
+    $null = Run $tmp (UJ $uc 94 20)
+    Check 'same tier: state not rewritten' 'warn 5h 99 4102444800' (UState)
+    UCheck 'stop, 7d wins the tie' 'guyb > uc  main  wk 98%|stop 7d 98 4102444800' (UJ $uc 99 98)
+    UCheck 'stop on 5h alone' 'guyb > uc  main  5h 99%|stop 5h 99 4102444800' (UJ $uc 99 20)
+    UCheck 'back below: state removed' 'guyb > uc  main|none' (UJ $uc 10 20)
+    UCheck 'no resets_at: window ignored' 'guyb > uc  main|none' "{`"cwd`":`"$(Esc $uc)`",`"rate_limits`":{`"five_hour`":{`"used_percentage`":99}}}"
+    $ucc = Join-Path $uc '.claude/CLAUDE.md'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ucc) | Out-Null
+    [IO.File]::WriteAllText($ucc, "- usage_warn: 80`r`nusage_stop: 85`r`n", $utf8)
+    UCheck 'project config thresholds (CRLF)' 'guyb > uc  main  5h 86%|stop 5h 86 4102444800' (UJ $uc 86 20)
+    Put $ucc @('usage_stop: 0')
+    UCheck 'usage_stop 0 = off: warn only' 'guyb > uc  main  5h 99%|warn 5h 99 4102444800' (UJ $uc 99 20)
+    Put $ucc @('usage_warn: 0', 'usage_stop: 0')
+    UCheck 'both off' 'guyb > uc  main|none' (UJ $uc 99 99)
+    Put $ucc @('usage_warn: 99', 'usage_stop: 90')
+    UCheck 'warn above stop: warn = stop' 'guyb > uc  main  5h 91%|stop 5h 91 4102444800' (UJ $uc 91 20)
+    Put $ucc @('usage_warn: 30', 'usage_stop: abc')
+    UCheck 'invalid values: defaults' 'guyb > uc  main|none' (UJ $uc 60 20)
+    Remove-Item -Recurse -Force (Join-Path $uc '.claude')
+    [IO.File]::WriteAllText((Join-Path $tmp 'ro'), '')
+    $env:GUYB_USAGE_DIR = Join-Path $tmp 'ro/x'
+    Check 'state dir unwritable: output unchanged' 'guyb > uc  main  5h 99%' (Run $tmp (UJ $uc 99 20))
+    $env:GUYB_USAGE_DIR = $null
+
     # loose timing sanity (PowerShell startup dominates)
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $null = Run $tmp (Json (Join-Path $tmp 'new'))

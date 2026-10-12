@@ -195,6 +195,15 @@ try {
     }
 
     'plugin' {
+      Write-Host 'hooks.json usage guard contract'
+      $hj = Get-Content -Raw -LiteralPath (Join-Path $root 'plugins/guyb/hooks/hooks.json')
+      $hjo = $hj | ConvertFrom-Json
+      $rw = @(foreach ($ev in 'PostToolUse', 'Stop', 'SubagentStop') { $hjo.hooks.$ev | ForEach-Object { $_.hooks } | Where-Object { $_.asyncRewake -eq $true } })
+      Expect-Eq 'hooks.json asyncRewake entries' $rw.Count 3
+      foreach ($m in 'resume', 'done', 'agent-stop') { Expect-Eq "hooks.json asyncRewake on tab-status $m" (@($rw | Where-Object { $_.command -like "*tab-status.sh*`" $m" }).Count) 1 }
+      $gate = @($hjo.hooks.PreToolUse | Where-Object { $_.matcher -eq 'Agent|Task' } | ForEach-Object { $_.hooks })
+      Expect-Eq 'hooks.json usage gate entries' $gate.Count 1
+      Expect-Eq 'hooks.json usage gate fast path' $gate[0].command '[ -f "${GUYB_USAGE_DIR:-$HOME/.claude/guyb/usage}/state" ] || exit 0; . "${CLAUDE_PLUGIN_ROOT}/hooks/usage-guard.sh" gate'
       Write-Host 'brief.ps1 outdated plugin flag'
       $a = Join-Path $tmp 'f-plug'; Make-Fixture $a
       $cfg = Join-Path $home2 '.claude/plugins'; $mk = Join-Path $tmp 'marketplace'

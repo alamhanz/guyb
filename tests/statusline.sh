@@ -119,6 +119,40 @@ if [ -n "$conv" ]; then
   check "Windows-style path, forward slashes" "guyb > new  main  2 running  2 questions" "$(run "$tmp" "{\"cwd\":\"$win\"}")"
 else echo "skip Windows-style path (no cygpath/wslpath)"; fi
 
+# usage guard: rate_limits -> state file + segment (GUYB_USAGE_DIR keeps it inside $tmp)
+export GUYB_USAGE_DIR=$tmp/usage
+proj uc 'ref: refs/heads/main'
+uj() { # dir pct5 pct7 [resets5]: session JSON with rate_limits (resets_at 4102444800 = year 2100)
+  printf '{"cwd":"%s","rate_limits":{"five_hour":{"used_percentage":%s,"resets_at":%s},"seven_day":{"used_percentage":%s,"resets_at":4102444800}}}' "$1" "$2" "${4:-4102444800}" "$3"
+}
+ustate() { if [ -f "$GUYB_USAGE_DIR/state" ]; then cat "$GUYB_USAGE_DIR/state"; else echo none; fi; }
+check "usage below 50: plain, no state" "guyb > uc  main|none" "$(run "$tmp" "$(uj "$tmp/uc" 10 20)")|$(ustate)"
+check "usage 50-92: no segment, no state" "guyb > uc  main|none" "$(run "$tmp" "$(uj "$tmp/uc" 60 92)")|$(ustate)"
+check "warn on 5h (float pct)" "guyb > uc  main  5h 93%|warn 5h 93 4102444800" "$(run "$tmp" "$(uj "$tmp/uc" 93.4 20)")|$(ustate)"
+printf 'warn 5h 99 4102444800\n' > "$GUYB_USAGE_DIR/state"
+check "same tier: state not rewritten" "warn 5h 99 4102444800" "$(run "$tmp" "$(uj "$tmp/uc" 94 20)" >/dev/null; ustate)"
+check "stop, 7d wins the tie" "guyb > uc  main  wk 98%|stop 7d 98 4102444800" "$(run "$tmp" "$(uj "$tmp/uc" 99 98)")|$(ustate)"
+check "stop on 5h alone" "guyb > uc  main  5h 99%|stop 5h 99 4102444800" "$(run "$tmp" "$(uj "$tmp/uc" 99 20)")|$(ustate)"
+check "back below: state removed" "guyb > uc  main|none" "$(run "$tmp" "$(uj "$tmp/uc" 10 20)")|$(ustate)"
+check "no resets_at: window ignored" "guyb > uc  main|none" "$(run "$tmp" '{"cwd":"'"$tmp/uc"'","rate_limits":{"five_hour":{"used_percentage":99}}}')|$(ustate)"
+mkdir -p "$tmp/uc/.claude"
+printf '%s\r\n' '- usage_warn: 80' 'usage_stop: 85' > "$tmp/uc/.claude/CLAUDE.md"
+check "project config thresholds (CRLF)" "guyb > uc  main  5h 86%|stop 5h 86 4102444800" "$(run "$tmp" "$(uj "$tmp/uc" 86 20)")|$(ustate)"
+printf '%s\n' 'usage_stop: 0' > "$tmp/uc/.claude/CLAUDE.md"
+check "usage_stop 0 = off: warn only" "guyb > uc  main  5h 99%|warn 5h 99 4102444800" "$(run "$tmp" "$(uj "$tmp/uc" 99 20)")|$(ustate)"
+printf '%s\n' 'usage_warn: 0' 'usage_stop: 0' > "$tmp/uc/.claude/CLAUDE.md"
+check "both off" "guyb > uc  main|none" "$(run "$tmp" "$(uj "$tmp/uc" 99 99)")|$(ustate)"
+printf '%s\n' 'usage_warn: 99' 'usage_stop: 90' > "$tmp/uc/.claude/CLAUDE.md"
+check "warn above stop: warn = stop" "guyb > uc  main  5h 91%|stop 5h 91 4102444800" "$(run "$tmp" "$(uj "$tmp/uc" 91 20)")|$(ustate)"
+printf '%s\n' 'usage_warn: 30' 'usage_stop: abc' > "$tmp/uc/.claude/CLAUDE.md"
+check "invalid values: defaults" "guyb > uc  main|none" "$(run "$tmp" "$(uj "$tmp/uc" 60 20)")|$(ustate)"
+rm -rf "$tmp/uc/.claude"
+if [ "$(id -u 2>/dev/null)" != 0 ]; then
+  : > "$tmp/ro"
+  check "state dir unwritable: output unchanged" "guyb > uc  main  5h 99%" "$(GUYB_USAGE_DIR=$tmp/ro/x run "$tmp" "$(uj "$tmp/uc" 99 20)")"
+fi
+unset GUYB_USAGE_DIR
+
 # loose timing sanity
 s=$(date +%s); run "$tmp" "$(json "$tmp/new")" > /dev/null; e=$(date +%s)
 if [ $((e - s)) -le 3 ]; then echo "ok   runtime under 3s"; else echo "FAIL runtime over 3s"; fail=$((fail + 1)); fi

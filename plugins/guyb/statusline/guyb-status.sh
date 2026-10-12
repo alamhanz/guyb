@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # guyb status line for Claude Code: prints one line "guyb > <project>  <branch>  N running  M question(s)".
-# Read-only, no network, no gh, no git subprocess, ASCII only, never prompts, always exits 0.
+# Read-only except the usage state file (see below), no network, no gh, no git subprocess, ASCII only, never prompts, always exits 0.
+# Usage guard: when rate_limits (5-hour / weekly plan usage) reaches usage_warn (default 93) or usage_stop (default 98) it
+# writes one line to ${GUYB_USAGE_DIR:-~/.claude/guyb/usage}/state (removed when usage is back below), read by hooks/usage-guard.sh;
+# keys usage_warn / usage_stop (50-100, 0 = off) come from the project .claude/CLAUDE.md, then ~/.claude/guyb/profile.md.
 # Location independent: Claude Code runs it from settings.json (setup copies it to ~/.claude/guyb/).
 # Reads the session JSON on stdin (workspace.current_dir, then cwd, then $PWD); stdin read is capped and times out.
 # Registry: <root>/.claude/guyb/pipeline/{runs,questions}.md, else the legacy .claude/pipeline/ copy when
@@ -175,9 +178,68 @@ if [ -n "$rfile$qfile" ]; then
   case $2 in ''|*[!0-9]*) ;; *) questions=$2 ;; esac
 fi
 
+# Usage guard: no rate_limits in the JSON = nothing to do (no fork); state file touched only on a tier change
+useg=
+case $json in *'"rate_limits"'*)
+  ud=${GUYB_USAGE_DIR:-$HOME/.claude/guyb/usage}
+  ure='[[:space:]]*:[[:space:]]*\{([^}]*)\}'
+  upct='"used_percentage"[[:space:]]*:[[:space:]]*([0-9]+)'
+  ures='"resets_at"[[:space:]]*:[[:space:]]*([0-9]+)'
+  p5=; r5=; p7=; r7=
+  if [[ $json =~ \"five_hour\"$ure ]]; then
+    ut=${BASH_REMATCH[1]}
+    [[ $ut =~ $upct ]] && p5=${BASH_REMATCH[1]}
+    [[ $ut =~ $ures ]] && r5=${BASH_REMATCH[1]}
+  fi
+  if [[ $json =~ \"seven_day\"$ure ]]; then
+    ut=${BASH_REMATCH[1]}
+    [[ $ut =~ $upct ]] && p7=${BASH_REMATCH[1]}
+    [[ $ut =~ $ures ]] && r7=${BASH_REMATCH[1]}
+  fi
+  [ -n "$r5" ] || p5=
+  [ -n "$r7" ] || p7=
+  if [ "${p5:-0}" -ge 50 ] || [ "${p7:-0}" -ge 50 ]; then
+    uw=; us=
+    ucre='^[[:space:]]*[-*]?[[:space:]]*(usage_warn|usage_stop):[[:space:]]*([0-9]+)[[:space:]]*$'
+    for uf in "$root/.claude/CLAUDE.md" "$HOME/.claude/guyb/profile.md"; do
+      [ -f "$uf" ] || continue
+      while IFS= read -r ul || [ -n "$ul" ]; do
+        ul=${ul%$'\r'}; ul=${ul#$'\xef\xbb\xbf'}
+        [[ $ul =~ $ucre ]] || continue
+        un=$((10#${BASH_REMATCH[2]}))
+        if [ "$un" -eq 0 ] || { [ "$un" -ge 50 ] && [ "$un" -le 100 ]; }; then
+          [ "${BASH_REMATCH[1]}" = usage_warn ] && [ -z "$uw" ] && uw=$un
+          [ "${BASH_REMATCH[1]}" = usage_stop ] && [ -z "$us" ] && us=$un
+        fi
+      done < "$uf"
+    done
+    : "${uw:=93}" "${us:=98}"
+    [ "$uw" -gt "$us" ] && [ "$us" -gt 0 ] && uw=$us
+    ulvl=0; uwin=; upc=; urs=
+    for uc in 5h:$p5:$r5 7d:$p7:$r7; do # equal level: the later window (7d) wins, it binds longer
+      un=${uc%%:*}; ur=${uc#*:}; up=${ur%%:*}; ur=${ur#*:}
+      [ -n "$up" ] || continue
+      ul=0
+      if [ "$us" -gt 0 ] && [ "$up" -ge "$us" ]; then ul=2
+      elif [ "$uw" -gt 0 ] && [ "$up" -ge "$uw" ]; then ul=1; fi
+      if [ "$ul" -gt 0 ] && [ "$ul" -ge "$ulvl" ]; then ulvl=$ul; uwin=$un; upc=$up; urs=$ur; fi
+    done
+  else ulvl=0; fi
+  if [ "$ulvl" -gt 0 ]; then
+    if [ "$ulvl" -eq 2 ]; then un=stop; else un=warn; fi
+    ucur=; [ -f "$ud/state" ] && IFS= read -r ucur < "$ud/state"
+    set -f; set -- $ucur; set +f
+    if [ "$1 $2 $4" != "$un $uwin $urs" ]; then
+      { mkdir -p "$ud" && printf '%s %s %s %s\n' "$un" "$uwin" "$upc" "$urs" > "$ud/state.$$" && mv -f "$ud/state.$$" "$ud/state"; } 2>/dev/null || rm -f "$ud/state.$$" 2>/dev/null
+    fi
+    if [ "$uwin" = 5h ]; then useg="5h $upc%"; else useg="wk $upc%"; fi
+  elif [ -f "$ud/state" ]; then rm -f "$ud/state"; fi ;;
+esac
+
 [ -n "$branch" ] && out="$out  $branch"
 [ "$running" -gt 0 ] && out="$out  $running running"
 if [ "$questions" -eq 1 ]; then out="$out  1 question"
 elif [ "$questions" -gt 1 ]; then out="$out  $questions questions"; fi
+[ -n "$useg" ] && out="$out  $useg"
 printf '%s\n' "$out"
 exit 0
