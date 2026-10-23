@@ -6,6 +6,8 @@
 # notice on stderr and arranges exit 2; with the asyncRewake hook option that wakes the model. Mode end drops the
 # session's marker. Gate: at level stop asks for permission before a new agent launch.
 # Expects $input (stdin JSON, notify) and $1 (mode); bash 3.2 safe, ASCII only, never prompts.
+# Hooks run under sh (dash on Linux/WSL): re-exec in bash before any bash-only syntax is parsed; no-op under bash. Older dash drops `.` args, so the mode defaults to the hook's own.
+if [ -z "${BASH_VERSION:-}" ]; then command -v bash >/dev/null 2>&1 || exit 0; exec bash -c '. "$0" "$@"' "${CLAUDE_PLUGIN_ROOT}/hooks/usage-guard.sh" "${1:-gate}"; fi
 ug_dir=${GUYB_USAGE_DIR:-$HOME/.claude/guyb/usage}
 ug_mode=${1:-}
 ug_lvl=; ug_win=; ug_pct=; ug_rs=

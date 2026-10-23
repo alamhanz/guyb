@@ -8,6 +8,8 @@
 
 # One awk: cfg values (max_parallel and cleanup limits, project file first), the Connections sections of the project
 # and profile, then checks that read other files only for recorded types. Paths and flags arrive in ENVIRON, not -v.
+# Hooks run under sh (dash on Linux/WSL): re-exec in bash before any bash-only syntax is parsed; no-op under bash. Older dash drops `.` args, so the mode defaults to the hook's own.
+if [ -z "${BASH_VERSION:-}" ]; then command -v bash >/dev/null 2>&1 || exit 0; exec bash -c '. "$0" "$@"' "${CLAUDE_PLUGIN_ROOT}/skills/setup/connections.sh" "${1:-hook}"; fi
 gc_awk='
 function trim(s) { gsub(/^[ \t\r]+|[ \t\r]+$/, "", s); return s }
 function dn(y, m, d,   e, yo) {
