@@ -50,8 +50,8 @@ done <<< "$rctext"
 # exp_home <value>: sets exv with a leading ~, $HOME or ${HOME} replaced by $HOME (no eval, no subshell)
 exp_home() {
   exv=$1
+  # shellcheck disable=SC2088 # the tilde is matched literally
   case $exv in
-    # shellcheck disable=SC2088 # the tilde is matched literally
     "~"|"~/"*) exv=$HOME${exv#"~"} ;;
     '$HOME'|'$HOME/'*) exv=$HOME${exv#'$HOME'} ;;
     '${HOME}'|'${HOME}/'*) exv=$HOME${exv#'${HOME}'} ;;
