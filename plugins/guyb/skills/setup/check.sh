@@ -47,24 +47,35 @@ while IFS= read -r rcl; do
   [[ $rcl =~ $re_src ]] && rc_src=$rcl
 done <<< "$rctext"
 
+# exp_home <value>: sets exv with a leading ~, $HOME or ${HOME} replaced by $HOME (no eval, no subshell)
+exp_home() {
+  exv=$1
+  case $exv in
+    "~"|"~/"*) exv=$HOME${exv#"~"} ;;
+    '$HOME'|'$HOME/'*) exv=$HOME${exv#'$HOME'} ;;
+    '${HOME}'|'${HOME}/'*) exv=$HOME${exv#'${HOME}'} ;;
+  esac
+}
+
 # GUYB_ROOT: process env -> rc line
 root=""; rootsrc=""
 if [ -n "${GUYB_ROOT:-}" ]; then root="$GUYB_ROOT"; rootsrc="process env"
 elif [ -n "$rc_root" ]; then
-  root=${rc_root#*GUYB_ROOT=}; root=${root#["$esc_q$esc_aq"]}; root=${root%["$esc_q$esc_aq"]}; rootsrc="rc line"
+  root=${rc_root#*GUYB_ROOT=}; root=${root#["$esc_q$esc_aq"]}; root=${root%["$esc_q$esc_aq"]}; exp_home "$root"; root=$exv; rootsrc="rc line"
 fi
 
-# Repo: source line in rc, else known_marketplaces.json
+# Repo: source line in rc (when its launcher exists), else known_marketplaces.json
 repo=""; reposrc=""
 if [ -n "$rc_src" ]; then
-  repo=$(printf '%s' "$rc_src" | sed -E 's/^[[:space:]]*(source|\.)[[:space:]]+//; s/^["'"'"']//; s/["'"'"']?[[:space:]]*$//; s#/scripts/launch\.sh.*##'); reposrc="rc line"
+  repo=$(printf '%s' "$rc_src" | sed -E 's/^[[:space:]]*(source|\.)[[:space:]]+//; s/^["'"'"']//; s/["'"'"']?[[:space:]]*$//; s#/scripts/launch\.sh.*##'); exp_home "$repo"; repo=$exv; reposrc="rc line"
 fi
 mk="$claude_dir/plugins/known_marketplaces.json"
-if [ -z "$repo" ] && [ -f "$mk" ]; then
+if { [ -z "$repo" ] || [ ! -f "$repo/scripts/launch.sh" ]; } && [ -f "$mk" ]; then
   entry=$(tr -d '\n' < "$mk" | awk '{i=index($0,"\"guyb\""); if(!i)exit; t=substr($0,i); d=0; o=""; for(k=1;k<=length(t);k++){c=substr(t,k,1); o=o c; if(c=="{")d++; else if(c=="}"){d--; if(d==0)break}} print o}')
   p=$(printf '%s' "$entry" | sed -n 's/.*"path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 | sed 's/\\\\/\\/g')
   [ -z "$p" ] && p=$(printf '%s' "$entry" | sed -n 's/.*"installLocation"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1 | sed 's/\\\\/\\/g')
-  [ -n "$p" ] && repo="$p" && reposrc="marketplace"
+  [ -n "$p" ] && [ -f "$p/scripts/launch.sh" ] && repo="$p" && reposrc="marketplace"
+  [ -z "$repo" ] && [ -n "$p" ] && repo="$p" && reposrc="marketplace"
 fi
 launcher=""; [ -n "$repo" ] && launcher="$repo/scripts/launch.sh"
 
