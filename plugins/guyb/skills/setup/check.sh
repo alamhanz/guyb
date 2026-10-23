@@ -51,6 +51,7 @@ done <<< "$rctext"
 exp_home() {
   exv=$1
   case $exv in
+    # shellcheck disable=SC2088 # the tilde is matched literally
     "~"|"~/"*) exv=$HOME${exv#"~"} ;;
     '$HOME'|'$HOME/'*) exv=$HOME${exv#'$HOME'} ;;
     '${HOME}'|'${HOME}/'*) exv=$HOME${exv#'${HOME}'} ;;
