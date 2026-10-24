@@ -9,10 +9,12 @@
 - **Owner**: @alamhanz
 
 ## Current Status
-- **Branch**: main (clean); installed plugin 0.11.0
-- **Version**: 0.11.0 (PR #17); see Versions
+- **Branch**: main (clean, c180a73); installed plugin not yet updated to 0.12.0
+- **Version**: 0.12.0 (PR #22); see Versions
 
 ## Versions
+- **0.12.0** (PR #22, c180a73, plan guyb-156, fixes #20): manager-only orchestrator (every project-file edit goes to an agent, trivial ones on haiku batched; reads ~3 files max); parallel by default for disjoint tasks; shared gitignored `pipeline/memory.md` fed from report `## Memory` bullets, session-tracker promotes durable items to Decisions; new key `cleanup_memory_lines` (100) in brief/connections; lint caps orchestrator.md at 8192 bytes (now 7692)
+- **0.11.1** (PR #21, c66d26c, plan guyb-153; fixes #18, #19): PreToolUse hooks re-exec in bash under dash (POSIX guard line, dash test); setup check expands ~/$HOME in rc lines, marketplace fallback, PATH launcher detection; Windows guyb shim (scripts/guyb.cmd, guyb.ps1, winlauncher.ps1; install.ps1 adds user PATH entry, user GUYB_ROOT, Git Bash ~/.bashrc line)
 - **0.11.0** (PR #17, 5ad7740, plan guyb-144): usage guard - status line records plan usage and writes a state file at/above warn (defaults 93/98); usage-guard.sh notices via asyncRewake on tab-status hooks (async kept for older CC); Agent launch ask gate at stop tier; /guyb:end usage-limit mode; /guyb:setup thresholds
 - **0.10.1** (PR #16, plan guyb-142): project-level SessionStart hook (.claude/settings.json, not shipped) runs .claude/scripts/cloud-setup.sh on Linux non-WSL when pwsh or shellcheck is missing (pinned pwsh 7.4.20 sha256, no interactive sudo); CONTRIBUTING notes on cloud sessions and WSL dirty counts
 - **0.10.0** (PR #15, plan guyb-133): connections awareness. Startup notice (separate SessionStart `startup` hook, systemMessage) plus brief/check lines list recorded global connections, warn on broken ones and show `project config:`; `/guyb:setup` is model-invocable and lists/adds/changes/removes connections (Cloudflare MCP + wrangler, generic user-scope MCP) and records `## Connections` in profile.md; routing line in the playbook; wrangler and `claude mcp` permission rules
@@ -27,6 +29,8 @@
 - **0.3.0** (PR #1): run IDs, waves, progress files
 
 ## Recent Changes
+- 2026-10-24 - 0.12.0 merged (PR #22, c180a73): runs guyb-159 (docs/skills), guyb-160 (scripts/tests; cut off by API 429, resumed), guyb-161 review approved with 1 should-fix, guyb-162 fixes + bump, guyb-163 PR. Full suite green (bash smoke 540/0, pwsh smoke 506/0, secrets 206/109, tabs 99/39, permissions 84, winlauncher 22), CI green on all 9 checks. Merge needed ruleset bypass (main `update` rule restricts updates to bypass actors)
+- 2026-10-24 - 0.11.1 merged (PR #21, c66d26c): runs guyb-154 (stopped by session end), guyb-155 (Task 3), guyb-157 review approved (hooks-sh 30, setup-paths 9/11, winlauncher 22, permissions 84), guyb-158 PR; CI green on all 9 checks. Housekeeping: 105 pipeline scratch files older than 14 days deleted. Gotcha: sed -i in Git Bash strips CR from .ps1 files; use Edit for CRLF files
 - 2026-10-13 - 0.11.0 merged (PR #17, 5ad7740): full suite green locally (bash smoke 538, pwsh smoke 504) and in CI on all 9 checks incl. macOS; PR conflicted because 0.10.1 was squash-merged (#16) while the branch kept e5e6d03, fixed with a merge commit (force-push blocked by auto mode). Installed plugin updated 0.9.1 -> 0.11.0. Runs guyb-149..152 done; branch deleted
 - 2026-10-12 - 0.11.0 usage guard implemented (guyb-146 stopped, finished in guyb-149), review guyb-150 approved with fixes, fixes guyb-152 (keep async with asyncRewake, silent state write, no temp file below warn). Spikes (a) asyncRewake wake and (c) Agent ask not verified live (Q102: ship unverified)
 - 2026-10-12 - 0.10.1 cloud-setup hook implemented (guyb-145); WSL install path verified with a local tarball, WSL network truncates the GitHub download (curl 18)
@@ -49,20 +53,24 @@
 - **Q51**: tab icon ~1s lag on Windows accepted (async hook).
 - **Q52**: Notification on idle prompt turns the icon to `?` after done - kept.
 - **Connections notice (0.10.0)** is local-only: file reads and `command -v`, no CLI or network call in any start path (measured: gh auth status 1.1 s, aws sts 3.9 s, claude mcp list 4.4 s, gcloud config list 47 s); startup hook budget: +1 bash +1 awk per new session, parallel with the playbook hook, no cost on resume/clear/compact or tool calls. Network verify only in `/guyb:setup` on request.
+- **Ruleset bypass**: main has an `update` rule limiting updates to bypass actors, so merging PRs (#22) needs the bypass; the merge stays the user's step.
 - **STATE.md** is committed; `.claude/pipeline/` is gitignored.
 
 ## Open Issues
 - Read-only guard hooks.json filter: 8 entries per shell (one per casing of "git"); a call spawns the guard once per casing it contains. Cost measured: 0.2-0.3 s per git-mentioning call on Windows is the hook shell start (guard adds ~0 on the main-session path), ~3 ms on Linux; no cheaper safe filter. Revisit if Claude Code filters hooks by agent type
 - Read-only guard: obfuscated command names (`g\it`, `gi""t`, `g'i't`) have no "git" substring, so the hooks.json filter never runs the guard (widening it costs a spawn per Bash call)
 - Action SHA pins are not auto-bumped (no Dependabot); claude-code npm pin in the validate job needs deliberate bumps
-- macOS behavior verified only by CI (passing on PR #17)
+- macOS behavior verified only by CI (passing on PR #22)
 - install.ps1 settings merge not executed in a test; tmux launch path untested
+- Sed -i on .ps1 files strips CR (CRLF required); edit them with Edit
 
 ## Next Up
+- Live-check 0.12.0 in a fresh session: small edit goes to a haiku agent, parallel launch for disjoint tasks, memory.md flow (orchestrator writes from `## Memory` bullets) and the cleanup_memory_lines line in brief
+- Live-check guyb.cmd from a fresh Windows terminal after running install.ps1
 - Live-check 0.11.0 spikes (a) and (c): scratch plugin PostToolUse hook with asyncRewake exit 2 wakes the model; a stop state file in GUYB_USAGE_DIR makes Agent launches prompt
 - Live check of 0.10.0 (plugin now updated): fresh session shows the connections notice; "add Cloudflare to guyb" runs /guyb:setup
 - smoke.sh on Git Bash: 206 s on a loaded box (fork baseline 3.4 s per 20 forks), target 240 s met; remaining cost is hook/brief/check process starts
 - Live check of the wrap-up: say "I need to go" in a session with a running agent (SendMessage checkpoint, TaskStop fallback, git-ops WIP push), then /guyb:start on the same machine (handoff) and on another (STATE.md + WIP branches)
 
 ---
-**Last updated**: 2026-10-13
+**Last updated**: 2026-10-24
