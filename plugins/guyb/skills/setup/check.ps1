@@ -47,20 +47,27 @@ $profiles = @($PROFILE.CurrentUserCurrentHost, (Join-Path $docs 'PowerShell\Micr
 $profileText = ''
 foreach ($p in $profiles) { if (Test-Path -LiteralPath $p) { $profileText += (Get-Content -LiteralPath $p -Raw) + "`n" } }
 
+# Expand-Rc <value>: replace a leading ~, $HOME, ${HOME}, $env:USERPROFILE or $env:HOME with the home folder (string ops only, no eval)
+function Expand-Rc($v) {
+    $m = [regex]::Match($v, '^(~|\$\{HOME\}|\$HOME|\$env:USERPROFILE|\$env:HOME)(?=$|[\\/])', 'IgnoreCase')
+    if ($m.Success) { return $HOME + $v.Substring($m.Length) }
+    return $v
+}
+
 # GUYB_ROOT: process env -> user env -> $PROFILE line
 $root = ''; $rootSrc = ''
 if ($env:GUYB_ROOT) { $root = $env:GUYB_ROOT; $rootSrc = 'process env' }
 elseif ($v = [Environment]::GetEnvironmentVariable('GUYB_ROOT', 'User')) { $root = $v; $rootSrc = 'user env' }
-elseif ($profileText -match "(?m)^\s*\`$env:GUYB_ROOT\s*=\s*['""]([^'""]+)['""]") { $root = $Matches[1]; $rootSrc = 'profile line' }
+elseif ($profileText -match "(?m)^\s*\`$env:GUYB_ROOT\s*=\s*['""]([^'""]+)['""]") { $root = Expand-Rc $Matches[1]; $rootSrc = 'profile line' }
 
 # Repo: source line in profile, else known_marketplaces.json
 $repo = ''; $repoSrc = ''
-if ($profileText -match "(?m)^\s*\.\s+['""]([^'""]*?)[\\/]scripts[\\/]launch\.ps1['""]") { $repo = $Matches[1]; $repoSrc = 'profile line' }
+if ($profileText -match "(?m)^\s*\.\s+['""]([^'""]*?)[\\/]scripts[\\/]launch\.ps1['""]") { $repo = Expand-Rc $Matches[1]; $repoSrc = 'profile line' }
 $claudeDir = Join-Path $HOME '.claude'
 $mk = Read-Json (Join-Path $claudeDir 'plugins\known_marketplaces.json')
-if (-not $repo -and $mk -and $mk.guyb) {
-    if ($mk.guyb.source.path) { $repo = $mk.guyb.source.path; $repoSrc = 'marketplace' }
-    elseif ($mk.guyb.installLocation) { $repo = $mk.guyb.installLocation; $repoSrc = 'marketplace' }
+if ((-not $repo -or -not (Test-Path -LiteralPath (Join-Path $repo 'scripts\launch.ps1'))) -and $mk -and $mk.guyb) {
+    $mp = if ($mk.guyb.source.path) { $mk.guyb.source.path } elseif ($mk.guyb.installLocation) { $mk.guyb.installLocation } else { '' }
+    if ($mp -and (-not $repo -or (Test-Path -LiteralPath (Join-Path $mp 'scripts\launch.ps1')))) { $repo = $mp; $repoSrc = 'marketplace' }
 }
 $launcher = if ($repo) { Join-Path $repo 'scripts\launch.ps1' } else { '' }
 $onWin = $env:OS -eq 'Windows_NT'
@@ -91,6 +98,7 @@ else {
 }
 
 if ($profileText -match 'scripts[\\/]launch\.ps1') { Add-Check 'launcher-profile' 'ok' $false 'launcher source line present in $PROFILE' }
+elseif ($repo -and $onWin -and (@(([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') | ForEach-Object { $_.Trim('"').TrimEnd('\') }) -contains (Join-Path $repo 'scripts').TrimEnd('\'))) { Add-Check 'launcher-profile' 'ok' $false 'guyb command on the user PATH (scripts folder)' }
 else { Add-Check 'launcher-profile' 'warn' $false 'no launcher source line in $PROFILE (the guyb command is unavailable in your terminals)' $(if ($repo) { "Add-Content `$PROFILE `". '$launcher'`"" } else { 'Run scripts\install.ps1' }) 'claude-after-consent' }
 
 $profileMd = Join-Path $claudeDir 'guyb\profile.md'

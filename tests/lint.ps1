@@ -1,6 +1,6 @@
 # Static checks for the guyb repo. Read-only; writes nothing. Works on Windows PowerShell 5.1 and PowerShell 7.
 #   pwsh -File tests/lint.ps1
-# Checks: every ps1 parses, JSON/SVG are well-formed, ASCII only, plain frontmatter values, sh and tsv files LF, ps1 files CRLF.
+# Checks: every ps1 parses, JSON/SVG are well-formed, ASCII only, plain frontmatter values, sh and tsv files LF, ps1 and cmd files CRLF.
 # Bash twin: lint.sh (runs bash -n and shellcheck, which only runs there; keep the file rules in sync).
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -17,12 +17,13 @@ function Rel($f) { $f.FullName.Substring($root.Length + 1).Replace('\', '/') }
 
 $code = @('plugins', 'scripts', 'tests', '.claude/scripts')
 $ps1 = @(Get-Files $code '*.ps1')
+$cmd = @(Get-Files $code '*.cmd')
 $sh = @(Get-Files $code '*.sh')
 $tsv = @(Get-Files $code '*.tsv')
 $json = @(Get-Files @('plugins', 'scripts', 'tests', 'settings', '.claude-plugin') '*.json')
 if (Test-Path -LiteralPath '.claude/settings.json') { $json += Get-Item -LiteralPath '.claude/settings.json' -Force }
 $svg = @(Get-Files @('docs') '*.svg')
-$text = @($ps1) + @($sh) + @($tsv) + @($json) + @($svg) + @(Get-Files @('.github') '*.yml')
+$text = @($ps1) + @($cmd) + @($sh) + @($tsv) + @($json) + @($svg) + @(Get-Files @('.github') '*.yml')
 if (Test-Path -LiteralPath '.gitattributes') { $text += Get-Item -LiteralPath '.gitattributes' -Force }
 
 Write-Host 'parse ps1'
@@ -66,7 +67,7 @@ foreach ($f in @(Get-Files @('plugins') '*.md')) {
   }
 }
 
-Write-Host 'line endings (sh, tsv = LF; ps1 = CRLF)'
+Write-Host 'line endings (sh, tsv = LF; ps1, cmd = CRLF)'
 function Count-Eol($path) {
   $lf = 0; $cr = 0; $crlf = 0; $prev = 0
   foreach ($b in [System.IO.File]::ReadAllBytes($path)) {
@@ -79,9 +80,9 @@ foreach ($f in @($sh) + @($tsv)) {
   $c = Count-Eol $f.FullName
   if ($c[1] -gt 0) { Bad ("{0}: file contains CR (must be LF)" -f (Rel $f)) }
 }
-foreach ($f in $ps1) {
+foreach ($f in @($ps1) + @($cmd)) {
   $c = Count-Eol $f.FullName
-  if ($c[0] -ne $c[2] -or $c[1] -ne $c[2]) { Bad ("{0}: ps1 file is not CRLF ({1} LF, {2} CR, {3} CRLF)" -f (Rel $f), $c[0], $c[1], $c[2]) }
+  if ($c[0] -ne $c[2] -or $c[1] -ne $c[2]) { Bad ("{0}: ps1/cmd file is not CRLF ({1} LF, {2} CR, {3} CRLF)" -f (Rel $f), $c[0], $c[1], $c[2]) }
 }
 
 if ($script:fail -gt 0) { Write-Host "lint: $($script:fail) problem(s)"; exit 1 }

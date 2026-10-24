@@ -5,7 +5,7 @@
 root=$(cd "$(dirname "$0")/.." && pwd)
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/guyb-run.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT
-names="lint smoke secrets tabs statusline"
+names="lint smoke secrets tabs statusline hooks-sh setup-paths"
 
 for n in $names; do
   (

@@ -71,6 +71,12 @@ jobs:
           GUYB_REQUIRE_ZSH: ${{ runner.os != 'Windows' && '1' || '' }}
       - name: Status line
         run: /bin/bash tests/statusline.sh
+      - name: Hooks under dash
+        run: /bin/bash tests/hooks-sh.sh
+        env:
+          GUYB_REQUIRE_DASH: ${{ runner.os == 'Linux' && '1' || '' }}
+      - name: Setup check path expansion
+        run: /bin/bash tests/setup-paths.sh
 
   # PowerShell 7 on all three OSes
   pwsh:
@@ -98,6 +104,10 @@ jobs:
         run: ./tests/statusline.ps1
       - name: Permission rules
         run: ./tests/permissions.ps1
+      - name: Setup check path expansion
+        run: ./tests/setup-paths.ps1
+      - name: Windows launcher (shim, PATH helpers)
+        run: ./tests/winlauncher.ps1
 
   # Windows PowerShell 5.1 (the shell older Windows machines still use)
   winps51:
@@ -121,6 +131,10 @@ jobs:
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/statusline.ps1
       - name: Permission rules
         run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/permissions.ps1
+      - name: Setup check path expansion
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/setup-paths.ps1
+      - name: Windows launcher (shim, PATH helpers)
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests/winlauncher.ps1
 
   # Plugin manifest validation. Not part of ci-ok yet: it installs Claude Code from npm and may need
   # network or auth. Make it required by adding it to ci-ok's needs once it has been green for a while.

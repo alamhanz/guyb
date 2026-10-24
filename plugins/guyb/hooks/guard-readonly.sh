@@ -29,6 +29,8 @@
 # carries "agent_id" and "agent_type". Plugin agents report "agent_type":"guyb:<name>"
 # (accept the bare name too). Main-session calls carry neither field.
 
+# Hooks run under sh (dash on Linux/WSL): re-exec in bash before any bash-only syntax is parsed; no-op under bash.
+if [ -z "${BASH_VERSION:-}" ]; then command -v bash >/dev/null 2>&1 || exit 0; exec bash -c '. "$0" "$@"' "${CLAUDE_PLUGIN_ROOT}/hooks/guard-readonly.sh" "$@"; fi
 IFS= read -r -d '' input
 _gro_re='"agent_type"[[:space:]]*:[[:space:]]*"(guyb:)?(code-reviewer|architect|data-modeler|data-analyst|session-tracker|brand-designer)"'
 [[ $input =~ $_gro_re ]] || [ "${1-}" = batch ] || exit 0

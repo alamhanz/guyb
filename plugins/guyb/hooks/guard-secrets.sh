@@ -14,6 +14,8 @@
 # Fail-open choice: when git cannot read any repo (target and cwd both fail), allow, since the commit
 # would fail too; a git failure on the computed target is retried against the cwd first.
 
+# Hooks run under sh (dash on Linux/WSL): re-exec in bash before any bash-only syntax is parsed; no-op under bash.
+if [ -z "${BASH_VERSION:-}" ]; then command -v bash >/dev/null 2>&1 || exit 0; exec bash -c '. "$0" "$@"' "${CLAUDE_PLUGIN_ROOT}/hooks/guard-secrets.sh" "$@"; fi
 input=
 [ -t 0 ] || IFS= read -r -d '' input
 case "$input" in *commit*) ;; *) [ -n "$input" ] && exit 0 ;; esac
