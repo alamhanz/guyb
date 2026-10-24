@@ -249,6 +249,7 @@ $limClaude = Get-Limit 'cleanup_claude_md_lines' 200
 $limState = Get-Limit 'cleanup_state_lines' 300
 $limRows = Get-Limit 'cleanup_rows' 200
 $limDays = Get-Limit 'cleanup_days' 14
+$limMemory = Get-Limit 'cleanup_memory_lines' 100
 function Read-Table($path) {
   # data rows as arrays of trimmed cells; the first row is the header, separator rows are dropped
   $rows = New-Object System.Collections.ArrayList
@@ -301,6 +302,8 @@ if (Test-Path -LiteralPath $cm -PathType Leaf) { $n = @(Get-Content -Encoding UT
 if ($state) { $n = @(Get-Content -Encoding UTF8 -LiteralPath $state).Count; if ($n -gt $limState) { $cl += "STATE.md $n lines (>$limState)" } }
 $n = [Math]::Max(0, $runRows.Count - 1); if ($n -gt $limRows) { $cl += "runs.md $n rows (>$limRows)" }
 $n = [Math]::Max(0, $qRows.Count - 1); if ($n -gt $limRows) { $cl += "questions.md $n rows (>$limRows)" }
+$mem = if ($pipe) { Join-Path $pipe 'memory.md' } else { '' }
+if ($mem -and (Test-Path -LiteralPath $mem -PathType Leaf)) { $n = @(Get-Content -Encoding UTF8 -LiteralPath $mem).Count; if ($n -gt $limMemory) { $cl += "memory.md $n lines (>$limMemory)" } }
 $stale = 0
 if ($pipe) {
   $cut = (Get-Date).AddDays(-($limDays + 1))

@@ -158,6 +158,7 @@ try {
     Write-File (Join-Path $dir '.claude/guyb/pipeline/runs.md') $rr
     $qq = "| ID | Run | Question | Blocking | Assumed | Status |`r`n|---|---|---|---|---|---|`r`n"; for ($i = 1; $i -le 200 + $d; $i++) { $qq += "| Q$i | x-1 | q | no | a | answered |`r`n" }
     Write-File (Join-Path $dir '.claude/guyb/pipeline/questions.md') $qq
+    Write-File (Join-Path $dir '.claude/guyb/pipeline/memory.md') (Lines (100 + $d) '- [x-1] fact')
   }
   function Snapshot($dir) { (@(Get-ChildItem -LiteralPath $dir -Recurse -Force | Where-Object { -not $_.PSIsContainer -and $_.FullName -notmatch '[\\/]\.git([\\/]|$)' } | ForEach-Object { "$($_.FullName) $($_.Length) $($_.LastWriteTime.Ticks)" } | Sort-Object) -join "`n") + "`n" + $(if (Test-Path -LiteralPath (Join-Path $dir '.git')) { (& git -C $dir status --short) -join "`n" }) }
   $sep = [System.IO.Path]::PathSeparator
@@ -377,7 +378,7 @@ try {
       Write-File (Join-Path $c1 '.claude/guyb/pipeline/brand/x-1/a.svg') "<svg/>`n"
       foreach ($f in 'progress/x-1.md', 'progress/x-2.md', 'brand/x-1/a.svg') { Age (Join-Path $c1 (".claude/guyb/pipeline/" + $f)) }
       $r = Run-Child $brief @('-Dir', $c1) $null
-      Expect-Has 'cleanup over' $r[1] 'cleanup: CLAUDE.md 201 lines (>200); STATE.md 301 lines (>300); runs.md 201 rows (>200); questions.md 201 rows (>200); 2 pipeline files older than 14 days'
+      Expect-Has 'cleanup over' $r[1] 'cleanup: CLAUDE.md 201 lines (>200); STATE.md 301 lines (>300); runs.md 201 rows (>200); questions.md 201 rows (>200); memory.md 101 lines (>100); 2 pipeline files older than 14 days'
       Write-Host 'brief.ps1 leaves the fixture unchanged (cleanup)'
       $before = Snapshot $c1
       $null = Run-Child $brief @('-Dir', $c1) $null
@@ -394,6 +395,12 @@ try {
       Write-File (Join-Path $c2 '.claude/CLAUDE.md') ("cleanup_rows: 5`ncleanup_days: 0`ncleanup_state_lines: abc`n" + (Lines 3 'line'))
       $r = Run-Child $brief @('-Dir', $c2) $null
       Expect-Has 'cleanup limit overrides' $r[1] 'cleanup: runs.md 200 rows (>5); questions.md 200 rows (>5)'
+      Write-File (Join-Path $c2 '.claude/CLAUDE.md') "cleanup_memory_lines: 10`n"
+      $r = Run-Child $brief @('-Dir', $c2) $null
+      Expect-Has 'cleanup memory override' $r[1] 'cleanup: memory.md 100 lines (>10)'
+      Write-File (Join-Path $c2 '.claude/CLAUDE.md') "cleanup_memory_lines: abc`n"
+      $r = Run-Child $brief @('-Dir', $c2) $null
+      Expect-Lacks 'cleanup invalid memory ignored' $r[1] 'memory.md'
     }
 
     'overdue' {

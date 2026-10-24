@@ -19,6 +19,7 @@ Ordinary session briefings come from the `brief` script in `/guyb:start`; use th
 2. Targeted edits only (never rewrite the whole file):
    - Append to Recent changes: `YYYY-MM-DD - <what> (<commit/PR>)`.
    - Update Current status, Open issues, Next up. Record important decisions with a one-line *why*.
+   - If `.claude/guyb/pipeline/memory.md` exists, promote its durable items (lasting facts, decisions) to Decisions; trim memory.md only if the orchestrator says so.
    - Don't overwrite deploy fields the deployer already set unless they're wrong.
 3. **Docs drift**: if the diff renamed/removed/added commands, env vars, endpoints, or config, check README/docs for stale mentions and make minimal edits. Never invent commands/URLs/versions not present in the code. If a doc section needs a big rewrite, leave it and list it under Open issues.
 4. If nothing significant happened, say so and skip edits.

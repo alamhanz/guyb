@@ -85,5 +85,9 @@ foreach ($f in @($ps1) + @($cmd)) {
   if ($c[0] -ne $c[2] -or $c[1] -ne $c[2]) { Bad ("{0}: ps1/cmd file is not CRLF ({1} LF, {2} CR, {3} CRLF)" -f (Rel $f), $c[0], $c[1], $c[2]) }
 }
 
+Write-Host 'playbook size (hooks/orchestrator.md is loaded every session: at most 8192 bytes)'
+$n = (Get-Item -LiteralPath 'plugins/guyb/hooks/orchestrator.md').Length
+if ($n -gt 8192) { Bad "plugins/guyb/hooks/orchestrator.md: $n bytes (limit 8192)" }
+
 if ($script:fail -gt 0) { Write-Host "lint: $($script:fail) problem(s)"; exit 1 }
 Write-Host 'lint: ok'
