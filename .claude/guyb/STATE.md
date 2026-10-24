@@ -9,7 +9,7 @@
 - **Owner**: @alamhanz
 
 ## Current Status
-- **Branch**: main (clean, c180a73); installed plugin not yet updated to 0.12.0
+- **Branch**: main (clean, c45cf3b); installed plugin updated 0.11.0 -> 0.12.0 on 2026-10-24 (applies in a fresh session). `claude plugin list` reads the source dir version, so it showed 0.12.0 while the session ran cached 0.11.0; installed_plugins.json is the truth
 - **Version**: 0.12.0 (PR #22); see Versions
 
 ## Versions
@@ -29,6 +29,7 @@
 - **0.3.0** (PR #1): run IDs, waves, progress files
 
 ## Recent Changes
+- 2026-10-24 - Housekeeping: STATE.md PR #23 merged (c45cf3b); all merged/superseded branches deleted local and remote (only main left); 105 stale scratch files deleted earlier; runs guyb-164..166 done (branch delete, STATE update, docs PR)
 - 2026-10-24 - 0.12.0 merged (PR #22, c180a73): runs guyb-159 (docs/skills), guyb-160 (scripts/tests; cut off by API 429, resumed), guyb-161 review approved with 1 should-fix, guyb-162 fixes + bump, guyb-163 PR. Full suite green (bash smoke 540/0, pwsh smoke 506/0, secrets 206/109, tabs 99/39, permissions 84, winlauncher 22), CI green on all 9 checks. Merge needed ruleset bypass (main `update` rule restricts updates to bypass actors)
 - 2026-10-24 - 0.11.1 merged (PR #21, c66d26c): runs guyb-154 (stopped by session end), guyb-155 (Task 3), guyb-157 review approved (hooks-sh 30, setup-paths 9/11, winlauncher 22, permissions 84), guyb-158 PR; CI green on all 9 checks. Housekeeping: 105 pipeline scratch files older than 14 days deleted. Gotcha: sed -i in Git Bash strips CR from .ps1 files; use Edit for CRLF files
 - 2026-10-13 - 0.11.0 merged (PR #17, 5ad7740): full suite green locally (bash smoke 538, pwsh smoke 504) and in CI on all 9 checks incl. macOS; PR conflicted because 0.10.1 was squash-merged (#16) while the branch kept e5e6d03, fixed with a merge commit (force-push blocked by auto mode). Installed plugin updated 0.9.1 -> 0.11.0. Runs guyb-149..152 done; branch deleted
@@ -71,6 +72,8 @@
 - Live check of 0.10.0 (plugin now updated): fresh session shows the connections notice; "add Cloudflare to guyb" runs /guyb:setup
 - smoke.sh on Git Bash: 206 s on a loaded box (fork baseline 3.4 s per 20 forks), target 240 s met; remaining cost is hook/brief/check process starts
 - Live check of the wrap-up: say "I need to go" in a session with a running agent (SendMessage checkpoint, TaskStop fallback, git-ops WIP push), then /guyb:start on the same machine (handoff) and on another (STATE.md + WIP branches)
+- Backlog #24: optional local model via Ollama MCP for small read-only work; usage-guard fallback; opt-in; spike vs haiku first
+- Backlog #25: auto-delete stale cleanup items (`cleanup_auto_days` 21), only clean+merged worktrees and finished-run scratch files; open question: agent worktrees, scratch files, or both
 
 ---
 **Last updated**: 2026-10-24
