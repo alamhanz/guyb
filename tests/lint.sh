@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Static checks for the guyb repo. Read-only; writes nothing. Usage: bash tests/lint.sh
-# Checks: bash -n and shellcheck (-S warning) on *.sh, JSON/SVG validity, ASCII only (incl. *.tsv), plain frontmatter values, sh and tsv files LF, ps1 files CRLF, no bash 4+ syntax.
+# Checks: bash -n and shellcheck (-S warning) on *.sh, JSON/SVG validity, ASCII only (incl. *.tsv), plain frontmatter values, sh and tsv files LF, ps1 and cmd files CRLF, no bash 4+ syntax.
 # Targets bash 3.2 (macOS /bin/bash): no mapfile, associative arrays, or ${v,,}.
 # Shellcheck step is skipped when not installed, required when GUYB_REQUIRE_SHELLCHECK=1 (CI Linux job).
 # PowerShell twin: lint.ps1 (parses ps1 files; no shellcheck there; keep the file rules in sync).
@@ -13,10 +13,11 @@ count() { tr -cd "$1" < "$2" | wc -c | tr -d ' '; }
 list() { find "$@" -type f 2>/dev/null | sort; }
 sh_files=$(list plugins scripts tests .claude/scripts -name '*.sh')
 ps1_files=$(list plugins scripts tests -name '*.ps1')
+cmd_files=$(list plugins scripts tests -name '*.cmd')
 json_files=$( { list plugins scripts tests settings .claude-plugin -name '*.json'; ls .claude/settings.json 2>/dev/null; } )
 tsv_files=$(list tests -name '*.tsv')
 svg_files=$(list docs -name '*.svg')
-text_files=$( { ls .claude/settings.json 2>/dev/null; list plugins scripts tests .claude/scripts settings .claude-plugin docs .github \( -name '*.sh' -o -name '*.ps1' -o -name '*.json' -o -name '*.svg' -o -name '*.yml' -o -name '*.tsv' \); ls .gitattributes 2>/dev/null; } )
+text_files=$( { ls .claude/settings.json 2>/dev/null; list plugins scripts tests .claude/scripts settings .claude-plugin docs .github \( -name '*.sh' -o -name '*.ps1' -o -name '*.json' -o -name '*.svg' -o -name '*.yml' -o -name '*.tsv' -o -name '*.cmd' \); ls .gitattributes 2>/dev/null; } )
 
 parse_with() { # kind file: validate JSON or XML with the first tool available; 2 = no tool
   if [ "$1" = json ] && command -v jq >/dev/null 2>&1; then jq empty "$2" >/dev/null 2>&1
@@ -81,13 +82,13 @@ if [ -n "$md_files" ]; then
   for l in $fm_bad; do bad "$l: unquoted frontmatter value contains ': ' or ' #' (quote it or use ' - ')"; done
 fi
 
-echo "line endings (sh, tsv = LF; ps1 = CRLF)"
+echo "line endings (sh, tsv = LF; ps1, cmd = CRLF)"
 for f in $sh_files $tsv_files; do
   [ "$(count '\r' "$f")" -gt 0 ] && bad "$f: file contains CR (must be LF)"
 done
-for f in $ps1_files; do
+for f in $ps1_files $cmd_files; do
   lf=$(count '\n' "$f"); cr=$(count '\r' "$f")
-  [ "$lf" -ne "$cr" ] && bad "$f: ps1 file is not CRLF ($lf LF, $cr CR)"
+  [ "$lf" -ne "$cr" ] && bad "$f: ps1/cmd file is not CRLF ($lf LF, $cr CR)"
 done
 
 if [ "$fail" -gt 0 ]; then echo "lint: $fail problem(s)"; exit 1; fi

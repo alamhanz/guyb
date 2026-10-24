@@ -1,4 +1,4 @@
-# guyb launcher for PowerShell 7+ (Windows Terminal aware).
+# guyb launcher for PowerShell 7+ and Windows PowerShell 5.1 (Windows Terminal aware).
 # Dot-source from your $PROFILE:   . "<repo>\scripts\launch.ps1"
 #
 #   guyb               -> pick a project from $env:GUYB_ROOT (or the current folder) and open it

@@ -40,6 +40,8 @@ git clone https://github.com/alamhanz/guyb.git
 
 Options (`-SkipPermissions` / `--skip-permissions`, `--skip-launcher`) are in the script headers. The permission rules are in [`settings/recommended-permissions.json`](settings/recommended-permissions.json): allow read-only git/cloud, ask on destructive ops, deny reading `.env` and key files.
 
+On Windows the installer also puts `guyb` on your user PATH (cmd, Win+R, Windows PowerShell 5.1 and 7) and adds a source line to Git Bash `~/.bashrc`. `<repo>\scripts` is on PATH, so anything dropped there becomes a command; moving the clone needs a re-run of `install.ps1`. Open a new terminal afterwards.
+
 **Plugin only:**
 
 ```

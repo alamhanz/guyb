@@ -1,7 +1,7 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-  Installs the guyb plugin, merges recommended permissions, and adds the `guyb` launcher to your PowerShell profile.
+  Installs the guyb plugin, merges recommended permissions, and adds the `guyb` launcher (PowerShell profile, user PATH shim for cmd/PowerShell, Git Bash ~/.bashrc).
 .EXAMPLE
   ./scripts/install.ps1 -ProjectsRoot D:\projects
 .EXAMPLE
@@ -49,7 +49,7 @@ if (-not $SkipPermissions) {
 else { Write-Host '2/3 Skipped permissions.' }
 
 if (-not $SkipLauncher) {
-    Write-Host '3/3 Adding `guyb` launcher to your PowerShell profile...' -ForegroundColor Cyan
+    Write-Host '3/3 Adding `guyb` launcher (PowerShell profile, user PATH, Git Bash)...' -ForegroundColor Cyan
     if (-not (Test-Path -LiteralPath $PROFILE)) { New-Item -ItemType File -Force $PROFILE | Out-Null }
     # An empty profile reads as $null, which breaks string checks below
     $profileText = Get-Content -LiteralPath $PROFILE -Raw
@@ -59,8 +59,28 @@ if (-not $SkipLauncher) {
     if (-not $profileText.Contains($sourceLine)) { $lines += $sourceLine }
     if ($ProjectsRoot -and -not $profileText.Contains('GUYB_ROOT')) { $lines += "`$env:GUYB_ROOT = '$($ProjectsRoot -replace "'", "''")'" }
     if ($lines) { Add-Content -Path $PROFILE -Value ("`n# guyb`n" + ($lines -join "`n")) }
-    Write-Host "   updated $PROFILE"
+    Write-Host ("   PowerShell profile {0}: {1}" -f $PROFILE, $(if ($lines) { 'added' } else { 'already present' }))
+
+    # guyb.cmd / guyb.ps1 in <repo>\scripts on the user PATH: cmd, Win+R, Windows PowerShell and pwsh. The shim runs -NoProfile, so GUYB_ROOT goes in the user environment too.
+    . (Join-Path $PSScriptRoot 'winlauncher.ps1')
+    $scriptsDir = Join-Path $repo 'scripts'
+    $r = Add-GuybUserPath -Dir $scriptsDir
+    Write-Host "   user PATH $scriptsDir`: $(if ($r -eq 'added') { 'added' } else { 'already present' })"
+    if ($r -eq 'added') { Write-Host "   previous user PATH was: $script:GuybPathPrevious" }
+    if ($ProjectsRoot) {
+        $r = Set-GuybUserRoot -Root $ProjectsRoot
+        Write-Host "   user GUYB_ROOT: $(if ($r -eq 'added') { "set to $ProjectsRoot" } else { 'already set, left as is' })"
+    }
+    if (Get-Command git.exe -ErrorAction SilentlyContinue) {
+        $bashrc = Join-Path $HOME '.bashrc'
+        $r = Add-GuybBashrc -Path $bashrc -Repo $repo
+        Write-Host "   Git Bash $bashrc`: $(if ($r -eq 'added') { 'added' } else { 'already present' })"
+        $bashProfile = Join-Path $HOME '.bash_profile'
+        if ((Test-Path -LiteralPath $bashProfile) -and ((Get-Content -LiteralPath $bashProfile -Raw) -notmatch '\.bashrc')) {
+            Write-Host "   hint: $bashProfile does not mention .bashrc; Git Bash login shells may skip the guyb line. Add: [ -f ~/.bashrc ] && . ~/.bashrc"
+        }
+    }
 }
 else { Write-Host '3/3 Skipped launcher.' }
 
-Write-Host "`nDone. Open a new terminal, then run:  guyb" -ForegroundColor Green
+Write-Host "`nDone. Open a NEW terminal (running shells do not see the PATH change), then run:  guyb" -ForegroundColor Green

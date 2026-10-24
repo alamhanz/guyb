@@ -5,7 +5,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $hostExe = (Get-Process -Id $PID).Path
-$names = @('lint', 'smoke', 'secrets', 'tabs', 'statusline', 'permissions')
+$names = @('lint', 'smoke', 'secrets', 'tabs', 'statusline', 'permissions', 'setup-paths', 'winlauncher')
 $jobs = @()
 foreach ($n in $names) {
   $psi = New-Object System.Diagnostics.ProcessStartInfo
