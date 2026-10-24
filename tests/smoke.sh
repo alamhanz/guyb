@@ -312,13 +312,14 @@ g_gitignore() {
   expect_lacks "gitignore .claude/" "$out" "gitignore:"
 }
 
-mk_clean() { # dir claude-lines state-lines registry-rows
+mk_clean() { # dir claude-lines state-lines registry-rows memory-lines
   make_fixture "$1"
   gen_lines "$2" "line" > "$1/.claude/CLAUDE.md"
   { printf '# State\n\n## Next up\n- x\n\n## Open issues\n- y\n'; gen_lines "$(($3 - 7))" "filler"; } > "$1/.claude/guyb/STATE.md"
   p="$1/.claude/guyb/pipeline"; mkdir -p "$p/progress" "$p/reports" "$p/plans" "$p/brand/x-1"
   { echo "$RUNHDR"; echo '|---|'; runrow x-1 'done' 2020-01-01; runrow x-2 running "$today"; awk -v n="$4" 'BEGIN { for (i = 1; i <= n - 2; i++) printf "| f-%d | implementer | sonnet | t | 1 | - | done | 2020-01-01 | 1k |\n", i }'; } > "$p/runs.md"
   gen_table "$p/questions.md" '| ID | Run | Question | Blocking | Assumed | Status |' "$4" Q answered
+  gen_lines "$5" "- [x-1] fact" > "$p/memory.md"
   : > "$p/progress/x-1.md"; : > "$p/progress/x-2.md"; : > "$p/progress/x-3.md"; : > "$p/brand/x-1/a.svg"
   touch -t 202001010000 "$p/progress/x-1.md" "$p/progress/x-2.md" "$p/brand/x-1/a.svg"
 }
@@ -326,18 +327,18 @@ snap() { { find "$1" | sort; git -C "${1/#"$tmp"/$tmp_w}" status --short 2>/dev/
 
 g_cleanup_over() {
   echo "brief.sh cleanup suggestions (over limits)"
-  ov="$tmp/over"; mk_clean "$ov" 201 301 201; ov_w=${ov/#"$tmp"/$tmp_w}
+  ov="$tmp/over"; mk_clean "$ov" 201 301 201 101; ov_w=${ov/#"$tmp"/$tmp_w}
   before=$(snap "$ov")
   out=$(bash "$brief" "${ov_w}" 2>&1)
   after=$(snap "$ov")
-  expect_has "cleanup over" "$out" "cleanup: CLAUDE.md 201 lines (>200); STATE.md 301 lines (>300); runs.md 201 rows (>200); questions.md 201 rows (>200); 2 pipeline files older than 14 days"
+  expect_has "cleanup over" "$out" "cleanup: CLAUDE.md 201 lines (>200); STATE.md 301 lines (>300); runs.md 201 rows (>200); questions.md 201 rows (>200); memory.md 101 lines (>100); 2 pipeline files older than 14 days"
   expect_lacks "cleanup over" "$out" "overdue:"
   expect_eq "brief leaves fixture unchanged" "$after" "$before"
 }
 
 g_cleanup_under() {
   echo "brief.sh cleanup suggestions (limits, overrides, profile)"
-  un="$tmp/under"; mk_clean "$un" 200 300 200; un_w=${un/#"$tmp"/$tmp_w}
+  un="$tmp/under"; mk_clean "$un" 200 300 200 100; un_w=${un/#"$tmp"/$tmp_w}
   rm -f "$un/.claude/guyb/pipeline/progress/x-1.md" "$un/.claude/guyb/pipeline/brand/x-1/a.svg"
   out=$(bash "$brief" "${un_w}" 2>&1)
   expect_lacks "cleanup under limits" "$out" "cleanup:"
@@ -350,6 +351,12 @@ g_cleanup_under() {
   touch -t 202001010000 "$un/.claude/guyb/pipeline/progress/x-3.md"
   out=$(bash "$brief" "${un_w}" 2>&1)
   expect_has "cleanup profile days" "$out" "1 pipeline files older than 3 days"
+  printf '# fixture\n\n- cleanup_memory_lines: 10\n' > "$un/.claude/CLAUDE.md"
+  out=$(bash "$brief" "${un_w}" 2>&1)
+  expect_has "cleanup memory override" "$out" "cleanup: memory.md 100 lines (>10)"
+  printf '# fixture\n\ncleanup_memory_lines: abc\n' > "$un/.claude/CLAUDE.md"
+  out=$(bash "$brief" "${un_w}" 2>&1)
+  expect_lacks "cleanup invalid memory ignored" "$out" "memory.md"
 }
 
 g_overdue() {

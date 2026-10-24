@@ -22,7 +22,7 @@ function Get-GuybConnections {
   }
 
   $known = @('github', 'gitlab', 'bitbucket', 'aws', 'gcp', 'azure', 'cloudflare', 'mcp', 'db', 'service')
-  $cfgKeys = @('max_parallel', 'cleanup_claude_md_lines', 'cleanup_state_lines', 'cleanup_rows', 'cleanup_days')
+  $cfgKeys = @('max_parallel', 'cleanup_claude_md_lines', 'cleanup_state_lines', 'cleanup_rows', 'cleanup_days', 'cleanup_memory_lines')
 
   # one file: Connections entries, project extras (Cloud line, Credentials names, cfg keys it defines)
   function Read-Conf([string]$path, [bool]$isProject) {

@@ -15,10 +15,12 @@ guyb is a Claude Code plugin: one orchestrator per project that plans the work, 
 
 ## How it works
 
-1. A small change (max 3 files, 20 lines) is done inline; no agent is spawned.
+1. The orchestrator only manages: every edit goes to an agent (trivial ones on haiku), and it asks agents for code detail.
 2. Otherwise the `architect` returns scope, risks, a task table, and open questions. You answer and say OK.
-3. Tasks are grouped into **waves**: runs in a wave are independent and start together. Parallel agents get disjoint files and worktree isolation. Up to `max_parallel` run at once (default 5).
+3. Tasks are grouped into **waves**: runs in a wave are independent and start together, parallel by default for disjoint tasks. Parallel agents get disjoint files and worktree isolation. Up to `max_parallel` run at once (default 5).
 4. `code-reviewer` reviews (skipped for docs-only changes), `git-ops` opens the PR, `/guyb:end` records the session in `STATE.md`.
+
+Agents read a shared, gitignored `.claude/guyb/pipeline/memory.md`; only the orchestrator writes it, from the `## Memory` lines in their reports.
 
 While agents run you can talk about anything else; ask "what's running?" and the orchestrator answers from `.claude/guyb/pipeline/runs.md` and each run's progress file. Details: [`plugins/guyb/skills/pipeline/SKILL.md`](plugins/guyb/skills/pipeline/SKILL.md).
 
@@ -109,7 +111,7 @@ Flags and the `-List` / `--list` format are in the headers of `scripts/launch.ps
 | `brand-designer` | sonnet | logo and brand mark: SVG concepts, preview page, README block |
 | `session-tracker` | haiku | end-of-session `STATE.md` update, docs drift |
 
-Change defaults via `model:` in `plugins/guyb/agents/*.md`. Every agent starts with fresh context, so guyb spends agents where they pay off: small changes run inline, independent big areas run in parallel, haiku/sonnet/opus are picked per run. Set the parallel cap with `max_parallel: N` in the project `.claude/CLAUDE.md` or `~/.claude/guyb/profile.md` (project wins).
+Change defaults via `model:` in `plugins/guyb/agents/*.md`. Every agent starts with fresh context, so guyb spends agents where they pay off: disjoint tasks run in parallel, haiku/sonnet/opus are picked per run. Set the parallel cap with `max_parallel: N` in the project `.claude/CLAUDE.md` or `~/.claude/guyb/profile.md` (project wins).
 
 ## Files guyb creates
 

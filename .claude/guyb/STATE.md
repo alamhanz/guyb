@@ -43,7 +43,7 @@
 
 ## Decisions
 - **Secrets guard** keeps blocking `git add <other> && git commit` while a non-ignored secret is untracked (add paths may hold unexpandable variables); alias commits (`git ci`) are a known gap (hooks.json filter is *commit*).
-- **Delegation model**: orchestrator plans and delegates; does small changes inline only (PR #3).
+- **Delegation model** (0.12.0, issue #20): orchestrator is manager only; every project-file edit goes to an agent (trivial ones on haiku, batched per request); reads ~3 files at most for quick answers, else asks the agent (SendMessage) or Explore. Parallel by default for disjoint tasks (merge parts sharing files or under ~30 lines). Shared gitignored `pipeline/memory.md`, written only by the orchestrator from report `## Memory` bullets; session-tracker promotes durable items to Decisions; cap `cleanup_memory_lines` (100). Replaces "small changes inline only" (PR #3).
 - **Q8**: install.sh without jq warns with install hints and ends "Done (permissions NOT merged)", exit 0.
 - **Q9**: credential-returning AWS get verbs (ecr get-login-password/get-authorization-token, lambda get-function(-configuration), apigateway get-api-key(s)) are ask rules; .env read denies cover 9 read verbs x 4 patterns, symmetric for Bash and PowerShell.
 - **Q51**: tab icon ~1s lag on Windows accepted (async hook).

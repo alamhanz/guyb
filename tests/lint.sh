@@ -91,5 +91,9 @@ for f in $ps1_files $cmd_files; do
   [ "$lf" -ne "$cr" ] && bad "$f: ps1/cmd file is not CRLF ($lf LF, $cr CR)"
 done
 
+echo "playbook size (hooks/orchestrator.md is loaded every session: at most 8192 bytes)"
+n=$(wc -c < plugins/guyb/hooks/orchestrator.md | tr -d ' ')
+[ "$n" -gt 8192 ] && bad "plugins/guyb/hooks/orchestrator.md: $n bytes (limit 8192)"
+
 if [ "$fail" -gt 0 ]; then echo "lint: $fail problem(s)"; exit 1; fi
 echo "lint: ok"

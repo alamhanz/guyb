@@ -3,7 +3,7 @@
 # shellcheck disable=SC2034 # gc_* results are read by the scripts that source this file
 # No CLI is run (command -v only), no network, no prompts. Secrets files are read only for the "expiresAt" value (aws caches);
 # env var VALUES are never read. Usage (sourced): . connections.sh hook   -> prints {"systemMessage":"..."} or nothing, always exits 0.
-# guyb_conn <brief|check|hook> <dir> sets: gc_cfg (six cfg words for brief.sh), gc_list ("connections: ..." or ""),
+# guyb_conn <brief|check|hook> <dir> sets: gc_cfg (seven cfg words for brief.sh), gc_list ("connections: ..." or ""),
 # gc_gh1 (first github name), gc_wl (lines "type<US>name<US>reason" for broken connections), gc_pcfg ("project config: ..." or "").
 
 # One awk: cfg values (max_parallel and cleanup limits, project file first), the Connections sections of the project
@@ -101,8 +101,8 @@ function expired(   n, i, f, nw, d) {
 BEGIN {
   US = sprintf("%c", 31)
   proj = ENVIRON["GC_PROJ"]
-  split("max_parallel cleanup_claude_md_lines cleanup_state_lines cleanup_rows cleanup_days", ks, " ")
-  for (i = 1; i <= 5; i++) { ix[ks[i]] = i; v[i] = "-" }
+  split("max_parallel cleanup_claude_md_lines cleanup_state_lines cleanup_rows cleanup_days cleanup_memory_lines", ks, " ")
+  for (i = 1; i <= 6; i++) { ix[ks[i]] = i; v[i] = "-" }
   split("github gitlab bitbucket aws gcp azure cloudflare mcp db service", kt, " ")
   for (i = 1; i <= 10; i++) known[kt[i]] = 1
 }
@@ -127,7 +127,7 @@ FNR == 1 { role = (FILENAME == proj) ? 1 : 2; sec = "" }
   cfg($0)
 }
 END {
-  print "K " v[1], (src == "" ? "-" : src), v[2], v[3], v[4], v[5]
+  print "K " v[1], (src == "" ? "-" : src), v[2], v[3], v[4], v[5], v[6]
   hp = (ENVIRON["GC_HASPROF"] == "1")
   for (i = 1; i <= cnt[1]; i++) povr[et[1, i]] = 1
   m = 0
@@ -187,7 +187,7 @@ END {
     if (cloud != "") parts = parts (parts != "" ? "; " : "") "cloud " cloud
     if (hascred) parts = parts (parts != "" ? "; " : "") (ncred ? "credentials " ncred " names" : "credentials none")
     if (src == "project") parts = parts (parts != "" ? "; " : "") "max_parallel " v[1]
-    if (pdef[2] || pdef[3] || pdef[4] || pdef[5]) parts = parts (parts != "" ? "; " : "") "cleanup limits"
+    if (pdef[2] || pdef[3] || pdef[4] || pdef[5] || pdef[6]) parts = parts (parts != "" ? "; " : "") "cleanup limits"
     if (ENVIRON["GC_MCPJSON"] == "1") parts = parts (parts != "" ? "; " : "") ".mcp.json"
     print "P project config: " (parts == "" ? "none - follows global (~/.claude/guyb/profile.md)" : parts)
   }
@@ -195,7 +195,7 @@ END {
 
 guyb_conn() { # mode dir
   gc_mode=$1; gc_d=${2%/}; [ -n "$gc_d" ] || gc_d=/
-  gc_cfg="- - - - - -"; gc_list=""; gc_wl=""; gc_pcfg=""; gc_gh1=""
+  gc_cfg="- - - - - - -"; gc_list=""; gc_wl=""; gc_pcfg=""; gc_gh1=""
   gc_h=${HOME//\\//}
   gc_pj="$gc_d/.claude/CLAUDE.md"; gc_pm="$gc_h/.claude/guyb/profile.md"
   gc_files=(); gc_isproj=0; gc_hasprof=0; gc_mj=0

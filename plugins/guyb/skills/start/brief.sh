@@ -49,24 +49,25 @@ trap 'exit 1' HUP INT TERM
 pn=${dir##*/}; [ -n "$pn" ] || pn=/
 echo "project: $pn"
 
-# max_parallel, the four cleanup limits and the connections lines come from one awk in setup/connections.sh:
-# first file (project, then profile) with a valid value wins per key. gc_cfg = "<max_parallel> <src> <claude_md_lines> <state_lines> <rows> <days>"; "-" when unset.
-gc_cfg="- - - - - -"; gc_lines=""; gc_wl=""; gc_gh1=""
+# max_parallel, the five cleanup limits and the connections lines come from one awk in setup/connections.sh:
+# first file (project, then profile) with a valid value wins per key. gc_cfg = "<max_parallel> <src> <claude_md_lines> <state_lines> <rows> <days> <memory_lines>"; "-" when unset.
+gc_cfg="- - - - - - -"; gc_lines=""; gc_wl=""; gc_gh1=""
 gc_src="${BASH_SOURCE[0]%/*}/../setup/connections.sh"
 if [ -f "$gc_src" ]; then
   # shellcheck disable=SC1090 # sourced next to this script
   . "$gc_src" lib
   guyb_conn brief "$base"; guyb_conn_lines
 fi
-# shellcheck disable=SC2086 # six words, splitting is intended
+# shellcheck disable=SC2086 # seven words, splitting is intended
 set -- $gc_cfg
 max_parallel=5; max_src=default
 [ "$1" != "-" ] && { max_parallel=$1; max_src=$2; }
-lim_claude=200; lim_state=300; lim_rows=200; lim_days=14
+lim_claude=200; lim_state=300; lim_rows=200; lim_days=14; lim_memory=100
 [ "$3" != "-" ] && lim_claude=$3
 [ "$4" != "-" ] && lim_state=$4
 [ "$5" != "-" ] && lim_rows=$5
 [ "$6" != "-" ] && lim_days=$6
+[ "$7" != "-" ] && lim_memory=$7
 echo "max parallel: $max_parallel ($max_src)"
 [ -n "$gc_lines" ] && printf '%s\n' "$gc_lines"
 
@@ -334,15 +335,17 @@ fi
 # by registry columns (ID, Status): "all|<ids>|" then "act|<running/queued/blocked ids>|".
 cl=""
 rf=/dev/null; qf=/dev/null; active="|"; allids="|"
+mf=/dev/null
 cntf=()
 [ -f "$base/.claude/CLAUDE.md" ] && cntf[${#cntf[@]}]="$base/.claude/CLAUDE.md"
 [ -n "$state" ] && cntf[${#cntf[@]}]="$state"
 if [ -n "$pipe" ]; then
   [ -f "$pipe/runs.md" ] && { rf="$pipe/runs.md"; cntf[${#cntf[@]}]="$rf"; }
   [ -f "$pipe/questions.md" ] && { qf="$pipe/questions.md"; cntf[${#cntf[@]}]="$qf"; }
+  [ -f "$pipe/memory.md" ] && { mf="$pipe/memory.md"; cntf[${#cntf[@]}]="$mf"; }
 fi
 if [ ${#cntf[@]} -gt 0 ]; then
-  cnto=$(awk -F'|' -v cm="$base/.claude/CLAUDE.md" -v st="$state" -v rf="$rf" -v qf="$qf" '
+  cnto=$(awk -F'|' -v cm="$base/.claude/CLAUDE.md" -v st="$state" -v rf="$rf" -v qf="$qf" -v mf="$mf" '
     function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
     { sub(/\r$/, ""); nl[FILENAME] = FNR }
     /^\|/ && !/^\|[ \t|:-]+$/ { r[FILENAME]++ }
@@ -351,14 +354,15 @@ if [ ${#cntf[@]} -gt 0 ]; then
       if (h && ic && sc) { id = trim($ic); if (id == "" || id ~ /^[-:]+$/) next; al = al id "|"; if (trim($sc) ~ /^(running|queued|blocked)$/) ac = ac id "|" }
     }
     END {
-      print nl[cm] + 0, nl[st] + 0, nl[rf] + 0, (r[rf] > 0 ? r[rf] - 1 : 0), nl[qf] + 0, (r[qf] > 0 ? r[qf] - 1 : 0)
+      print nl[cm] + 0, nl[st] + 0, nl[rf] + 0, (r[rf] > 0 ? r[rf] - 1 : 0), nl[qf] + 0, (r[qf] > 0 ? r[qf] - 1 : 0), nl[mf] + 0
       print "|" al; print "|" ac
     }' "${cntf[@]}" /dev/null)
-  { read -r c_cl_n c_st_n _ c_rn_r _ c_q_r; IFS= read -r allids; IFS= read -r active; } <<< "$cnto"
+  { read -r c_cl_n c_st_n _ c_rn_r _ c_q_r c_mem_n; IFS= read -r allids; IFS= read -r active; } <<< "$cnto"
   [ -f "$base/.claude/CLAUDE.md" ] && [ "$c_cl_n" -gt "$lim_claude" ] && cl="CLAUDE.md $c_cl_n lines (>$lim_claude)"
   [ -n "$state" ] && [ "$c_st_n" -gt "$lim_state" ] && cl="${cl:+$cl; }STATE.md $c_st_n lines (>$lim_state)"
   [ "$c_rn_r" -gt "$lim_rows" ] && cl="${cl:+$cl; }runs.md $c_rn_r rows (>$lim_rows)"
   [ "$c_q_r" -gt "$lim_rows" ] && cl="${cl:+$cl; }questions.md $c_q_r rows (>$lim_rows)"
+  [ "$c_mem_n" -gt "$lim_memory" ] && cl="${cl:+$cl; }memory.md $c_mem_n lines (>$lim_memory)"
 fi
 if [ -n "$pipe" ]; then
   fdirs=()
