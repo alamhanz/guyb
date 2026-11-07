@@ -5,6 +5,6 @@ disable-model-invocation: true
 argument-hint: "[optional: projects root folder]"
 ---
 
-Run the `guyb:repo-steward` agent in read-only portfolio-status mode. Root folder: "$ARGUMENTS" if given, else `$GUYB_ROOT`, else the parent folder of the current directory.
+Run the `guyb:repo-steward` agent in read-only portfolio-status mode. Root folder: "$ARGUMENTS" if given, else every `$GUYB_ROOT` entry (list separator `;` on Windows, `:` elsewhere), else the parent folder of the current directory.
 
-Show the user its table and the "needs attention" list, then offer the top 3 fixes as next actions.
+Show the user its table (with a root column when there is more than one root) and the "needs attention" list, then offer the top 3 fixes as next actions.
