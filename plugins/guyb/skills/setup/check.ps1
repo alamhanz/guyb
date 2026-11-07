@@ -54,6 +54,27 @@ function Expand-Rc($v) {
     return $v
 }
 
+# Get-PathShim <user PATH string> <repo>: 'ok' (scripts folder on PATH and guyb.cmd present), 'stale' (a guyb...\scripts entry points at a missing folder, or guyb.cmd is gone), else 'missing'
+function Get-PathShim($userPath, $repoDir) {
+    $want = (Join-Path $repoDir 'scripts').TrimEnd('\', '/')
+    $stale = $false
+    foreach ($e in @($userPath -split ';')) {
+        $e = [Environment]::ExpandEnvironmentVariables($e.Trim().Trim('"')).TrimEnd('\', '/')
+        if (-not $e) { continue }
+        if ($e -ieq $want) { if (Test-Path -LiteralPath (Join-Path $e 'guyb.cmd') -PathType Leaf) { return 'ok' } else { $stale = $true } }
+        elseif ($e -match '(?i)guyb[^\\/]*[\\/]scripts$' -and -not (Test-Path -LiteralPath $e -PathType Container)) { $stale = $true }
+    }
+    if ($stale) { 'stale' } else { 'missing' }
+}
+# Get-BashrcLine <rc file text>: 'missing' (no scripts/launch.sh line), 'stale' (drive path to a missing launch.sh), else 'ok'
+function Get-BashrcLine($text) {
+    $m = [regex]::Match([string]$text, '(?m)^\s*(?:source|\.)\s+["'']?([^"''\r\n]*?scripts/launch\.sh)')
+    if (-not $m.Success) { return 'missing' }
+    $f = $m.Groups[1].Value
+    if ($f -match '^[A-Za-z]:' -and -not (Test-Path -LiteralPath $f -PathType Leaf)) { return 'stale' }
+    'ok'
+}
+
 $sep = [string][IO.Path]::PathSeparator
 # Expand-List <value>: Expand-Rc on every entry of a path list
 function Expand-List($v) { (@($v -split [regex]::Escape($sep)) | ForEach-Object { Expand-Rc $_ }) -join $sep }
@@ -132,9 +153,25 @@ if ($homeV) {
     Add-Check 'home' 'ok' $false "GUYB_HOME not set; home = $homeDef"
 }
 
+$instFix = if ($repo) { "Re-run $(Join-Path $repo 'scripts\install.ps1')" } else { 'Run scripts\install.ps1 from the guyb repo' }
+$pathState = if ($repo -and $onWin) { Get-PathShim ([Environment]::GetEnvironmentVariable('Path', 'User')) $repo } else { '' }
 if ($profileText -match 'scripts[\\/]launch\.ps1') { Add-Check 'launcher-profile' 'ok' $false 'launcher source line present in $PROFILE' }
-elseif ($repo -and $onWin -and (@(([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') | ForEach-Object { $_.Trim('"').TrimEnd('\') }) -contains (Join-Path $repo 'scripts').TrimEnd('\'))) { Add-Check 'launcher-profile' 'ok' $false 'guyb command on the user PATH (scripts folder)' }
+elseif ($pathState -eq 'ok') { Add-Check 'launcher-profile' 'ok' $false 'guyb command on the user PATH (scripts folder)' }
 else { Add-Check 'launcher-profile' 'warn' $false 'no launcher source line in $PROFILE (the guyb command is unavailable in your terminals)' $(if ($repo) { "Add-Content `$PROFILE `". '$launcher'`"" } else { 'Run scripts\install.ps1' }) 'claude-after-consent' }
+if ($pathState -eq 'ok') { Add-Check 'launcher-path' 'ok' $false 'guyb.cmd shim folder on the user PATH (cmd, Windows PowerShell)' }
+elseif ($pathState) {
+    $pd = if ($pathState -eq 'stale') { 'user PATH has a stale guyb scripts entry or guyb.cmd is missing' } else { 'scripts folder not on the user PATH' }
+    Add-Check 'launcher-path' 'warn' $false "$pd (guyb is not found in cmd or Windows PowerShell)" "$instFix (adds it), or Add-GuybUserPath from scripts\winlauncher.ps1" 'user'
+}
+if ($repo -and $onWin -and (Has-Cmd git)) {
+    $brc = Join-Path $HOME '.bashrc'
+    $bs = Get-BashrcLine $(if (Test-Path -LiteralPath $brc) { Get-Content -LiteralPath $brc -Raw })
+    if ($bs -eq 'ok') { Add-Check 'launcher-bashrc' 'ok' $false 'launcher source line present in ~/.bashrc (Git Bash)' }
+    else {
+        $bd = if ($bs -eq 'stale') { '~/.bashrc launcher line points at a missing launch.sh' } else { 'no launcher source line in ~/.bashrc' }
+        Add-Check 'launcher-bashrc' 'warn' $false "$bd (guyb is not found in Git Bash)" "$instFix (adds it), or Add-GuybBashrc from scripts\winlauncher.ps1" 'user'
+    }
+}
 
 $profileMd = Join-Path $claudeDir 'guyb\profile.md'
 if (Has-Cmd gh) {

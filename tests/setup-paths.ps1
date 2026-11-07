@@ -1,7 +1,7 @@
 # Tests that skills/setup/check.ps1 expands ~, $HOME, ${HOME}, $env:USERPROFILE and $env:HOME in the profile
 # lines it reads, and falls back to known_marketplaces.json when the profile path has no launcher (issue #19).
 # Works on Windows PowerShell 5.1 and PowerShell 7:   pwsh -File tests/setup-paths.ps1
-# Expand-Rc is unit-tested by extracting it from check.ps1. The end-to-end cases run check.ps1 with a fake HOME in
+# Get-PathShim and Get-BashrcLine (launcher surfaces, issue #27) are unit-tested the same way. Expand-Rc is unit-tested by extracting it from check.ps1. The end-to-end cases run check.ps1 with a fake HOME in
 # parallel children; profile lines can only be injected where $PROFILE follows HOME (Linux, macOS), so on Windows
 # only the marketplace fallback runs, and only when the real profile has no launcher line. GUYB_HOME and multi-entry
 # GUYB_ROOT cases set the variables in the child process env (they win over the real profile and user env), so they
@@ -32,6 +32,37 @@ if ($fn) {
       @('$HOMEX\r', '$HOMEX\r'), @('D:\x\~\r', 'D:\x\~\r'), @('D:/abs/r', 'D:/abs/r'), @('', ''))) {
     Expect-Eq "Expand-Rc '$($c[0])'" (Expand-Rc $c[0]) $c[1]
   }
+}
+
+# unit: Get-PathShim and Get-BashrcLine from check.ps1 (pure functions: PATH string and rc text are passed in, the real user PATH and ~/.bashrc are never read)
+foreach ($name in 'Get-PathShim', 'Get-BashrcLine') {
+  $f = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)
+  if ($f) { . ([scriptblock]::Create($f.Extent.Text)) } else { No "$name not found in check.ps1" }
+}
+if ((Get-Command Get-PathShim -ErrorAction SilentlyContinue) -and (Get-Command Get-BashrcLine -ErrorAction SilentlyContinue)) {
+  $ut = Join-Path ([System.IO.Path]::GetTempPath()) ('guyb-launchsurf-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+  try {
+    $ur = Join-Path $ut 'guyb'; $us = Join-Path $ur 'scripts'; $ug = Join-Path $ut 'gone\guyb\scripts'
+    New-Item -ItemType Directory -Force -Path $us | Out-Null
+    Write-File (Join-Path $us 'guyb.cmd') ''; Write-File (Join-Path $us 'launch.sh') ''
+    $ut2 = Join-Path $ut 'nocmd'; New-Item -ItemType Directory -Force -Path (Join-Path $ut2 'scripts') | Out-Null
+    Expect-Eq 'shim ok' (Get-PathShim "C:\Windows;$us;C:\x" $ur) 'ok'
+    Expect-Eq 'shim ok trailing slash, quotes' (Get-PathShim ("C:\x;`"$us\`"") $ur) 'ok'
+    Expect-Eq 'shim ok case' (Get-PathShim $us.ToUpper() $ur) 'ok'
+    Expect-Eq 'shim missing' (Get-PathShim 'C:\Windows;C:\x' $ur) 'missing'
+    Expect-Eq 'shim empty' (Get-PathShim '' $ur) 'missing'
+    Expect-Eq 'shim stale entry' (Get-PathShim "C:\Windows;$ug" $ur) 'stale'
+    Expect-Eq 'shim no guyb.cmd' (Get-PathShim (Join-Path $ut2 'scripts') $ut2) 'stale'
+    Expect-Eq 'shim stale then ok' (Get-PathShim "$ug;$us" $ur) 'ok'
+    $lsh = $us.Replace('\', '/') + '/launch.sh'
+    Expect-Eq 'rc ok' (Get-BashrcLine "# guyb`nsource `"$lsh`"`n") 'ok'
+    Expect-Eq 'rc ok dot' (Get-BashrcLine ". '$lsh'`n") 'ok'
+    Expect-Eq 'rc ok msys path' (Get-BashrcLine "source `"/c/guyb/scripts/launch.sh`"`n") 'ok'
+    Expect-Eq 'rc stale' (Get-BashrcLine "source `"$($ug.Replace('\', '/'))/launch.sh`"`n") 'stale'
+    Expect-Eq 'rc missing' (Get-BashrcLine "export GUYB_ROOT=x`n") 'missing'
+    Expect-Eq 'rc commented' (Get-BashrcLine "# source `"$lsh`"`n") 'missing'
+    Expect-Eq 'rc empty' (Get-BashrcLine $null) 'missing'
+  } finally { Remove-Item -LiteralPath $ut -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
 # end to end
