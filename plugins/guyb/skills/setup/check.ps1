@@ -54,11 +54,34 @@ function Expand-Rc($v) {
     return $v
 }
 
+$sep = [string][IO.Path]::PathSeparator
+# Expand-List <value>: Expand-Rc on every entry of a path list
+function Expand-List($v) { (@($v -split [regex]::Escape($sep)) | ForEach-Object { Expand-Rc $_ }) -join $sep }
+
 # GUYB_ROOT: process env -> user env -> $PROFILE line
 $root = ''; $rootSrc = ''
 if ($env:GUYB_ROOT) { $root = $env:GUYB_ROOT; $rootSrc = 'process env' }
 elseif ($v = [Environment]::GetEnvironmentVariable('GUYB_ROOT', 'User')) { $root = $v; $rootSrc = 'user env' }
-elseif ($profileText -match "(?m)^\s*\`$env:GUYB_ROOT\s*=\s*['""]([^'""]+)['""]") { $root = Expand-Rc $Matches[1]; $rootSrc = 'profile line' }
+elseif ($profileText -match "(?m)^\s*\`$env:GUYB_ROOT\s*=\s*['""]([^'""]+)['""]") { $root = Expand-List $Matches[1]; $rootSrc = 'profile line' }
+
+# GUYB_HOME: process env -> user env -> $PROFILE line (a single path, never split)
+$homeV = ''; $homeSrc = ''
+if ($env:GUYB_HOME) { $homeV = $env:GUYB_HOME; $homeSrc = 'process env' }
+elseif ($v = [Environment]::GetEnvironmentVariable('GUYB_HOME', 'User')) { $homeV = $v; $homeSrc = 'user env' }
+elseif ($profileText -match "(?m)^\s*\`$env:GUYB_HOME\s*=\s*['""]([^'""]+)['""]") { $homeV = Expand-Rc $Matches[1]; $homeSrc = 'profile line' }
+
+# roots: spaces and one pair of quotes trimmed, empty dropped, trailing \ or / stripped (not on a drive root or /),
+# duplicates dropped (case-insensitive on Windows); order kept
+$roots = New-Object System.Collections.Generic.List[string]
+foreach ($e in @($root -split [regex]::Escape($sep))) {
+    $e = $e.Trim()
+    if ($e.Length -ge 2 -and (($e[0] -eq '"' -and $e[$e.Length - 1] -eq '"') -or ($e[0] -eq "'" -and $e[$e.Length - 1] -eq "'"))) { $e = $e.Substring(1, $e.Length - 2) }
+    while ($e.Length -gt 0 -and $e -match '[\\/]$' -and $e -notmatch '^[A-Za-z]:[\\/]$' -and $e -ne '/') { $e = $e.Substring(0, $e.Length - 1) }
+    if (-not $e) { continue }
+    $dup = $false
+    foreach ($x in $roots) { if ($(if ($env:OS -eq 'Windows_NT') { $x -ieq $e } else { $x -ceq $e })) { $dup = $true; break } }
+    if (-not $dup) { $roots.Add($e) }
+}
 
 # Repo: source line in profile, else known_marketplaces.json
 $repo = ''; $repoSrc = ''
@@ -90,11 +113,23 @@ if ($launcher -and (Test-Path -LiteralPath $launcher)) { Add-Check 'launcher' 'o
 else { Add-Check 'launcher' 'fail' $true $(if ($repo) { "repo $repo has no scripts\launch.ps1" } else { 'guyb repo not found' }) 'Run scripts\install.ps1 from the guyb repo; without it, cd into the project and run claude manually' 'user' }
 
 # --- warnings ---
-if ($root) { Add-Check 'root' 'ok' $false "GUYB_ROOT=$root ($rootSrc)" }
+if ($root) {
+    $rootMiss = @($roots | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Container) })
+    if ($rootMiss.Count -gt 0) { Add-Check 'root' 'warn' $false ("GUYB_ROOT entry not found: " + ($rootMiss -join ', ') + " ($rootSrc)") '/guyb:setup layout' 'user' }
+    else { Add-Check 'root' 'ok' $false "GUYB_ROOT=$root ($rootSrc)" }
+}
 else {
     $fallback = if ($StartDir) { "; session start folder $StartDir is used" } else { '' }
     $tgt = if ($StartDir) { $StartDir } else { '<projects folder>' }
     Add-Check 'root' 'warn' $false ("GUYB_ROOT not set$fallback") "Add `$env:GUYB_ROOT = '$tgt' to `$PROFILE" 'claude-after-consent'
+}
+
+if ($homeV) {
+    if (Test-Path -LiteralPath $homeV -PathType Container) { Add-Check 'home' 'ok' $false "GUYB_HOME=$homeV ($homeSrc)" }
+    else { Add-Check 'home' 'warn' $false "GUYB_HOME not found: $homeV ($homeSrc)" '/guyb:setup layout' 'user' }
+} else {
+    $homeDef = if ($roots.Count -gt 0) { $roots[0] } elseif ($StartDir) { $StartDir } else { 'none' }
+    Add-Check 'home' 'ok' $false "GUYB_HOME not set; home = $homeDef"
 }
 
 if ($profileText -match 'scripts[\\/]launch\.ps1') { Add-Check 'launcher-profile' 'ok' $false 'launcher source line present in $PROFILE' }
@@ -186,10 +221,13 @@ if ($ctr) {
         Add-Check 'container' 'warn' $false "$ctr $ver, daemon $why" $cfix 'user'
     }
 } else {
-    $scanRoot = if ($root) { $root } else { $StartDir }
-    $nCont = 0
-    if ($scanRoot -and (Test-Path -LiteralPath $scanRoot -PathType Container)) {
-        $dirs = @(Get-ChildItem -LiteralPath $scanRoot -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' -and $_.Name -ne 'node_modules' } | Select-Object -First 200)
+    $scanRoots = if ($roots.Count -gt 0) { @($roots) } elseif ($StartDir) { @($StartDir) } else { @() }
+    $nCont = 0; $nScan = 0
+    foreach ($scanRoot in $scanRoots) {
+        if ($nScan -ge 200) { break }
+        if (-not (Test-Path -LiteralPath $scanRoot -PathType Container)) { continue }
+        $dirs = @(Get-ChildItem -LiteralPath $scanRoot -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike '.*' -and $_.Name -ne 'node_modules' } | Select-Object -First (200 - $nScan))
+        $nScan += $dirs.Count
         foreach ($dd in $dirs) {
             foreach ($f in 'Dockerfile', 'compose.yaml', 'compose.yml', 'docker-compose.yml', 'docker-compose.yaml') {
                 if (Test-Path -LiteralPath (Join-Path $dd.FullName $f) -PathType Leaf) { $nCont++; break }
@@ -231,6 +269,8 @@ $blockFail = @($checks | Where-Object { $_.blocking -and $_.status -eq 'fail' })
     version = 1
     os      = $(if ($onWin) { 'windows' } else { 'unix' })
     root    = $root
+    home    = $homeV
+    roots   = @($roots)
     repo    = $repo
     blockingFailures = $blockFail
     checks  = $checks.ToArray()
