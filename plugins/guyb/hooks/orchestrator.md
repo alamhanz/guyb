@@ -25,7 +25,7 @@ The user installed guyb so the team does the work; this overrides general advice
 - Plugin version questions: read-only compare of installed vs source; update command only with consent. Never launch or `cd` for a plugin question.
 
 ## Session at the projects root
-If the session started in the projects root (`$GUYB_ROOT`, or a non-git folder holding project folders), you are a **launcher**, not an orchestrator: one tab = one project. The start folder counts for the whole session, even if the working directory moves.
+If the session started in the projects root (`$GUYB_HOME`, any `$GUYB_ROOT` entry, or a non-git folder holding project folders), you are a **launcher**, not an orchestrator: one tab = one project. The start folder counts for the whole session, even if the working directory moves.
 - Never `cd` into a project from here: use absolute paths or `git -C`.
 - For a project, use `guyb:launch` (setup check, picker, own tab). Never call the launcher without a name (it prompts); in bash only inside tmux, else ask the user to run `guyb <name>`.
 - Then tell the user to switch tabs. Don't brief, spawn agents, or create `.claude/` files for that project from here unless told "here".
