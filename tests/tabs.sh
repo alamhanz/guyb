@@ -41,6 +41,7 @@ expect_eq tmux-arg-hash "$(_guyb_tmux_arg 'a#b')" 'a##b'
 
 mkdir -p "$tmp/proj/my app" "$tmp/proj/guyb" "$tmp/proj/x;" "$tmp/proj/a#b"
 export GUYB_ROOT="$tmp/proj"
+unset GUYB_HOME
 
 out="$(guyb 'my app' 2>&1)"
 expect_has here-osc "$out" "here: osc0 $DONE my app"
@@ -70,6 +71,47 @@ list="$(guyb --list 2>&1)"
 expect_has list-guyb "$list" "guyb	$tmp/proj/guyb"
 expect_has list-space "$list" 'my app'
 expect_lacks list-no-dryrun "$list" 'here:'
+expect_eq list-root-col "$(printf '%s\n' "$list" | grep '^guyb	' | cut -f7)" "$tmp/proj"
+
+# Multi-root: r1/{a,dup}, r2/{b,dup}; the value has an empty, a duplicate and a missing entry.
+# Git Bash: ';' separator and Windows-style paths (the user env value); elsewhere ':'.
+mkdir -p "$tmp/ml/r1/a" "$tmp/ml/r1/dup" "$tmp/ml/r2/b" "$tmp/ml/r2/dup"
+msep=:; mp() { printf '%s' "$1"; }
+case "${OSTYPE:-}" in msys*|cygwin*|win32*) msep=';'; mp() { cygpath -w "$1"; } ;; esac
+mr1="$(mp "$tmp/ml/r1")"; mr2="$(mp "$tmp/ml/r2")"; mgone="$(mp "$tmp/ml")/gone"
+mval="$mr1$msep$msep$mr2$msep$mr1/$msep$mgone"
+r1n="$(cd "$tmp/ml/r1" && pwd)"; r2n="$(cd "$tmp/ml/r2" && pwd)"
+mlist="$(GUYB_ROOT="$mval" guyb --list 2>&1)"
+expect_eq ml-rows "$(printf '%s\n' "$mlist" | grep -c "	")" 4
+expect_eq ml-cols "$(printf '%s\n' "$mlist" | grep "	" | head -n1 | awk -F'	' '{print NF}')" 7
+expect_eq ml-dup-count "$(printf '%s\n' "$mlist" | grep -c '^dup	')" 2
+expect_eq ml-root-a "$(printf '%s\n' "$mlist" | grep '^a	' | cut -f7)" "$r1n"
+expect_eq ml-root-b "$(printf '%s\n' "$mlist" | grep '^b	' | cut -f7)" "$r2n"
+expect_has ml-warn "$mlist" 'guyb: root not found:'
+out="$(GUYB_ROOT="$mval" guyb a 2>&1)"
+expect_has ml-open-a "$out" "here: cd '$r1n/a'"
+out="$(GUYB_ROOT="$mval" guyb b 2>&1)"
+expect_has ml-open-b "$out" "here: cd '$r2n/b'"
+out="$(GUYB_ROOT="$mval" guyb dup 2>&1)"
+expect_has ml-ambiguous "$out" 'Ambiguous project: dup is in 2 roots:'
+expect_has ml-ambiguous-r1 "$out" "$r1n/dup"
+expect_has ml-ambiguous-r2 "$out" "$r2n/dup"
+expect_has ml-ambiguous-run "$out" "Run: guyb '$r1n/dup'"
+expect_lacks ml-ambiguous-launch "$out" 'here:'
+expect_lacks ml-ambiguous-tmux "$out" 'tmux:'
+expect_eq ml-ambiguous-rc "$(GUYB_ROOT="$mval" guyb dup >/dev/null 2>&1; echo $?)" 1
+out="$(GUYB_ROOT="$mval" guyb nosuch 2>&1)"
+expect_has ml-nosuch "$out" 'Project not found: nosuch'
+expect_has ml-nosuch-roots "$out" "(roots: $r1n; $r2n)"
+out="$(GUYB_ROOT="$mgone" guyb --list 2>&1; echo rc=$?)"
+expect_has ml-all-missing "$out" 'Root not found'
+expect_has ml-all-missing-rc "$out" 'rc=1'
+out="$(GUYB_ROOT="$(mp "$tmp/ml")$msep$mr1" guyb --list 2>&1)"
+expect_lacks ml-root-not-project "$out" "	$r1n	"
+expect_has ml-other-root-listed "$out" "	$r2n	"
+out="$(GUYB_ROOT="$(mp "$tmp/ml")" GUYB_HOME="$mr2" guyb --list 2>&1)"
+expect_lacks ml-home-not-project "$out" "	$r2n	"
+expect_has ml-home-sibling-listed "$out" "	$r1n	"
 
 # --- tab-status.sh (status hook): GUYB_DRYRUN=1 prints "tab: <mode> <title>". Acts only when GUYB_TAB_NAME is set.
 hook="$root/plugins/guyb/hooks/tab-status.sh"
@@ -316,6 +358,14 @@ else
   out="$(zsh -f -c 'GUYB_ROOT=$1; source $2; guyb nosuch; echo rc=$?' _ "$tmp/empty" "$zl" 2>&1)"
   expect_has zsh-nosuch "$out" 'Project not found'
   expect_has zsh-nosuch-rc "$out" 'rc=1'
+  out="$(zsh -f -c 'GUYB_ROOT=$1; source $2; guyb --list' _ "$mval" "$zl" 2>&1)"
+  expect_eq zsh-ml-rows "$(printf '%s\n' "$out" | grep -c "	")" 4
+  expect_eq zsh-ml-root-b "$(printf '%s\n' "$out" | grep '^b	' | cut -f7)" "$r2n"
+  out="$(zsh -f -c 'GUYB_ROOT=$1; GUYB_DRYRUN=1; source $2; guyb dup; echo rc=$?' _ "$mval" "$zl" 2>&1)"
+  expect_has zsh-ml-ambiguous "$out" 'Ambiguous project: dup is in 2 roots:'
+  expect_has zsh-ml-ambiguous-r2 "$out" "$r2n/dup"
+  expect_has zsh-ml-ambiguous-rc "$out" 'rc=1'
+  expect_lacks zsh-ml-ambiguous-launch "$out" 'here:'
 
   # install.sh appends the source line to ~/.zshrc; an interactive zsh then has guyb
   inst() { HOME="$tmp/home" SHELL=/bin/zsh PATH="$tmp/bin:$PATH" /bin/bash "$root/scripts/install.sh" --skip-permissions --root "$tmp/proj" >/dev/null 2>&1; }
