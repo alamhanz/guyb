@@ -44,7 +44,7 @@ function _guyb_wt_args([string]$Name, [string]$Target, [string]$Shell, [string]$
       '--startingDirectory', $dir, $Shell, '-NoExit', '-Command', $run.Replace(';', '\;'))
 }
 
-# Roots: $env:GUYB_ROOT is a path list (';' on Windows, ':' elsewhere), else the current folder. Entries: trimmed, one pair of
+# Roots: $env:GUYB_ROOT is a path list (';' on Windows, ':' elsewhere), else the current folder as one entry (never split). Entries: trimmed, one pair of
 # quotes removed, empties dropped, trailing separators stripped (not on a drive root), duplicates dropped. Missing entries warn
 # ("guyb: root not found: <entry>") and are skipped. Returns the existing roots in order.
 function _guyb_norm([string]$Path) {
@@ -54,10 +54,10 @@ function _guyb_norm([string]$Path) {
 }
 function _guyb_key([string]$Path) { if ([IO.Path]::DirectorySeparatorChar -eq '\') { $Path.ToLowerInvariant() } else { $Path } }
 function _guyb_roots {
-    $raw = if ($env:GUYB_ROOT) { $env:GUYB_ROOT } else { (Get-Location).Path }
+    $parts = if ($env:GUYB_ROOT) { $env:GUYB_ROOT.Split([IO.Path]::PathSeparator) } else { , (Get-Location).Path }
     $seen = @{}
     $roots = New-Object System.Collections.ArrayList
-    foreach ($e in $raw.Split([IO.Path]::PathSeparator)) {
+    foreach ($e in $parts) {
         $e = $e.Trim()
         if ($e.Length -ge 2 -and (($e[0] -eq '"' -and $e[-1] -eq '"') -or ($e[0] -eq "'" -and $e[-1] -eq "'"))) { $e = $e.Substring(1, $e.Length - 2) }
         if (-not $e) { continue }

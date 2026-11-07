@@ -66,13 +66,17 @@ function Get-PathShim($userPath, $repoDir) {
     }
     if ($stale) { 'stale' } else { 'missing' }
 }
-# Get-BashrcLine <rc file text>: 'missing' (no scripts/launch.sh line), 'stale' (drive path to a missing launch.sh), else 'ok'
+# Get-BashrcLine <rc file text>: 'missing' (no scripts/launch.sh line), 'stale' (every line is a drive or /x/ path to a missing launch.sh), else 'ok'
 function Get-BashrcLine($text) {
-    $m = [regex]::Match([string]$text, '(?m)^\s*(?:source|\.)\s+["'']?([^"''\r\n]*?scripts/launch\.sh)')
-    if (-not $m.Success) { return 'missing' }
-    $f = $m.Groups[1].Value
-    if ($f -match '^[A-Za-z]:' -and -not (Test-Path -LiteralPath $f -PathType Leaf)) { return 'stale' }
-    'ok'
+    $ms = [regex]::Matches([string]$text, '(?m)^\s*(?:source|\.)\s+["'']?([^"''\r\n]*?scripts/launch\.sh)')
+    if ($ms.Count -eq 0) { return 'missing' }
+    foreach ($m in $ms) {
+        $f = $m.Groups[1].Value
+        if ($env:OS -eq 'Windows_NT' -and $f -match '^/([A-Za-z])/(.*)$') { $f = $Matches[1] + ':/' + $Matches[2] }
+        if ($f -match '^[A-Za-z]:' -and -not (Test-Path -LiteralPath $f -PathType Leaf)) { continue }
+        return 'ok'
+    }
+    'stale'
 }
 
 $sep = [string][IO.Path]::PathSeparator
@@ -159,18 +163,19 @@ if ($profileText -match 'scripts[\\/]launch\.ps1') { Add-Check 'launcher-profile
 elseif ($pathState -eq 'ok') { Add-Check 'launcher-profile' 'ok' $false 'guyb command on the user PATH (scripts folder)' }
 else { Add-Check 'launcher-profile' 'warn' $false 'no launcher source line in $PROFILE (the guyb command is unavailable in your terminals)' $(if ($repo) { "Add-Content `$PROFILE `". '$launcher'`"" } else { 'Run scripts\install.ps1' }) 'claude-after-consent' }
 if ($pathState -eq 'ok') { Add-Check 'launcher-path' 'ok' $false 'guyb.cmd shim folder on the user PATH (cmd, Windows PowerShell)' }
-elseif ($pathState) {
-    $pd = if ($pathState -eq 'stale') { 'user PATH has a stale guyb scripts entry or guyb.cmd is missing' } else { 'scripts folder not on the user PATH' }
-    Add-Check 'launcher-path' 'warn' $false "$pd (guyb is not found in cmd or Windows PowerShell)" "$instFix (adds it), or Add-GuybUserPath from scripts\winlauncher.ps1" 'user'
+elseif ($pathState -eq 'stale') {
+    Add-Check 'launcher-path' 'warn' $false 'user PATH has a stale guyb scripts entry or guyb.cmd is missing (guyb is not found in cmd or Windows PowerShell)' "$instFix (adds it), or Add-GuybUserPath from scripts\winlauncher.ps1" 'user'
 }
+elseif ($pathState) { Add-Check 'launcher-path' 'ok' $false "not set up (optional): $instFix to add guyb to cmd/PS 5.1/Git Bash" }
 if ($repo -and $onWin -and (Has-Cmd git)) {
     $brc = Join-Path $HOME '.bashrc'
     $bs = Get-BashrcLine $(if (Test-Path -LiteralPath $brc) { Get-Content -LiteralPath $brc -Raw })
     if ($bs -eq 'ok') { Add-Check 'launcher-bashrc' 'ok' $false 'launcher source line present in ~/.bashrc (Git Bash)' }
-    else {
-        $bd = if ($bs -eq 'stale') { '~/.bashrc launcher line points at a missing launch.sh' } else { 'no launcher source line in ~/.bashrc' }
-        Add-Check 'launcher-bashrc' 'warn' $false "$bd (guyb is not found in Git Bash)" "$instFix (adds it), or Add-GuybBashrc from scripts\winlauncher.ps1" 'user'
+    elseif ($bs -eq 'stale') {
+        $fixed = ($repo.Replace('\', '/')) + '/scripts/launch.sh'
+        Add-Check 'launcher-bashrc' 'warn' $false '~/.bashrc launcher line points at a missing launch.sh (guyb is not found in Git Bash)' "Edit ~/.bashrc and replace the launch.sh source line with: source `"$fixed`" (re-running install.ps1 keeps an existing line)" 'user'
     }
+    else { Add-Check 'launcher-bashrc' 'ok' $false "not set up (optional): $instFix to add guyb to cmd/PS 5.1/Git Bash" }
 }
 
 $profileMd = Join-Path $claudeDir 'guyb\profile.md'

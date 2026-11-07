@@ -57,13 +57,15 @@ _guyb_tmux_opt() {
   else tmux set-window-option -t "$1" "$2" "$3" >/dev/null 2>&1; fi
 }
 
-# Roots: $GUYB_ROOT is a path list (';' on Windows incl. Git Bash, ':' elsewhere), else $PWD. Entries: trimmed, one pair of quotes
+# Roots: $GUYB_ROOT is a path list (';' on Windows incl. Git Bash, ':' elsewhere), else $PWD as one entry. Entries: trimmed, one pair of quotes
 # removed, empties dropped, duplicates dropped. Missing entries warn ("guyb: root not found: <entry>") and are skipped.
 # Prints the existing roots, one per line, normalized with `cd && pwd`.
 _guyb_roots() {
-  local rest="${GUYB_ROOT:-$PWD}" sep=: e n k seen="" nl="
+  local rest="${GUYB_ROOT:-}" sep=: e n k seen="" nl="
 " more=1
   case "${OSTYPE:-}" in msys*|cygwin*|win32*) sep=';' ;; esac
+  # no GUYB_ROOT: the current folder is one entry, never split on the separator
+  [ -n "$rest" ] || { sep="$nl"; rest="$PWD"; }
   while [ -n "$more" ]; do
     case "$rest" in
       *"$sep"*) e="${rest%%"$sep"*}"; rest="${rest#*"$sep"}" ;;
@@ -85,16 +87,19 @@ _guyb_roots() {
 # A folder that is itself a root or $GUYB_HOME is not a project.
 _guyb_projects() {
   [ -n "${ZSH_VERSION:-}" ] && setopt local_options null_glob
-  local skip="$1" r d p h i=0 tab nl="
-"
+  local skip="$1" r d p h k i=0 tab nl="
+" ci=""
   tab="$(printf '\t')"
+  case "${OSTYPE:-}" in msys*|cygwin*|win32*) ci=1 ;; esac
   if [ -n "${GUYB_HOME:-}" ] && [ -d "$GUYB_HOME" ]; then h="$(cd "$GUYB_HOME" && pwd)"; skip="$skip$nl$h"; fi
+  [ -z "$ci" ] || skip="$(printf %s "$skip" | tr 'A-Z' 'a-z')"
   while IFS= read -r r; do
     [ -n "$r" ] || continue
     for d in "$r"/*/; do
       [ -d "$d" ] || continue
       p="$(cd "$d" && pwd)"
-      case "$nl$skip$nl" in *"$nl$p$nl"*) continue ;; esac
+      k="$p"; [ -z "$ci" ] || k="$(printf %s "$p" | tr 'A-Z' 'a-z')"
+      case "$nl$skip$nl" in *"$nl$k$nl"*) continue ;; esac
       printf '%s%s%s%s%s\n' "$i" "$tab" "$r" "$tab" "$p"
     done
     i=$((i + 1))

@@ -86,9 +86,10 @@ Flags and the `-List` / `--list` format are in the headers of `scripts/launch.ps
 The list separator is `;` on Windows (including Git Bash) and `:` on macOS, Linux and WSL. Empty entries and duplicates are dropped; a missing entry gets a warning and is skipped. Quote the value in rc files, since an unquoted `;` ends a bash command.
 
 ```
-# PowerShell profile (Windows)
-$env:GUYB_ROOT = 'D:\projects;E:\work'
-$env:GUYB_HOME = 'D:\home'
+# Windows: user environment variables (what /guyb:setup layout writes; the guyb.cmd and guyb.ps1 shims run
+# without your profile and only see these)
+[Environment]::SetEnvironmentVariable('GUYB_ROOT', 'D:\projects;E:\work', 'User')
+[Environment]::SetEnvironmentVariable('GUYB_HOME', 'D:\home', 'User')
 
 # ~/.bashrc or ~/.zshrc
 export GUYB_ROOT="$HOME/projects:$HOME/work"

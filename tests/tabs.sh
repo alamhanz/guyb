@@ -113,6 +113,12 @@ out="$(GUYB_ROOT="$(mp "$tmp/ml")" GUYB_HOME="$mr2" guyb --list 2>&1)"
 expect_lacks ml-home-not-project "$out" "	$r2n	"
 expect_has ml-home-sibling-listed "$out" "	$r1n	"
 
+# GUYB_ROOT unset: the current folder is one root even when its path contains the list separator
+mkdir -p "$tmp/sp${msep}x/pj"
+out="$(cd "$tmp/sp${msep}x" && unset GUYB_ROOT GUYB_HOME && guyb --list 2>&1)"
+expect_has cwd-sep-listed "$out" "pj	"
+expect_lacks cwd-sep-no-warn "$out" 'root not found'
+
 # --- tab-status.sh (status hook): GUYB_DRYRUN=1 prints "tab: <mode> <title>". Acts only when GUYB_TAB_NAME is set.
 hook="$root/plugins/guyb/hooks/tab-status.sh"
 hk() { GUYB_TAB_NAME="$tname" TMPDIR="$tmp" bash "$hook" "$@" </dev/null 2>&1; }

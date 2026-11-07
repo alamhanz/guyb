@@ -141,6 +141,15 @@ try {
     $names = @((guyb -List) | ForEach-Object { ($_ -split "`t")[1] })
     ExpectEq ml-home-not-project ($names -contains $r2) $false
     ExpectEq ml-home-sibling-listed ($names -contains $r1) $true
+
+    # GUYB_ROOT unset: the current folder is one root even when its path contains the list separator
+    $sp = Join-Path $tmp "sp${sep}x"
+    New-Item -ItemType Directory -Force -Path (Join-Path $sp 'pj') | Out-Null
+    $env:GUYB_ROOT = $null; $env:GUYB_HOME = $null
+    Push-Location -LiteralPath $sp
+    try { $out = (& { guyb -List 2>&1 }) -join "`n" } finally { Pop-Location }
+    ExpectHas cwd-sep-listed $out "pj`t"
+    ExpectLacks cwd-sep-no-warn $out 'root not found'
 }
 finally {
     $env:GUYB_HOME = $savedHome

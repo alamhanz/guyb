@@ -57,7 +57,11 @@ if ((Get-Command Get-PathShim -ErrorAction SilentlyContinue) -and (Get-Command G
     $lsh = $us.Replace('\', '/') + '/launch.sh'
     Expect-Eq 'rc ok' (Get-BashrcLine "# guyb`nsource `"$lsh`"`n") 'ok'
     Expect-Eq 'rc ok dot' (Get-BashrcLine ". '$lsh'`n") 'ok'
-    Expect-Eq 'rc ok msys path' (Get-BashrcLine "source `"/c/guyb/scripts/launch.sh`"`n") 'ok'
+    if ($env:OS -eq 'Windows_NT' -and $lsh -match '^([A-Za-z]):(.*)$') {
+      Expect-Eq 'rc ok msys path' (Get-BashrcLine "source `"/$($Matches[1].ToLower())$($Matches[2])`"`n") 'ok'
+      Expect-Eq 'rc stale msys path' (Get-BashrcLine "source `"/$($Matches[1].ToLower())/nope/gone/guyb/scripts/launch.sh`"`n") 'stale'
+    } else { Expect-Eq 'rc ok posix path' (Get-BashrcLine "source `"/c/guyb/scripts/launch.sh`"`n") 'ok' }
+    Expect-Eq 'rc stale then ok' (Get-BashrcLine "source `"$($ug.Replace('\', '/'))/launch.sh`"`nsource `"$lsh`"`n") 'ok'
     Expect-Eq 'rc stale' (Get-BashrcLine "source `"$($ug.Replace('\', '/'))/launch.sh`"`n") 'stale'
     Expect-Eq 'rc missing' (Get-BashrcLine "export GUYB_ROOT=x`n") 'missing'
     Expect-Eq 'rc commented' (Get-BashrcLine "# source `"$lsh`"`n") 'missing'
@@ -103,7 +107,7 @@ try {
     $cases += New-Case 'userprofile' '. "$env:USERPROFILE\r\scripts\launch.ps1"' $false
     $cases += New-Case 'tilde' ". '~\r\scripts\launch.ps1'`n`$env:GUYB_ROOT = '~\p'" $false
     $cases += New-Case 'mline' ". '~\r\scripts\launch.ps1'`n`$env:GUYB_ROOT = '~/p$sep~/gone'`n`$env:GUYB_HOME = '~/p'" $false
-    $cases += New-Case 'brace''. "${HOME}/r/scripts/launch.ps1"' $false
+    $cases += New-Case 'brace' '. "${HOME}/r/scripts/launch.ps1"' $false
     $cases += New-Case 'fall' '. "$HOME\nope\scripts\launch.ps1"' $true
   } else {
     $real = @($profPath, (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'PowerShell\Microsoft.PowerShell_profile.ps1'),
@@ -132,6 +136,8 @@ try {
     if (-not $obj) { No "${n}: check.ps1 output is not JSON"; continue }
     $l = $obj.checks | Where-Object { $_.id -eq 'launcher' }
     Expect-Eq "$n launcher status" $l.status 'ok'
+    $lb = $obj.checks | Where-Object { $_.id -eq 'launcher-bashrc' }
+    if ($lb) { Expect-Eq "$n missing ~/.bashrc line is ok" $lb.status 'ok' }
     if ($r.Case.Env) { } # env cases run with the real profile and user env: the launcher source may vary
     elseif ($n -eq 'fall') { Expect-Eq "$n launcher source" $l.detail 'launcher found (marketplace)' } else { Expect-Eq "$n launcher source" $l.detail 'launcher found (profile line)' }
     if ($n -eq 'tilde') {
