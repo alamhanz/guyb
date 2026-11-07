@@ -117,8 +117,8 @@ guyb() {
   if [ "${1:-}" = "--list" ]; then
     # Non-interactive: one tab-separated line per project, most recent activity first:
     # name, abs path, last activity (ISO 8601 UTC), is git (y/n), dirty count, has .claude/guyb/STATE.md or legacy .claude/STATE.md (y/n), root
-    local idx rt p ts ct isgit dirty state iso
-    _guyb_projects "$roots" | while IFS="$tab" read -r idx rt p; do
+    local rt p ts ct isgit dirty state iso
+    _guyb_projects "$roots" | while IFS="$tab" read -r _ rt p; do
       ts="$(stat -c %Y "$p" 2>/dev/null || stat -f %m "$p" 2>/dev/null || echo 0)"
       isgit=n; dirty=0
       if command -v git >/dev/null 2>&1 && [ -e "$p/.git" ]; then
