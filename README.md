@@ -31,7 +31,7 @@ Needs [Claude Code](https://code.claude.com/docs) v2.1.280+ and `git` (Git for W
 ```powershell
 # Windows (PowerShell 7): plugin + recommended permissions + launcher
 git clone https://github.com/alamhanz/guyb.git
-./guyb/scripts/install.ps1 -ProjectsRoot D:\projects
+./guyb/scripts/install.ps1 -ProjectsRoot D:\arena\projects
 ```
 
 ```bash
@@ -88,7 +88,7 @@ The list separator is `;` on Windows (including Git Bash) and `:` on macOS, Linu
 ```
 # Windows: user environment variables (what /guyb:setup layout writes; the guyb.cmd and guyb.ps1 shims run
 # without your profile and only see these)
-[Environment]::SetEnvironmentVariable('GUYB_ROOT', 'D:\projects;E:\work', 'User')
+[Environment]::SetEnvironmentVariable('GUYB_ROOT', 'D:\arena\projects;E:\work', 'User')
 [Environment]::SetEnvironmentVariable('GUYB_HOME', 'D:\home', 'User')
 
 # ~/.bashrc or ~/.zshrc
