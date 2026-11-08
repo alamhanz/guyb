@@ -9,7 +9,7 @@
 - **Owner**: @alamhanz
 
 ## Current Status
-- **Branch**: main (clean, ed11d43); only main exists local and remote. Installed plugin updated 0.12.0 -> 0.14.0 on 2026-11-08 (applies in a fresh session). `claude plugin list` reads the source dir version; installed_plugins.json is the truth. Work branch chore/arena-path-move (path updates, uncommitted STATE.md edit)
+- **Branch**: main (clean, 30e686f); only main exists local and remote. Plugin 0.14.0 loads in place from the repo folder (install.ps1 rerun: permissions merged, Git Bash ~/.bashrc launcher line added; `guyb -List` works). `claude plugin list` reads the source dir version; installed_plugins.json is the truth. No open work branch
 - **Version**: 0.14.0; see Versions
 
 ## Versions
@@ -31,9 +31,10 @@
 - **0.3.0** (PR #1): run IDs, waves, progress files
 
 ## Recent Changes
+- 2026-11-08 - PR #32 merged (30e686f): path updates after move to D:\arena\projects, STATE.md drift fix, Windows test fix (scripts/install.ps1 + tests/winlauncher.ps1 CRLF restored; tests/setup-paths.ps1 penv home json/check skipped when user-scope GUYB_HOME is set). Full suite green locally (pwsh + Git Bash), CI 9/9. Runs guyb-201..203 done, guyb-204 dropped (agent branch delete denied by auto mode; user did it), guyb-205 STATE update. Branch chore/arena-path-move deleted local and remote
 - 2026-11-08 - herdr / standalone-product spike (guyb-176) cancelled; moves to a separate project. guyb stays the Claude Code plugin/MCP project.
 - 2026-11-08 - Session start cleanup: stale handoff.md (2026-11-07, all items done) and 14 pipeline scratch files from 2026-10-24 deleted
-- 2026-11-08 - D:\ -> D:\arena migration done: repo now at D:\arena\projects\guyb; branch chore/arena-path-move (b76012d) updates path references, PR to be opened
+- 2026-11-08 - D:\ -> D:\arena migration done: repo now at D:\arena\projects\guyb; path references updated in PR #32
 - 2026-11-08 - Released 0.13.0 (PR #29, fa1b278) and 0.14.0 (PR #30, ed11d43); runs guyb-179..197. 0.13.0: guyb-179 re-review, guyb-181 suite + PR, guyb-182 doc fix, guyb-183 CI fix. 0.14.0: plan guyb-186, impl guyb-187..189, review guyb-190 (critical fixed in guyb-191), re-review guyb-193, PR guyb-194, macOS fix guyb-195. STATE.md PRs #28, #31 merged. Cleanup (guyb-184, 192, 196): only main left local and remote. guyb-197..200: D:\migrate-arena.ps1 migration script
 - 2026-11-07 - 0.13.0 work: plan guyb-169, runs guyb-170..177 (review guyb-174 found 1 critical, fixed). Removed aws hanz48/datakoen connections
 - 2026-10-24 - Housekeeping: STATE.md PR #23 merged (c45cf3b); all merged/superseded branches deleted local and remote (only main left); 105 stale scratch files deleted earlier; runs guyb-164..166 done (branch delete, STATE update, docs PR)
@@ -65,6 +66,9 @@
 - **Auto-clean (0.14.0, Q119-Q123)**: covers agent worktrees and finished-run scratch files (Q119); scratch files with unknown run id stay on consent (Q120); a squash-merged worktree whose remote branch is gone is auto-removed when every file the branch changed vs merge-base is identical on origin/main (Q121); the local branch is not deleted with its worktree, git-ops does it on consent (Q122); a haiku git-ops agent deletes (Q123).
 - **Layout (0.13.0)**: launcher vs orchestrator session is decided only by prompts, no script checks it; setup check JSON `root` goes back as GUYB_ROOT via the launch skill (keep it a string).
 - **Test gotchas**: on Windows `bash` from PowerShell is WSL (no shellcheck), run lint.sh from Git Bash; worktree-isolated agents cannot touch another agent's worktree (cherry-pick via git-ops) and their Bash refuses compound git commands; smoke fixtures with old finished-run files fall under auto-clean, so consent-flow tests set `cleanup_auto_days: 0`; brief.sh norm_path and brief.ps1 Norm-Path must stay in sync; check line endings with `git ls-files --eol`.
+- **Scope**: herdr / standalone-product work moves to a separate project; guyb stays the Claude Code plugin/MCP project.
+- **GUYB_HOME**: user-scope GUYB_HOME=D:\arena is intentional after the arena move; tests must not assume it unset.
+- **Git Bash here** is scoop (C:\Users\amoza\scoop\apps\git\current\bin\bash.exe, no C:\Program Files\Git); use it for tests/*.sh.
 - **STATE.md** is committed; `.claude/pipeline/` is gitignored.
 
 ## Open Issues
@@ -80,6 +84,7 @@
 - Sed -i on .ps1 files strips CR (CRLF required); edit them with Edit
 
 ## Next Up
+- No development started. Fresh session: live-checks of 0.12/0.13/0.14 and guyb.cmd (below); decide on issue #24 (Ollama backlog, the only open GitHub issue)
 - Live-check 0.13.0 and 0.14.0 in a fresh session: setup layout check (home/roots, launcher root column), brief auto-clean line, /guyb:start auto-clean via haiku git-ops
 - Live-check 0.12.0 in a fresh session: small edit goes to a haiku agent, parallel launch for disjoint tasks, memory.md flow (orchestrator writes from `## Memory` bullets) and the cleanup_memory_lines line in brief
 - Live-check guyb.cmd from a fresh Windows terminal after running install.ps1
