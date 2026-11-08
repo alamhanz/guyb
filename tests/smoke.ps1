@@ -424,25 +424,28 @@ try {
       Git-Quiet -C $ax checkout -q -b main
       Git-Quiet -C $ax config commit.gpgsign false
       Git-Quiet -C $ax config core.autocrlf false
-      Write-File "$ax/a" "a`n"; Git-Quiet -C $ax add a; Git-Quiet -C $ax commit -q -m init
+      Git-Quiet -C $ax config status.showUntrackedFiles no # user config must not hide untracked files from the clean check (w-untr)
+      Write-File "$ax/a" "a`n"; Write-File "$ax/r1" "r`n"; Git-Quiet -C $ax add a r1; Git-Quiet -C $ax commit -q -m init
       Git-Quiet -C $ax remote add origin "$ax.rem.git"; Git-Quiet -C $ax push -q origin main
       Git-Quiet -C $ax symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
-      foreach ($w in 'clean', 'anc', 'chk', 'squash', 'dirty', 'untr', 'unp', 'lock', 'young') { Git-Quiet -C $ax worktree add -q ".claude/worktrees/w-$w" -b "b-$w" }
+      foreach ($w in 'clean', 'anc', 'chk', 'squash', 'ren', 'dirty', 'untr', 'unp', 'lock', 'young') { Git-Quiet -C $ax worktree add -q ".claude/worktrees/w-$w" -b "b-$w" }
       Git-Quiet -C "$ax/.claude/worktrees/w-clean" push -q origin b-clean
       Git-Quiet -C "$ax/.claude/worktrees/w-young" push -q origin b-young
       foreach ($p in @('squash', 's'), @('chk', 'c'), @('unp', 'u')) { # worktree, file: one unpushed commit each
         Write-File "$ax/.claude/worktrees/w-$($p[0])/$($p[1])" "$($p[1])`n"
         Git-Quiet -C "$ax/.claude/worktrees/w-$($p[0])" add $p[1]; Git-Quiet -C "$ax/.claude/worktrees/w-$($p[0])" commit -q -m $p[1]
       }
+      Git-Quiet -C "$ax/.claude/worktrees/w-ren" mv r1 r2; Git-Quiet -C "$ax/.claude/worktrees/w-ren" commit -q -m rename # only commit renames r1 -> r2
       Write-File "$ax/.claude/worktrees/w-dirty/a" "m`n"; Write-File "$ax/.claude/worktrees/w-untr/untracked" "z`n"
       Git-Quiet -C $ax worktree lock ".claude/worktrees/w-lock"
       # main catches up: s identical (squash merge), c the same patch and then changed (cherry-pick), u with different content
       Write-File "$ax/s" "s`n"; Git-Quiet -C $ax add s; Git-Quiet -C $ax commit -q -m squashed
       Write-File "$ax/c" "c`n"; Git-Quiet -C $ax add c; Git-Quiet -C $ax commit -q -m c
       Write-File "$ax/c" "c2`n"; Git-Quiet -C $ax commit -q -a -m c2
+      Write-File "$ax/r2" "r`n"; Git-Quiet -C $ax add r2; Git-Quiet -C $ax commit -q -m r2 # origin has r2 but still r1
       Write-File "$ax/u" "other`n"; Git-Quiet -C $ax add u; Git-Quiet -C $ax commit -q -m other
       Git-Quiet -C $ax push -q origin main
-      foreach ($w in 'clean', 'anc', 'chk', 'squash', 'dirty', 'untr', 'unp', 'lock') { (Get-Item -LiteralPath "$ax/.claude/worktrees/w-$w").LastWriteTime = $old }
+      foreach ($w in 'clean', 'anc', 'chk', 'squash', 'ren', 'dirty', 'untr', 'unp', 'lock') { (Get-Item -LiteralPath "$ax/.claude/worktrees/w-$w").LastWriteTime = $old }
       Remove-Item Env:GIT_AUTHOR_DATE, Env:GIT_COMMITTER_DATE
 
       function Brief($more) { $r = Run-Child $brief (@('-Dir', $ax) + $more) $null; return ($r[1] -replace "`r", '') }
@@ -456,7 +459,7 @@ try {
       Expect-Eq 'auto-list: files, pushed, ancestor, cherry-pick, squash file check' $list $want
       Expect-Eq 'brief leaves fixture unchanged (auto-clean)' (Snapshot $ax) $before
       Expect-Eq 'brief leaves worktrees unchanged (auto-clean)' ((& git -C $ax worktree list --porcelain) -join "`n") $wbefore
-      foreach ($ex in 'p-2', 'p-3', 'p-4', 'p-5', 'brief-5', 'p-1-new', 'w-dirty', 'w-untr', 'w-unp', 'w-lock', 'w-young') { Expect-Lacks "auto-list excludes $ex" $list "/$ex" }
+      foreach ($ex in 'p-2', 'p-3', 'p-4', 'p-5', 'brief-5', 'p-1-new', 'w-ren', 'w-dirty', 'w-untr', 'w-unp', 'w-lock', 'w-young') { Expect-Lacks "auto-list excludes $ex" $list "/$ex" }
       $prof = Join-Path $home2 '.claude/guyb/profile.md'; $proj = "$ax/.claude/CLAUDE.md"
       Write-File $proj "cleanup_auto_days: 0`n"
       $out = Brief @()

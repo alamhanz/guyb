@@ -377,25 +377,28 @@ mk_auto() { # dir: old finished/unfinished run files and agent worktrees, all ba
   git -C "$ax_w" checkout -q -b main 2>/dev/null
   git -C "$ax_w" config commit.gpgsign false
   git -C "$ax_w" config core.autocrlf false
-  echo a > "$ax/a"; git -C "$ax_w" add a; git -C "$ax_w" commit -qm init
+  git -C "$ax_w" config status.showUntrackedFiles no # user config must not hide untracked files from the clean check (w-untr)
+  echo a > "$ax/a"; echo r > "$ax/r1"; git -C "$ax_w" add a r1; git -C "$ax_w" commit -qm init
   git -C "$ax_w" remote add origin "$ax_w.rem.git"; git -C "$ax_w" push -q origin main >/dev/null 2>&1
   git -C "$ax_w" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
-  for w in clean anc chk squash dirty untr unp lock young; do git -C "$ax_w" worktree add -q ".claude/worktrees/w-$w" -b "b-$w" >/dev/null 2>&1; done
+  for w in clean anc chk squash ren dirty untr unp lock young; do git -C "$ax_w" worktree add -q ".claude/worktrees/w-$w" -b "b-$w" >/dev/null 2>&1; done
   git -C "$ax_w/.claude/worktrees/w-clean" push -q origin b-clean >/dev/null 2>&1
   git -C "$ax_w/.claude/worktrees/w-young" push -q origin b-young >/dev/null 2>&1
   for w in squash:s chk:c unp:u; do # worktree:file, one unpushed commit each
     echo "${w#*:}" > "$ax/.claude/worktrees/w-${w%:*}/${w#*:}"
     git -C "$ax_w/.claude/worktrees/w-${w%:*}" add "${w#*:}"; git -C "$ax_w/.claude/worktrees/w-${w%:*}" commit -qm "${w#*:}"
   done
+  git -C "$ax_w/.claude/worktrees/w-ren" mv r1 r2; git -C "$ax_w/.claude/worktrees/w-ren" commit -qm rename # only commit renames r1 -> r2
   echo m > "$ax/.claude/worktrees/w-dirty/a"; echo z > "$ax/.claude/worktrees/w-untr/untracked"
   git -C "$ax_w" worktree lock ".claude/worktrees/w-lock"
   # main catches up: s identical (squash merge), c the same patch and then changed (cherry-pick), u with different content
   echo s > "$ax/s"; git -C "$ax_w" add s; git -C "$ax_w" commit -qm squashed
   echo c > "$ax/c"; git -C "$ax_w" add c; git -C "$ax_w" commit -qm c
   echo c2 > "$ax/c"; git -C "$ax_w" commit -qam c2
+  cp "$ax/r1" "$ax/r2"; git -C "$ax_w" add r2; git -C "$ax_w" commit -qm r2 # origin has r2 but still r1
   echo other > "$ax/u"; git -C "$ax_w" add u; git -C "$ax_w" commit -qm other
   git -C "$ax_w" push -q origin main >/dev/null 2>&1
-  for w in clean anc chk squash dirty untr unp lock; do touch -t 202001020000 "$ax/.claude/worktrees/w-$w"; done
+  for w in clean anc chk squash ren dirty untr unp lock; do touch -t 202001020000 "$ax/.claude/worktrees/w-$w"; done
 }
 
 g_autoclean() {
@@ -418,7 +421,7 @@ worktree $ax_w/.claude/worktrees/w-squash"
   expect_eq "auto-list: files, pushed, ancestor, cherry-pick, squash file check" "$list" "$want"
   expect_eq "brief leaves fixture unchanged (auto-clean)" "$(snap "$ax")" "$before"
   expect_eq "brief leaves worktrees unchanged (auto-clean)" "$(git -C "$ax_w" worktree list --porcelain)" "$wbefore"
-  for ex in p-2 p-3 p-4 p-5 brief-5 p-1-new w-dirty w-untr w-unp w-lock w-young; do expect_lacks "auto-list excludes $ex" "$list" "/$ex"; done
+  for ex in p-2 p-3 p-4 p-5 brief-5 p-1-new w-ren w-dirty w-untr w-unp w-lock w-young; do expect_lacks "auto-list excludes $ex" "$list" "/$ex"; done
   prof="$HOME/.claude/guyb/profile.md"; mkdir -p "${prof%/*}"; proj="$ax/.claude/CLAUDE.md"
   printf 'cleanup_auto_days: 0\n' > "$proj"
   out=$(bash "$brief" "$ax_w" 2>&1)

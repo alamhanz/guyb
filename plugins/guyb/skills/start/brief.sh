@@ -375,8 +375,8 @@ if [ -n "$pipe" ]; then
   done
   stale=0
   # Auto-clean files: older than lim_auto, run id finished (done|failed|stopped) in runs.md or runs-archive.md, no open question for it.
-  # Unknown ids never qualify. They are left out of the stale count below (they are deleted without asking).
-  if [ "$lim_auto" -gt 0 ] && [ ${#fdirs[@]} -gt 0 ]; then
+  # Unknown ids never qualify; the legacy .claude/pipeline/ is never auto-cleaned (git-ops may only delete under .claude/guyb/pipeline/). They are left out of the stale count below (they are deleted without asking).
+  if [ "$lim_auto" -gt 0 ] && [ "$pipe" = "$pipe_new" ] && [ ${#fdirs[@]} -gt 0 ]; then
     afound=$(find "${fdirs[@]}" -type f -mtime +"$lim_auto" 2>/dev/null)
     if [ -n "$afound" ]; then
       auto_files=$(AU_RF="$rf" AU_AF="$pipe/runs-archive.md" AU_QF="$qf" awk -v pipe="$pipe/" '
@@ -439,7 +439,7 @@ fi
 auto_wt_ok() { # absolute worktree path, $wdef, $wcut
   local w=$1 st ct n ch mb fn farr
   [ -f "$w/.git" ] || return 1
-  st=$(git -C "$w" status --porcelain 2>/dev/null) || return 1
+  st=$(git -C "$w" status --porcelain --untracked-files=all --ignore-submodules=none 2>/dev/null) || return 1
   [ -z "$st" ] || return 1
   ct=$(git -C "$w" log -1 --format=%ct 2>/dev/null) || return 1
   case "$ct" in ''|*[!0-9]*) return 1 ;; esac
@@ -453,26 +453,36 @@ auto_wt_ok() { # absolute worktree path, $wdef, $wcut
   fi
   mb=$(git -C "$w" merge-base "$wdef" HEAD 2>/dev/null) || return 1
   farr=()
-  while IFS= read -r -d '' fn; do farr[${#farr[@]}]=$fn; done < <(git -C "$w" diff --name-only -z "$mb" HEAD 2>/dev/null)
+  while IFS= read -r -d '' fn; do farr[${#farr[@]}]=$fn; done < <(git -C "$w" diff --no-renames --name-only -z "$mb" HEAD 2>/dev/null)
   [ ${#farr[@]} -gt 0 ] && [ ${#farr[@]} -le 500 ] || return 1
-  git --literal-pathspecs -C "$w" diff --quiet "$wdef" HEAD -- "${farr[@]}" 2>/dev/null
+  git --literal-pathspecs -C "$w" diff --no-ext-diff --quiet "$wdef" HEAD -- "${farr[@]}" 2>/dev/null
+}
+norm_path() { # physical path; on Windows (cygpath) mixed C:/ form, lower case; no trailing slash
+  local p=$1 q
+  q=$(cd "$p" 2>/dev/null && pwd -P) && p=$q
+  if command -v cygpath >/dev/null 2>&1; then
+    p=$(cygpath -m "$p" 2>/dev/null | tr 'A-Z' 'a-z') || p=$1
+  fi
+  printf '%s' "${p%/}"
 }
 auto_worktrees() { # prints the eligible worktree paths
-  local wl l cur lk wreg wdef c w nm wcut
+  local wl l cur lk wreg wdef c w nm wcut here1 here2
   wl=$(git -C "$base" worktree list --porcelain 2>/dev/null) || return 0
   wreg="|"; cur=""; lk=0
   while IFS= read -r l || [ -n "$l" ]; do
     l=${l%$'\r'}
     case "$l" in
       "worktree "*)
-        [ -n "$cur" ] && [ "$lk" = 0 ] && wreg="$wreg${cur##*/}|"
-        cur=${l#worktree }; lk=0
-        case "$cur" in */.claude/worktrees/*/*|*/.claude/worktrees/) cur="" ;; */.claude/worktrees/*) ;; *) cur="" ;; esac ;;
+        [ -n "$cur" ] && [ "$lk" = 0 ] && wreg="$wreg$(norm_path "$cur")|"
+        cur=${l#worktree }; lk=0 ;;
       locked*|prunable*) lk=1 ;;
     esac
   done <<< "$wl"
-  [ -n "$cur" ] && [ "$lk" = 0 ] && wreg="$wreg${cur##*/}|"
+  [ -n "$cur" ] && [ "$lk" = 0 ] && wreg="$wreg$(norm_path "$cur")|"
   [ "$wreg" = "|" ] && return 0
+  # never the worktree this session runs in (toplevel of the dir passed or of the current dir)
+  here1=$(git -C "$base" rev-parse --show-toplevel 2>/dev/null) && here1=$(norm_path "$here1") || here1=""
+  here2=$(git rev-parse --show-toplevel 2>/dev/null) && here2=$(norm_path "$here2") || here2=""
   wdef=$(git -C "$base" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)
   if [ -z "$wdef" ] || ! git -C "$base" rev-parse --verify -q "refs/remotes/$wdef" >/dev/null 2>&1; then
     wdef=""
@@ -482,8 +492,9 @@ auto_worktrees() { # prints the eligible worktree paths
   fi
   wcut=$(( $(date +%s) - (lim_auto + 1) * 86400 ))
   while IFS= read -r w; do
-    nm=${w##*/}
+    nm=$(norm_path "$w")
     case "$wreg" in *"|$nm|"*) ;; *) continue ;; esac
+    [ "$nm" = "$here1" ] || [ "$nm" = "$here2" ] && continue
     auto_wt_ok "$w" && printf '%s\n' "$w"
   done <<< "$wold"
 }

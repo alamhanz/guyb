@@ -298,9 +298,17 @@ if ($qRows.Count -gt 0) {
 # runs-archive.md, no open question for it; unknown ids never qualify. Worktrees: registered, unlocked, clean, HEAD commit and dir older than
 # limAuto, and no work to lose (all commits on a remote-tracking ref, or merged into origin/<default>, or no unique commit per git cherry,
 # or every file the branch changed since the merge-base is identical on origin/<default>). Offline git only; any git error skips the worktree.
+function Norm-Path([string]$p) { # full path with / separators, no trailing slash; /c/x -> c:/x and lower case on Windows
+  $win = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($PSVersionTable.PSVersion.Major -ge 6 -and $IsWindows)
+  if ($win) { $p = $p -replace '^/([A-Za-z])(/|$)', '$1:$2' }
+  try { $p = [System.IO.Path]::GetFullPath($p) } catch { }
+  $p = ($p -replace '\\', '/').TrimEnd('/')
+  if ($win) { $p = $p.ToLowerInvariant() }
+  return $p
+}
 function Test-AutoWt([string]$w, [string]$wdef, [long]$wcut) {
   if (-not (Test-Path -LiteralPath (Join-Path $w '.git') -PathType Leaf)) { return $false }
-  $st = (@(git -C $w status --porcelain 2>$null) -join '').Trim()
+  $st = (@(git -C $w status --porcelain --untracked-files=all --ignore-submodules=none 2>$null) -join '').Trim()
   if ($LASTEXITCODE -ne 0 -or $st) { return $false }
   $ct = ([string](git -C $w log -1 --format=%ct 2>$null)).Trim()
   if ($LASTEXITCODE -ne 0 -or $ct -notmatch '^\d+$' -or [long]$ct -gt $wcut) { return $false }
@@ -314,14 +322,14 @@ function Test-AutoWt([string]$w, [string]$wdef, [long]$wcut) {
   if ($LASTEXITCODE -eq 0 -and $ch -notmatch '\+') { return $true }
   $mb = ([string](git -C $w merge-base $wdef HEAD 2>$null)).Trim()
   if ($LASTEXITCODE -ne 0 -or -not $mb) { return $false }
-  $files = @((@(git -C $w diff --name-only -z $mb HEAD 2>$null) -join '') -split "`0" | Where-Object { $_ })
+  $files = @((@(git -C $w diff --no-renames --name-only -z $mb HEAD 2>$null) -join '') -split "`0" | Where-Object { $_ })
   if ($files.Count -lt 1 -or $files.Count -gt 500) { return $false }
-  git --literal-pathspecs -C $w diff --quiet $wdef HEAD -- $files *> $null
+  git --literal-pathspecs -C $w diff --no-ext-diff --quiet $wdef HEAD -- $files *> $null
   return ($LASTEXITCODE -eq 0)
 }
 $autoFiles = New-Object System.Collections.Generic.List[string]; $autoSet = @{}; $autoWts = New-Object System.Collections.Generic.List[string]
 if ($limAuto -gt 0) {
-  if ($pipe) {
+  if ($pipe -and -not $pipeLegacy) { # the legacy .claude/pipeline/ is never auto-cleaned (git-ops may only delete under .claude/guyb/pipeline/)
     $fin = @{}; $bad = @{}; $kn = @{}; $opn = @{}
     foreach ($tab in @($runRows, (Read-Table (Join-Path $pipe 'runs-archive.md')))) {
       if ($tab.Count -lt 1) { continue }
@@ -364,9 +372,7 @@ if ($limAuto -gt 0) {
         foreach ($l in $wl) {
           if (([string]$l) -match '^worktree (.*)$') {
             if ($cur -and -not $lk) { $wreg[$cur] = $true }
-            $p = $Matches[1].Trim() -replace '\\', '/'
-            $cur = ''; $lk = $false
-            if ($p -match '/\.claude/worktrees/([^/]+)$') { $cur = $Matches[1] }
+            $cur = Norm-Path $Matches[1].Trim(); $lk = $false
           } elseif (([string]$l) -match '^(locked|prunable)') { $lk = $true }
         }
         if ($cur -and -not $lk) { $wreg[$cur] = $true }
@@ -382,8 +388,13 @@ if ($limAuto -gt 0) {
         }
         $wcut = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - ([long]$limAuto + 1) * 86400
         $dirN = $Dir -replace '\\', '/'
+        # never the worktree this session runs in (toplevel of the dir passed or of the current dir)
+        $here1 = ''; $here2 = ''
+        $t1 = ([string](git -C $Dir rev-parse --show-toplevel 2>$null)).Trim(); if ($LASTEXITCODE -eq 0 -and $t1) { $here1 = Norm-Path $t1 }
+        $t2 = ([string](git rev-parse --show-toplevel 2>$null)).Trim(); if ($LASTEXITCODE -eq 0 -and $t2) { $here2 = Norm-Path $t2 }
         foreach ($d in $wold) {
-          if (-not $wreg.ContainsKey($d.Name)) { continue }
+          $dn = Norm-Path $d.FullName
+          if (-not $wreg.ContainsKey($dn) -or $dn -eq $here1 -or $dn -eq $here2) { continue }
           if (Test-AutoWt $d.FullName $wdef $wcut) { $autoWts.Add("$dirN/.claude/worktrees/$($d.Name)") }
         }
       }
@@ -399,7 +410,7 @@ if ($AutoList) {
 }
 if ($autoFiles.Count + $autoWts.Count -gt 0) { Add-Line "auto-clean: $($autoFiles.Count) files, $($autoWts.Count) worktrees (older than $limAuto days)" }
 if ($overdue.Count -gt 0) {
-  $ov ='overdue: ' + (($overdue | Select-Object -First 5) -join ', ')
+  $ov = 'overdue: ' + (($overdue | Select-Object -First 5) -join ', ')
   if ($overdue.Count -gt 5) { $ov += ", +$($overdue.Count - 5) more" }
   Add-Line $ov
 }
