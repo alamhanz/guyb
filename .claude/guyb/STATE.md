@@ -31,6 +31,7 @@
 - **0.3.0** (PR #1): run IDs, waves, progress files
 
 ## Recent Changes
+- 2026-11-08 - herdr / standalone-product spike (guyb-176) cancelled; moves to a separate project. guyb stays the Claude Code plugin/MCP project.
 - 2026-11-08 - Session start cleanup: stale handoff.md (2026-11-07, all items done) and 14 pipeline scratch files from 2026-10-24 deleted
 - 2026-11-08 - D:\ -> D:\arena migration done: repo now at D:\arena\projects\guyb; branch chore/arena-path-move (b76012d) updates path references, PR to be opened
 - 2026-11-08 - Released 0.13.0 (PR #29, fa1b278) and 0.14.0 (PR #30, ed11d43); runs guyb-179..197. 0.13.0: guyb-179 re-review, guyb-181 suite + PR, guyb-182 doc fix, guyb-183 CI fix. 0.14.0: plan guyb-186, impl guyb-187..189, review guyb-190 (critical fixed in guyb-191), re-review guyb-193, PR guyb-194, macOS fix guyb-195. STATE.md PRs #28, #31 merged. Cleanup (guyb-184, 192, 196): only main left local and remote. guyb-197..200: D:\migrate-arena.ps1 migration script
@@ -80,7 +81,6 @@
 
 ## Next Up
 - Live-check 0.13.0 and 0.14.0 in a fresh session: setup layout check (home/roots, launcher root column), brief auto-clean line, /guyb:start auto-clean via haiku git-ops
-- herdr spike guyb-176 (stopped; herdr as UI layer, guyb logic unchanged): still wanted?
 - Live-check 0.12.0 in a fresh session: small edit goes to a haiku agent, parallel launch for disjoint tasks, memory.md flow (orchestrator writes from `## Memory` bullets) and the cleanup_memory_lines line in brief
 - Live-check guyb.cmd from a fresh Windows terminal after running install.ps1
 - Live-check 0.11.0 spikes (a) and (c): scratch plugin PostToolUse hook with asyncRewake exit 2 wakes the model; a stop state file in GUYB_USAGE_DIR makes Agent launches prompt

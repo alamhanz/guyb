@@ -101,6 +101,8 @@ try {
   $pp = [System.Diagnostics.Process]::Start($pi); $profPath = $pp.StandardOutput.ReadToEnd().Trim(); $pp.WaitForExit()
   $isolated = $profPath.StartsWith($probe.Home, [StringComparison]::OrdinalIgnoreCase)
 
+  # check.ps1 reads user-scope GUYB_HOME from the registry, which a child env cannot hide
+  $userHome = [Environment]::GetEnvironmentVariable('GUYB_HOME', 'User')
   $cases = @()
   if ($isolated) {
     $cases += New-Case 'home' '. "$HOME\r\scripts\launch.ps1"' $false
@@ -157,8 +159,11 @@ try {
       Expect-Eq "$n root status" $rt.status 'warn'
       Expect-Eq "$n root detail" $rt.detail ('GUYB_ROOT entry not found: ' + (Join-Path $h 'gone') + ' (process env)')
       Expect-Eq "$n root fix" $rt.fix '/guyb:setup layout'
-      Expect-Eq "$n home json" $obj.home ''
-      Expect-Eq "$n home check" $hc.detail ('GUYB_HOME not set; home = ' + (Join-Path $h 'p'))
+      if ($userHome) { Write-Host "skip: $n home json/check need user-scope GUYB_HOME unset (it is set)" }
+      else {
+        Expect-Eq "$n home json" $obj.home ''
+        Expect-Eq "$n home check" $hc.detail ('GUYB_HOME not set; home = ' + (Join-Path $h 'p'))
+      }
     }
     if ($n -eq 'phome') {
       Expect-Eq "$n home json" $obj.home (Join-Path $h 'h')
