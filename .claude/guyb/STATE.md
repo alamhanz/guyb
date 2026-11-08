@@ -9,10 +9,12 @@
 - **Owner**: @alamhanz
 
 ## Current Status
-- **Branch**: main (clean, c45cf3b); installed plugin updated 0.11.0 -> 0.12.0 on 2026-10-24 (applies in a fresh session). `claude plugin list` reads the source dir version, so it showed 0.12.0 while the session ran cached 0.11.0; installed_plugins.json is the truth
-- **Version**: 0.12.0 (PR #22); see Versions
+- **Branch**: main (clean, ed11d43); only main exists local and remote. Installed plugin updated 0.12.0 -> 0.14.0 on 2026-11-08 (applies in a fresh session). `claude plugin list` reads the source dir version; installed_plugins.json is the truth. PR #28 (STATE.md) merged a3bb260
+- **Version**: 0.14.0 (PR #30); see Versions
 
 ## Versions
+- **0.14.0** (PR #30, ed11d43, plan guyb-186, fixes #25): `cleanup_auto_days` (default 21, 0 = off); brief prints an auto-clean line and `--auto-list` / `-AutoList`; /guyb:start hands the list to a haiku git-ops agent. Eligibility: finished-run scratch files older than the limit, clean worktrees whose branch is merged or pushed; squash-safe file check (Q121); untracked files counted regardless of config; renames handled; full-path match; macOS /var symlink fix (guyb-195). Tests: smoke.sh 568, smoke.ps1 534 (pwsh 7 + PS 5.1), CI 9/9
+- **0.13.0** (PR #29, fa1b278, plan guyb-169, fixes #27): `GUYB_HOME` + multi-entry `GUYB_ROOT` (`;` on Windows incl. Git Bash, `:` elsewhere); launchers get a root column and an ambiguity error; check reports home/roots; #27 PATH shim + Git Bash bashrc checks warn only on stale. CI fix guyb-183 changed test expectations in tests/setup-paths.ps1, not code
 - **0.12.0** (PR #22, c180a73, plan guyb-156, fixes #20): manager-only orchestrator (every project-file edit goes to an agent, trivial ones on haiku batched; reads ~3 files max); parallel by default for disjoint tasks; shared gitignored `pipeline/memory.md` fed from report `## Memory` bullets, session-tracker promotes durable items to Decisions; new key `cleanup_memory_lines` (100) in brief/connections; lint caps orchestrator.md at 8192 bytes (now 7692)
 - **0.11.1** (PR #21, c66d26c, plan guyb-153; fixes #18, #19): PreToolUse hooks re-exec in bash under dash (POSIX guard line, dash test); setup check expands ~/$HOME in rc lines, marketplace fallback, PATH launcher detection; Windows guyb shim (scripts/guyb.cmd, guyb.ps1, winlauncher.ps1; install.ps1 adds user PATH entry, user GUYB_ROOT, Git Bash ~/.bashrc line)
 - **0.11.0** (PR #17, 5ad7740, plan guyb-144): usage guard - status line records plan usage and writes a state file at/above warn (defaults 93/98); usage-guard.sh notices via asyncRewake on tab-status hooks (async kept for older CC); Agent launch ask gate at stop tier; /guyb:end usage-limit mode; /guyb:setup thresholds
@@ -29,7 +31,8 @@
 - **0.3.0** (PR #1): run IDs, waves, progress files
 
 ## Recent Changes
-- 2026-11-07 - 0.13.0 in progress (flexible layout GUYB_HOME + multi GUYB_ROOT, fixes #27): plan guyb-169; runs guyb-170..173 done, review guyb-174 (1 critical fixed), fixes guyb-177 done on feat/flexible-layout-fixes 4e04b62 (pushed, no PR). Stopped: guyb-178 re-review, guyb-175 full suite + PR, guyb-176 herdr spike (herdr as UI, guyb logic unchanged). Removed aws hanz48/datakoen connections.
+- 2026-11-08 - Released 0.13.0 (PR #29, fa1b278) and 0.14.0 (PR #30, ed11d43); runs guyb-179..197. 0.13.0: guyb-179 re-review, guyb-181 suite + PR, guyb-182 doc fix, guyb-183 CI fix. 0.14.0: plan guyb-186, impl guyb-187..189, review guyb-190 (critical fixed in guyb-191), re-review guyb-193, PR guyb-194, macOS fix guyb-195. PR #28 (STATE.md) merged a3bb260. Cleanup (guyb-184, 192, 196): only main left local and remote. guyb-197 (D:\ -> D:\arena migration script) still running
+- 2026-11-07 - 0.13.0 work: plan guyb-169, runs guyb-170..177 (review guyb-174 found 1 critical, fixed). Removed aws hanz48/datakoen connections
 - 2026-10-24 - Housekeeping: STATE.md PR #23 merged (c45cf3b); all merged/superseded branches deleted local and remote (only main left); 105 stale scratch files deleted earlier; runs guyb-164..166 done (branch delete, STATE update, docs PR)
 - 2026-10-24 - 0.12.0 merged (PR #22, c180a73): runs guyb-159 (docs/skills), guyb-160 (scripts/tests; cut off by API 429, resumed), guyb-161 review approved with 1 should-fix, guyb-162 fixes + bump, guyb-163 PR. Full suite green (bash smoke 540/0, pwsh smoke 506/0, secrets 206/109, tabs 99/39, permissions 84, winlauncher 22), CI green on all 9 checks. Merge needed ruleset bypass (main `update` rule restricts updates to bypass actors)
 - 2026-10-24 - 0.11.1 merged (PR #21, c66d26c): runs guyb-154 (stopped by session end), guyb-155 (Task 3), guyb-157 review approved (hooks-sh 30, setup-paths 9/11, winlauncher 22, permissions 84), guyb-158 PR; CI green on all 9 checks. Housekeeping: 105 pipeline scratch files older than 14 days deleted. Gotcha: sed -i in Git Bash strips CR from .ps1 files; use Edit for CRLF files
@@ -56,18 +59,27 @@
 - **Q52**: Notification on idle prompt turns the icon to `?` after done - kept.
 - **Connections notice (0.10.0)** is local-only: file reads and `command -v`, no CLI or network call in any start path (measured: gh auth status 1.1 s, aws sts 3.9 s, claude mcp list 4.4 s, gcloud config list 47 s); startup hook budget: +1 bash +1 awk per new session, parallel with the playbook hook, no cost on resume/clear/compact or tool calls. Network verify only in `/guyb:setup` on request.
 - **Ruleset bypass**: main has an `update` rule limiting updates to bypass actors, so merging PRs (#22) needs the bypass; the merge stays the user's step.
+- **Auto-clean (0.14.0, Q119-Q123)**: covers agent worktrees and finished-run scratch files (Q119); scratch files with unknown run id stay on consent (Q120); a squash-merged worktree whose remote branch is gone is auto-removed when every file the branch changed vs merge-base is identical on origin/main (Q121); the local branch is not deleted with its worktree, git-ops does it on consent (Q122); a haiku git-ops agent deletes (Q123).
+- **Layout (0.13.0)**: launcher vs orchestrator session is decided only by prompts, no script checks it; setup check JSON `root` goes back as GUYB_ROOT via the launch skill (keep it a string).
+- **Test gotchas**: on Windows `bash` from PowerShell is WSL (no shellcheck), run lint.sh from Git Bash; worktree-isolated agents cannot touch another agent's worktree (cherry-pick via git-ops) and their Bash refuses compound git commands; smoke fixtures with old finished-run files fall under auto-clean, so consent-flow tests set `cleanup_auto_days: 0`; brief.sh norm_path and brief.ps1 Norm-Path must stay in sync; check line endings with `git ls-files --eol`.
 - **STATE.md** is committed; `.claude/pipeline/` is gitignored.
 
 ## Open Issues
 - Read-only guard hooks.json filter: 8 entries per shell (one per casing of "git"); a call spawns the guard once per casing it contains. Cost measured: 0.2-0.3 s per git-mentioning call on Windows is the hook shell start (guard adds ~0 on the main-session path), ~3 ms on Linux; no cheaper safe filter. Revisit if Claude Code filters hooks by agent type
 - Read-only guard: obfuscated command names (`g\it`, `gi""t`, `g'i't`) have no "git" substring, so the hooks.json filter never runs the guard (widening it costs a spawn per Bash call)
 - Action SHA pins are not auto-bumped (no Dependabot); claude-code npm pin in the validate job needs deliberate bumps
-- macOS behavior verified only by CI (green on the 0.12.0 release)
+- macOS behavior verified only by CI (green on 0.14.0)
+- tests/setup-paths.ps1 isolated $PROFILE launcher-bashrc case runs only on Windows CI (skipped when the real profile has a launcher line)
+- brief.ps1 silently skips worktree auto-clean when -Dir is a junction
+- No smoke case for the legacy .claude/pipeline exclusion
+- Issue #24 (Ollama MCP for small read-only work) still backlog
 - install.ps1 settings merge not executed in a test; tmux launch path untested
 - Sed -i on .ps1 files strips CR (CRLF required); edit them with Edit
 
 ## Next Up
-- Finish 0.13.0: guyb-178 re-review of feat/flexible-layout-fixes, then guyb-175 full suite (lint.sh from Git Bash) + PR (fixes #27); then guyb-176 herdr spike
+- D:\ -> D:\arena migration: script D:\migrate-arena.ps1 being prepared by guyb-197; the user runs it from a fresh terminal with all sessions closed
+- Live-check 0.13.0 and 0.14.0 in a fresh session: setup layout check (home/roots, launcher root column), brief auto-clean line, /guyb:start auto-clean via haiku git-ops
+- herdr spike guyb-176 (stopped; herdr as UI layer, guyb logic unchanged): still wanted?
 - Live-check 0.12.0 in a fresh session: small edit goes to a haiku agent, parallel launch for disjoint tasks, memory.md flow (orchestrator writes from `## Memory` bullets) and the cleanup_memory_lines line in brief
 - Live-check guyb.cmd from a fresh Windows terminal after running install.ps1
 - Live-check 0.11.0 spikes (a) and (c): scratch plugin PostToolUse hook with asyncRewake exit 2 wakes the model; a stop state file in GUYB_USAGE_DIR makes Agent launches prompt
@@ -75,7 +87,6 @@
 - smoke.sh on Git Bash: 206 s on a loaded box (fork baseline 3.4 s per 20 forks), target 240 s met; remaining cost is hook/brief/check process starts
 - Live check of the wrap-up: say "I need to go" in a session with a running agent (SendMessage checkpoint, TaskStop fallback, git-ops WIP push), then /guyb:start on the same machine (handoff) and on another (STATE.md + WIP branches)
 - Backlog #24: optional local model via Ollama MCP for small read-only work; usage-guard fallback; opt-in; spike vs haiku first
-- Backlog #25: auto-delete stale cleanup items (`cleanup_auto_days` 21), only clean+merged worktrees and finished-run scratch files; open question: agent worktrees, scratch files, or both
 
 ---
-**Last updated**: 2026-10-24
+**Last updated**: 2026-11-08
