@@ -29,6 +29,7 @@
 - **0.3.0** (PR #1): run IDs, waves, progress files
 
 ## Recent Changes
+- 2026-11-07 - 0.13.0 in progress (flexible layout GUYB_HOME + multi GUYB_ROOT, fixes #27): plan guyb-169; runs guyb-170..173 done, review guyb-174 (1 critical fixed), fixes guyb-177 done on feat/flexible-layout-fixes 4e04b62 (pushed, no PR). Stopped: guyb-178 re-review, guyb-175 full suite + PR, guyb-176 herdr spike (herdr as UI, guyb logic unchanged). Removed aws hanz48/datakoen connections.
 - 2026-10-24 - Housekeeping: STATE.md PR #23 merged (c45cf3b); all merged/superseded branches deleted local and remote (only main left); 105 stale scratch files deleted earlier; runs guyb-164..166 done (branch delete, STATE update, docs PR)
 - 2026-10-24 - 0.12.0 merged (PR #22, c180a73): runs guyb-159 (docs/skills), guyb-160 (scripts/tests; cut off by API 429, resumed), guyb-161 review approved with 1 should-fix, guyb-162 fixes + bump, guyb-163 PR. Full suite green (bash smoke 540/0, pwsh smoke 506/0, secrets 206/109, tabs 99/39, permissions 84, winlauncher 22), CI green on all 9 checks. Merge needed ruleset bypass (main `update` rule restricts updates to bypass actors)
 - 2026-10-24 - 0.11.1 merged (PR #21, c66d26c): runs guyb-154 (stopped by session end), guyb-155 (Task 3), guyb-157 review approved (hooks-sh 30, setup-paths 9/11, winlauncher 22, permissions 84), guyb-158 PR; CI green on all 9 checks. Housekeeping: 105 pipeline scratch files older than 14 days deleted. Gotcha: sed -i in Git Bash strips CR from .ps1 files; use Edit for CRLF files
@@ -61,11 +62,12 @@
 - Read-only guard hooks.json filter: 8 entries per shell (one per casing of "git"); a call spawns the guard once per casing it contains. Cost measured: 0.2-0.3 s per git-mentioning call on Windows is the hook shell start (guard adds ~0 on the main-session path), ~3 ms on Linux; no cheaper safe filter. Revisit if Claude Code filters hooks by agent type
 - Read-only guard: obfuscated command names (`g\it`, `gi""t`, `g'i't`) have no "git" substring, so the hooks.json filter never runs the guard (widening it costs a spawn per Bash call)
 - Action SHA pins are not auto-bumped (no Dependabot); claude-code npm pin in the validate job needs deliberate bumps
-- macOS behavior verified only by CI (passing on PR #22)
+- macOS behavior verified only by CI (green on the 0.12.0 release)
 - install.ps1 settings merge not executed in a test; tmux launch path untested
 - Sed -i on .ps1 files strips CR (CRLF required); edit them with Edit
 
 ## Next Up
+- Finish 0.13.0: guyb-178 re-review of feat/flexible-layout-fixes, then guyb-175 full suite (lint.sh from Git Bash) + PR (fixes #27); then guyb-176 herdr spike
 - Live-check 0.12.0 in a fresh session: small edit goes to a haiku agent, parallel launch for disjoint tasks, memory.md flow (orchestrator writes from `## Memory` bullets) and the cleanup_memory_lines line in brief
 - Live-check guyb.cmd from a fresh Windows terminal after running install.ps1
 - Live-check 0.11.0 spikes (a) and (c): scratch plugin PostToolUse hook with asyncRewake exit 2 wakes the model; a stop state file in GUYB_USAGE_DIR makes Agent launches prompt
