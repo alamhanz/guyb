@@ -328,6 +328,7 @@ snap() { { find "$1" | sort; git -C "${1/#"$tmp"/$tmp_w}" status --short 2>/dev/
 g_cleanup_over() {
   echo "brief.sh cleanup suggestions (over limits)"
   ov="$tmp/over"; mk_clean "$ov" 201 301 201 101; ov_w=${ov/#"$tmp"/$tmp_w}
+  mkdir -p "$HOME/.claude/guyb"; printf 'cleanup_auto_days: 0\n' > "$HOME/.claude/guyb/profile.md" # old files stay on the consent flow so the stale count below is the pre-auto-clean one
   before=$(snap "$ov")
   out=$(bash "$brief" "${ov_w}" 2>&1)
   after=$(snap "$ov")
@@ -359,6 +360,93 @@ g_cleanup_under() {
   expect_lacks "cleanup invalid memory ignored" "$out" "memory.md"
 }
 
+mk_auto() { # dir: old finished/unfinished run files and agent worktrees, all backdated to 2020 (the config key decides what is old enough)
+  ax=$1; ax_w=${ax/#"$tmp"/$tmp_w}; ap="$ax/.claude/guyb/pipeline"
+  mkdir -p "$ap/progress" "$ap/reports" "$ap/plans" "$ap/brand/p-9"
+  { echo "$RUNHDR"; echo '|---|'
+    runrow p-1 'done' 2020-01-01; runrow p-2 running 2020-01-01; runrow p-3 'done' 2020-01-01
+    runrow p-4 queued 2020-01-01; runrow p-5 blocked 2020-01-01; runrow p-6 failed 2020-01-01; } > "$ap/runs.md"
+  { echo "$RUNHDR"; echo '|---|'; runrow p-9 stopped 2019-01-01; } > "$ap/runs-archive.md"
+  printf '| ID | Run | Question | Blocking | Assumed | Status |\n|---|---|---|---|---|---|\n| Q1 | p-3 | q | no | a | open |\n' > "$ap/questions.md"
+  for f in progress/p-1 progress/p-2 progress/p-3 progress/p-4 progress/p-5 progress/p-6 reports/p-1 plans/p-1-plan plans/brief-5 brand/p-9/a progress/p-1-new; do echo x > "$ap/$f.md"; done
+  touch -t 202001020000 "$ap"/progress/p-[1-6].md "$ap/reports/p-1.md" "$ap/plans/p-1-plan.md" "$ap/plans/brief-5.md" "$ap/brand/p-9/a.md"
+  export GIT_AUTHOR_NAME=smoke GIT_AUTHOR_EMAIL=smoke@example.invalid GIT_COMMITTER_NAME=smoke GIT_COMMITTER_EMAIL=smoke@example.invalid
+  export GIT_AUTHOR_DATE=2020-01-02T00:00:00 GIT_COMMITTER_DATE=2020-01-02T00:00:00
+  git init -q --bare "$ax_w.rem.git" >/dev/null 2>&1
+  git init -q "$ax_w" >/dev/null 2>&1
+  git -C "$ax_w" checkout -q -b main 2>/dev/null
+  git -C "$ax_w" config commit.gpgsign false
+  git -C "$ax_w" config core.autocrlf false
+  echo a > "$ax/a"; git -C "$ax_w" add a; git -C "$ax_w" commit -qm init
+  git -C "$ax_w" remote add origin "$ax_w.rem.git"; git -C "$ax_w" push -q origin main >/dev/null 2>&1
+  git -C "$ax_w" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  for w in clean anc chk squash dirty untr unp lock young; do git -C "$ax_w" worktree add -q ".claude/worktrees/w-$w" -b "b-$w" >/dev/null 2>&1; done
+  git -C "$ax_w/.claude/worktrees/w-clean" push -q origin b-clean >/dev/null 2>&1
+  git -C "$ax_w/.claude/worktrees/w-young" push -q origin b-young >/dev/null 2>&1
+  for w in squash:s chk:c unp:u; do # worktree:file, one unpushed commit each
+    echo "${w#*:}" > "$ax/.claude/worktrees/w-${w%:*}/${w#*:}"
+    git -C "$ax_w/.claude/worktrees/w-${w%:*}" add "${w#*:}"; git -C "$ax_w/.claude/worktrees/w-${w%:*}" commit -qm "${w#*:}"
+  done
+  echo m > "$ax/.claude/worktrees/w-dirty/a"; echo z > "$ax/.claude/worktrees/w-untr/untracked"
+  git -C "$ax_w" worktree lock ".claude/worktrees/w-lock"
+  # main catches up: s identical (squash merge), c the same patch and then changed (cherry-pick), u with different content
+  echo s > "$ax/s"; git -C "$ax_w" add s; git -C "$ax_w" commit -qm squashed
+  echo c > "$ax/c"; git -C "$ax_w" add c; git -C "$ax_w" commit -qm c
+  echo c2 > "$ax/c"; git -C "$ax_w" commit -qam c2
+  echo other > "$ax/u"; git -C "$ax_w" add u; git -C "$ax_w" commit -qm other
+  git -C "$ax_w" push -q origin main >/dev/null 2>&1
+  for w in clean anc chk squash dirty untr unp lock; do touch -t 202001020000 "$ax/.claude/worktrees/w-$w"; done
+}
+
+g_autoclean() {
+  echo "brief.sh auto-clean (key, line, --auto-list, exclusions)"
+  mk_auto "$tmp/auto"; ax="$tmp/auto"; ax_w=${ax/#"$tmp"/$tmp_w}; ap="$ax_w/.claude/guyb/pipeline"
+  want="file $ap/brand/p-9/a.md
+file $ap/plans/p-1-plan.md
+file $ap/progress/p-1.md
+file $ap/progress/p-6.md
+file $ap/reports/p-1.md
+worktree $ax_w/.claude/worktrees/w-anc
+worktree $ax_w/.claude/worktrees/w-chk
+worktree $ax_w/.claude/worktrees/w-clean
+worktree $ax_w/.claude/worktrees/w-squash"
+  before=$(snap "$ax"); wbefore=$(git -C "$ax_w" worktree list --porcelain)
+  out=$(bash "$brief" "$ax_w" 2>&1)
+  expect_has "auto-clean default 21" "$out" "auto-clean: 5 files, 4 worktrees (older than 21 days)"
+  expect_has "cleanup count excludes auto-eligible files" "$out" "cleanup: 2 pipeline files older than 14 days"
+  list=$(bash "$brief" "$ax_w" --auto-list 2>&1)
+  expect_eq "auto-list: files, pushed, ancestor, cherry-pick, squash file check" "$list" "$want"
+  expect_eq "brief leaves fixture unchanged (auto-clean)" "$(snap "$ax")" "$before"
+  expect_eq "brief leaves worktrees unchanged (auto-clean)" "$(git -C "$ax_w" worktree list --porcelain)" "$wbefore"
+  for ex in p-2 p-3 p-4 p-5 brief-5 p-1-new w-dirty w-untr w-unp w-lock w-young; do expect_lacks "auto-list excludes $ex" "$list" "/$ex"; done
+  prof="$HOME/.claude/guyb/profile.md"; mkdir -p "${prof%/*}"; proj="$ax/.claude/CLAUDE.md"
+  printf 'cleanup_auto_days: 0\n' > "$proj"
+  out=$(bash "$brief" "$ax_w" 2>&1)
+  expect_lacks "key 0: no auto-clean line" "$out" "auto-clean:"
+  expect_has "key 0: files back in cleanup count" "$out" "cleanup: 7 pipeline files older than 14 days"
+  expect_eq "key 0: empty auto-list" "$(bash "$brief" "$ax_w" --auto-list 2>&1)" ""
+  for bad in abc -1 1.5; do
+    printf 'cleanup_auto_days: %s\n' "$bad" > "$proj"
+    out=$(bash "$brief" "$ax_w" 2>&1)
+    expect_has "key '$bad' ignored, default 21" "$out" "auto-clean: 5 files, 4 worktrees (older than 21 days)"
+  done
+  printf 'cleanup_auto_days: 3\n' > "$prof"; rm -f "$proj"
+  out=$(bash "$brief" "$ax_w" 2>&1)
+  expect_has "profile key" "$out" "(older than 3 days)"
+  printf 'cleanup_auto_days: 7\n' > "$proj"
+  out=$(bash "$brief" "$ax_w" 2>&1)
+  expect_has "project key wins over profile" "$out" "(older than 7 days)"
+  printf 'cleanup_auto_days: 0\n' > "$prof"; rm -f "$proj"
+  out=$(bash "$brief" "$ax_w" 2>&1)
+  expect_lacks "profile key 0 disables" "$out" "auto-clean:"
+  printf 'cleanup_auto_days: 0\n' > "$prof"; printf 'cleanup_auto_days: 9\n' > "$proj"
+  out=$(bash "$brief" "$ax_w" 2>&1)
+  expect_has "project key beats profile 0" "$out" "(older than 9 days)"
+  printf 'cleanup_auto_days: 9000\n' > "$proj"
+  out=$(bash "$brief" "$ax_w" 2>&1)
+  expect_lacks "nothing older than the key: no line" "$out" "auto-clean:"
+}
+
 g_overdue() {
   echo "brief.sh overdue items"
   od="$tmp/overdue"; make_fixture "$od"; mkdir -p "$od/.claude/guyb/pipeline"; od_w=${od/#"$tmp"/$tmp_w}
@@ -384,6 +472,7 @@ g_regfmt() {
   printf '| ID | Run | Question | Blocking | Assumed | Status |\n|---|---|---|---|---|---|\n| Q1 | mien-dev-3 | old open | no | a | open |\n' > "$rp/questions.md"
   out=$(bash "$brief" "${rg_w}" 2>&1)
   expect_has "overdue ID-format questions" "$out" "overdue: mien-dev-3, Q1"
+  mkdir -p "$HOME/.claude/guyb"; printf 'cleanup_auto_days: 0\n' > "$HOME/.claude/guyb/profile.md" # keep the done run's old file on the consent flow
   : > "$rp/progress/r-6b.md"; : > "$rp/progress/r-6.md"; : > "$rp/progress/mien-dev-3-notes.md"
   touch -t 202001010000 "$rp/progress/r-6b.md" "$rp/progress/r-6.md" "$rp/progress/mien-dev-3-notes.md"
   out=$(bash "$brief" "${rg_w}" 2>&1)
@@ -787,6 +876,7 @@ spawn migration_new g_migration_new
 spawn env g_env
 spawn cleanup_under g_cleanup_under
 spawn cleanup_over g_cleanup_over
+spawn autoclean g_autoclean
 spawn drift g_drift
 spawn regfmt g_regfmt
 spawn guard g_guard

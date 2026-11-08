@@ -52,7 +52,7 @@ if (-not $Group) {
   # Orchestrator: one child process per group, slowest first (hung probes and the 5 s gh budget), at most $jobsMax at a time.
   # The timed groups (hung probes, 5 s gh budget) run first and alone: on a 2-core CI runner a full pool slows brief past their limits.
   $timed = 'docker', 'ghsleep'
-  $groups = 'matrix', 'readonly', 'migration', 'env', 'check', 'cleanup_over', 'cleanup_under', 'overdue', 'formats', 'drift', 'guard', 'plugin', 'gitignore', 'emptysec', 'wrapper', 'connections'
+  $groups = 'matrix', 'readonly', 'migration', 'env', 'check', 'cleanup_over', 'cleanup_under', 'autoclean', 'overdue', 'formats', 'drift', 'guard', 'plugin', 'gitignore', 'emptysec', 'wrapper', 'connections'
   $running = New-Object System.Collections.ArrayList
   foreach ($g in $timed) { [void]$running.Add([pscustomobject]@{ Name = $g; H = (Start-Proc $ps ('-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -Group ' + $g) '') }) }
   while (@($running | Where-Object { -not $_.H.P.HasExited }).Count -gt 0) { Start-Sleep -Milliseconds 200 }
@@ -372,6 +372,7 @@ try {
     'cleanup_over' {
       Write-Host 'brief.ps1 cleanup: over limits'
       $c1 = Join-Path $tmp 'clean-over'; Make-Fixture $c1; Make-Big $c1 $true
+      Write-File (Join-Path $home2 '.claude/guyb/profile.md') "cleanup_auto_days: 0`n" # old files stay on the consent flow so the stale count below is the pre-auto-clean one
       Write-File (Join-Path $c1 '.claude/guyb/pipeline/progress/x-1.md') "p`n"
       Write-File (Join-Path $c1 '.claude/guyb/pipeline/progress/x-2.md') "p`n"
       Write-File (Join-Path $c1 '.claude/guyb/pipeline/progress/x-3.md') "p`n"
@@ -403,6 +404,81 @@ try {
       Expect-Lacks 'cleanup invalid memory ignored' $r[1] 'memory.md'
     }
 
+    'autoclean' {
+      Write-Host 'brief.ps1 auto-clean (key, line, -AutoList, exclusions)'
+      $old = Get-Date '2020-01-02'
+      $ax = (Join-Path $tmp 'auto').Replace('\', '/')
+      $ap = "$ax/.claude/guyb/pipeline"
+      function Row($id, $st) { "| $id | implementer | sonnet | t | 1 | - | $st | 2020-01-01 | - |`r`n" }
+      Write-File "$ap/runs.md" ($runsHead + (Row 'p-1' 'done') + (Row 'p-2' 'running') + (Row 'p-3' 'done') + (Row 'p-4' 'queued') + (Row 'p-5' 'blocked') + (Row 'p-6' 'failed'))
+      Write-File "$ap/runs-archive.md" ($runsHead + (Row 'p-9' 'stopped'))
+      Write-File "$ap/questions.md" "| ID | Run | Question | Blocking | Assumed | Status |`r`n|---|---|---|---|---|---|`r`n| Q1 | p-3 | q | no | a | open |`r`n"
+      foreach ($f in 'progress/p-1', 'progress/p-2', 'progress/p-3', 'progress/p-4', 'progress/p-5', 'progress/p-6', 'reports/p-1', 'plans/p-1-plan', 'plans/brief-5', 'brand/p-9/a', 'progress/p-1-new') {
+        Write-File "$ap/$f.md" "x`n"
+        if ($f -ne 'progress/p-1-new') { (Get-Item -LiteralPath "$ap/$f.md").LastWriteTime = $old }
+      }
+      $env:GIT_AUTHOR_NAME = 'smoke'; $env:GIT_AUTHOR_EMAIL = 'smoke@example.invalid'; $env:GIT_COMMITTER_NAME = 'smoke'; $env:GIT_COMMITTER_EMAIL = 'smoke@example.invalid'
+      $env:GIT_AUTHOR_DATE = '2020-01-02T00:00:00'; $env:GIT_COMMITTER_DATE = '2020-01-02T00:00:00'
+      Git-Quiet init -q --bare "$ax.rem.git"
+      Git-Quiet init -q $ax
+      Git-Quiet -C $ax checkout -q -b main
+      Git-Quiet -C $ax config commit.gpgsign false
+      Git-Quiet -C $ax config core.autocrlf false
+      Write-File "$ax/a" "a`n"; Git-Quiet -C $ax add a; Git-Quiet -C $ax commit -q -m init
+      Git-Quiet -C $ax remote add origin "$ax.rem.git"; Git-Quiet -C $ax push -q origin main
+      Git-Quiet -C $ax symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+      foreach ($w in 'clean', 'anc', 'chk', 'squash', 'dirty', 'untr', 'unp', 'lock', 'young') { Git-Quiet -C $ax worktree add -q ".claude/worktrees/w-$w" -b "b-$w" }
+      Git-Quiet -C "$ax/.claude/worktrees/w-clean" push -q origin b-clean
+      Git-Quiet -C "$ax/.claude/worktrees/w-young" push -q origin b-young
+      foreach ($p in @('squash', 's'), @('chk', 'c'), @('unp', 'u')) { # worktree, file: one unpushed commit each
+        Write-File "$ax/.claude/worktrees/w-$($p[0])/$($p[1])" "$($p[1])`n"
+        Git-Quiet -C "$ax/.claude/worktrees/w-$($p[0])" add $p[1]; Git-Quiet -C "$ax/.claude/worktrees/w-$($p[0])" commit -q -m $p[1]
+      }
+      Write-File "$ax/.claude/worktrees/w-dirty/a" "m`n"; Write-File "$ax/.claude/worktrees/w-untr/untracked" "z`n"
+      Git-Quiet -C $ax worktree lock ".claude/worktrees/w-lock"
+      # main catches up: s identical (squash merge), c the same patch and then changed (cherry-pick), u with different content
+      Write-File "$ax/s" "s`n"; Git-Quiet -C $ax add s; Git-Quiet -C $ax commit -q -m squashed
+      Write-File "$ax/c" "c`n"; Git-Quiet -C $ax add c; Git-Quiet -C $ax commit -q -m c
+      Write-File "$ax/c" "c2`n"; Git-Quiet -C $ax commit -q -a -m c2
+      Write-File "$ax/u" "other`n"; Git-Quiet -C $ax add u; Git-Quiet -C $ax commit -q -m other
+      Git-Quiet -C $ax push -q origin main
+      foreach ($w in 'clean', 'anc', 'chk', 'squash', 'dirty', 'untr', 'unp', 'lock') { (Get-Item -LiteralPath "$ax/.claude/worktrees/w-$w").LastWriteTime = $old }
+      Remove-Item Env:GIT_AUTHOR_DATE, Env:GIT_COMMITTER_DATE
+
+      function Brief($more) { $r = Run-Child $brief (@('-Dir', $ax) + $more) $null; return ($r[1] -replace "`r", '') }
+      $want = (@("file $ap/brand/p-9/a.md", "file $ap/plans/p-1-plan.md", "file $ap/progress/p-1.md", "file $ap/progress/p-6.md", "file $ap/reports/p-1.md",
+          "worktree $ax/.claude/worktrees/w-anc", "worktree $ax/.claude/worktrees/w-chk", "worktree $ax/.claude/worktrees/w-clean", "worktree $ax/.claude/worktrees/w-squash")) -join "`n"
+      $before = Snapshot $ax; $wbefore = (& git -C $ax worktree list --porcelain) -join "`n"
+      $out = Brief @()
+      Expect-Has 'auto-clean default 21' $out 'auto-clean: 5 files, 4 worktrees (older than 21 days)'
+      Expect-Has 'cleanup count excludes auto-eligible files' $out 'cleanup: 2 pipeline files older than 14 days'
+      $list = (Brief @('-AutoList')).TrimEnd("`n")
+      Expect-Eq 'auto-list: files, pushed, ancestor, cherry-pick, squash file check' $list $want
+      Expect-Eq 'brief leaves fixture unchanged (auto-clean)' (Snapshot $ax) $before
+      Expect-Eq 'brief leaves worktrees unchanged (auto-clean)' ((& git -C $ax worktree list --porcelain) -join "`n") $wbefore
+      foreach ($ex in 'p-2', 'p-3', 'p-4', 'p-5', 'brief-5', 'p-1-new', 'w-dirty', 'w-untr', 'w-unp', 'w-lock', 'w-young') { Expect-Lacks "auto-list excludes $ex" $list "/$ex" }
+      $prof = Join-Path $home2 '.claude/guyb/profile.md'; $proj = "$ax/.claude/CLAUDE.md"
+      Write-File $proj "cleanup_auto_days: 0`n"
+      $out = Brief @()
+      Expect-Lacks 'key 0: no auto-clean line' $out 'auto-clean:'
+      Expect-Has 'key 0: files back in cleanup count' $out 'cleanup: 7 pipeline files older than 14 days'
+      Expect-Eq 'key 0: empty auto-list' (Brief @('-AutoList')).Trim() ''
+      foreach ($bad in 'abc', '-1', '1.5') {
+        Write-File $proj "cleanup_auto_days: $bad`n"
+        Expect-Has "key '$bad' ignored, default 21" (Brief @()) 'auto-clean: 5 files, 4 worktrees (older than 21 days)'
+      }
+      Write-File $prof "cleanup_auto_days: 3`n"; Remove-Item -LiteralPath $proj
+      Expect-Has 'profile key' (Brief @()) '(older than 3 days)'
+      Write-File $proj "cleanup_auto_days: 7`n"
+      Expect-Has 'project key wins over profile' (Brief @()) '(older than 7 days)'
+      Write-File $prof "cleanup_auto_days: 0`n"; Remove-Item -LiteralPath $proj
+      Expect-Lacks 'profile key 0 disables' (Brief @()) 'auto-clean:'
+      Write-File $proj "cleanup_auto_days: 9`n"
+      Expect-Has 'project key beats profile 0' (Brief @()) '(older than 9 days)'
+      Write-File $proj "cleanup_auto_days: 9000`n"
+      Expect-Lacks 'nothing older than the key: no line' (Brief @()) 'auto-clean:'
+    }
+
     'overdue' {
       Write-Host 'brief.ps1 overdue items'
       $c3 = Join-Path $tmp 'clean-overdue'; Make-Fixture $c3
@@ -428,6 +504,7 @@ try {
       Write-File (Join-Path $c4 '.claude/guyb/pipeline/progress/r-6c.md') "p`n"
       Write-File (Join-Path $c4 '.claude/guyb/pipeline/plans/mien-dev-3-logos.html') "p`n"
       foreach ($f in 'progress/r-6b.md', 'progress/r-6c.md', 'plans/mien-dev-3-logos.html') { Age (Join-Path $c4 ('.claude/guyb/pipeline/' + $f)) }
+      Write-File (Join-Path $home2 '.claude/guyb/profile.md') "cleanup_auto_days: 0`n" # keep the done run's old file on the consent flow
       $r = Run-Child $brief @('-Dir', $c4) $null
       Expect-Has 'formats Q/Run/Agent header' $r[1] 'overdue: mien-dev-3, Q7'
       Expect-Has 'formats empty last cell' $r[1] "  r-9 | i | s | t | 1 | - | running | $today | "
