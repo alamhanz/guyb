@@ -48,7 +48,7 @@ if ((Get-Command Get-PathShim -ErrorAction SilentlyContinue) -and (Get-Command G
     $ut2 = Join-Path $ut 'nocmd'; New-Item -ItemType Directory -Force -Path (Join-Path $ut2 'scripts') | Out-Null
     Expect-Eq 'shim ok' (Get-PathShim "C:\Windows;$us;C:\x" $ur) 'ok'
     Expect-Eq 'shim ok trailing slash, quotes' (Get-PathShim ("C:\x;`"$us\`"") $ur) 'ok'
-    Expect-Eq 'shim ok case' (Get-PathShim $us.ToUpper() $ur) 'ok'
+    if ($env:OS -eq 'Windows_NT') { Expect-Eq 'shim ok case' (Get-PathShim $us.ToUpper() $ur) 'ok' } # needs a case-insensitive file system
     Expect-Eq 'shim missing' (Get-PathShim 'C:\Windows;C:\x' $ur) 'missing'
     Expect-Eq 'shim empty' (Get-PathShim '' $ur) 'missing'
     Expect-Eq 'shim stale entry' (Get-PathShim "C:\Windows;$ug" $ur) 'stale'
@@ -62,7 +62,7 @@ if ((Get-Command Get-PathShim -ErrorAction SilentlyContinue) -and (Get-Command G
       Expect-Eq 'rc stale msys path' (Get-BashrcLine "source `"/$($Matches[1].ToLower())/nope/gone/guyb/scripts/launch.sh`"`n") 'stale'
     } else { Expect-Eq 'rc ok posix path' (Get-BashrcLine "source `"/c/guyb/scripts/launch.sh`"`n") 'ok' }
     Expect-Eq 'rc stale then ok' (Get-BashrcLine "source `"$($ug.Replace('\', '/'))/launch.sh`"`nsource `"$lsh`"`n") 'ok'
-    Expect-Eq 'rc stale' (Get-BashrcLine "source `"$($ug.Replace('\', '/'))/launch.sh`"`n") 'stale'
+    if ($env:OS -eq 'Windows_NT') { Expect-Eq 'rc stale' (Get-BashrcLine "source `"$($ug.Replace('\', '/'))/launch.sh`"`n") 'stale' } # only drive and msys paths are checked, so Windows only
     Expect-Eq 'rc missing' (Get-BashrcLine "export GUYB_ROOT=x`n") 'missing'
     Expect-Eq 'rc commented' (Get-BashrcLine "# source `"$lsh`"`n") 'missing'
     Expect-Eq 'rc empty' (Get-BashrcLine $null) 'missing'
@@ -148,9 +148,9 @@ try {
     $rt = $obj.checks | Where-Object { $_.id -eq 'root' }
     $hc = $obj.checks | Where-Object { $_.id -eq 'home' }
     if ($n -eq 'mline') {
-      Expect-Eq "$n roots" ($obj.roots -join '|') ((Join-Path $h 'p') + '|' + (Join-Path $h 'gone'))
-      Expect-Eq "$n root detail" $rt.detail ('GUYB_ROOT entry not found: ' + (Join-Path $h 'gone') + ' (profile line)')
-      Expect-Eq "$n home detail" $hc.detail ('GUYB_HOME=' + (Join-Path $h 'p') + ' (profile line)')
+      Expect-Eq "$n roots" ($obj.roots -join '|') ("$h/p|$h/gone")   # the profile line writes ~/p, ~/gone: only the leading ~ is expanded
+      Expect-Eq "$n root detail" $rt.detail "GUYB_ROOT entry not found: $h/gone (profile line)"
+      Expect-Eq "$n home detail" $hc.detail "GUYB_HOME=$h/p (profile line)"
     }
     if ($n -eq 'penv') {
       Expect-Eq "$n roots" ($obj.roots -join '|') ((Join-Path $h 'p') + '|' + (Join-Path $h 'q') + '|' + (Join-Path $h 'gone'))
