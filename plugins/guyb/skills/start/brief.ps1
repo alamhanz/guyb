@@ -302,6 +302,9 @@ function Norm-Path([string]$p) { # full path with / separators, no trailing slas
   $win = ($PSVersionTable.PSEdition -eq 'Desktop') -or ($PSVersionTable.PSVersion.Major -ge 6 -and $IsWindows)
   if ($win) { $p = $p -replace '^/([A-Za-z])(/|$)', '$1:$2' }
   try { $p = [System.IO.Path]::GetFullPath($p) } catch { }
+  if (-not $win -and (Test-Path -LiteralPath $p -PathType Container)) { # physical path like brief.sh (git reports /private/var for a /var symlink on macOS)
+    $q = ([string](& sh -c 'cd "$1" 2>/dev/null && pwd -P' _ $p 2>$null)).Trim(); if ($LASTEXITCODE -eq 0 -and $q) { $p = $q }
+  }
   $p = ($p -replace '\\', '/').TrimEnd('/')
   if ($win) { $p = $p.ToLowerInvariant() }
   return $p
