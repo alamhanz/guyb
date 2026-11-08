@@ -22,7 +22,7 @@ function Get-GuybConnections {
   }
 
   $known = @('github', 'gitlab', 'bitbucket', 'aws', 'gcp', 'azure', 'cloudflare', 'mcp', 'db', 'service')
-  $cfgKeys = @('max_parallel', 'cleanup_claude_md_lines', 'cleanup_state_lines', 'cleanup_rows', 'cleanup_days', 'cleanup_memory_lines')
+  $cfgKeys = @('max_parallel', 'cleanup_claude_md_lines', 'cleanup_state_lines', 'cleanup_rows', 'cleanup_days', 'cleanup_memory_lines', 'cleanup_auto_days')
 
   # one file: Connections entries, project extras (Cloud line, Credentials names, cfg keys it defines)
   function Read-Conf([string]$path, [bool]$isProject) {
@@ -47,9 +47,10 @@ function Get-GuybConnections {
       }
       if ($isProject -and $line -cmatch '^[ \t]*(?:[-*][ \t]+)?[`*]*([a-z_]+)[`*]*[ \t]*:[`* \t]*([0-9]+)[`* \t]*$' -and $cfgKeys -contains $Matches[1]) {
         $k = $Matches[1]; $d = $Matches[2].TrimStart('0')
+        if ($d -eq '' -and $k -eq 'cleanup_auto_days') { $d = '0' }
         if ($d -ne '' -and $d.Length -le $(if ($k -eq 'max_parallel') { 2 } else { 9 }) -and -not $seen.ContainsKey($k)) {
           $n = [int]$d
-          if ($n -ge 1 -and ($k -ne 'max_parallel' -or $n -le 20)) {
+          if (($n -ge 1 -or $k -eq 'cleanup_auto_days') -and ($k -ne 'max_parallel' -or $n -le 20)) {
             $seen[$k] = $true
             if ($k -eq 'max_parallel') { $r.MaxPar = $n } else { $r.Cleanup = $true }
           }
