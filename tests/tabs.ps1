@@ -6,6 +6,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ('guyb-tabs-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'proj\my app'), (Join-Path $tmp 'proj\guyb') | Out-Null
 $savedRoot = $env:GUYB_ROOT; $savedDry = $env:GUYB_DRYRUN; $savedTerm = $env:TERM; $savedAscii = $env:GUYB_TAB_ASCII; $savedName = $env:GUYB_TAB_NAME
+$savedHome = $env:GUYB_HOME; $env:GUYB_HOME = $null
 $env:GUYB_DRYRUN = '1'; $env:GUYB_ROOT = Join-Path $tmp 'proj'; $env:TERM = 'xterm'; $env:GUYB_TAB_ASCII = $null; $env:GUYB_TAB_NAME = $null
 # Tab icons by code point (same in tabs.sh): running U+23F3, done U+2705, waiting U+2753.
 $RUN = [string][char]0x23F3; $DONE = [string][char]0x2705; $WAIT = [string][char]0x2753
@@ -91,8 +92,67 @@ try {
     ExpectHas list-guyb $list "guyb`t$(Join-Path $env:GUYB_ROOT 'guyb')"
     ExpectHas list-space $list 'my app'
     ExpectLacks list-no-dryrun $list 'here:'
+    ExpectEq list-root-col (($list -split "`n" | Where-Object { $_ -like "guyb`t*" } | ForEach-Object { ($_ -split "`t")[6] }) -join ',') $env:GUYB_ROOT
+
+    # Multi-root: r1/{a,dup}, r2/{b,dup}; value has an empty, a duplicate and a missing entry.
+    $ml = Join-Path $tmp 'ml'
+    $r1 = Join-Path $ml 'r1'; $r2 = Join-Path $ml 'r2'
+    New-Item -ItemType Directory -Force -Path (Join-Path $r1 'a'), (Join-Path $r1 'dup'), (Join-Path $r2 'b'), (Join-Path $r2 'dup') | Out-Null
+    $sep = [string][IO.Path]::PathSeparator
+    $gone = Join-Path $ml 'gone'
+    $env:GUYB_ROOT = (@($r1, '', $r2, "$r1/", $gone) -join $sep)
+    $mlist = (guyb -List) -join "`n"
+    # The warning goes to the real stderr (stdout stays parseable); read it from a child shell.
+    $ErrorActionPreference = 'Continue'
+    $warn = (& (Get-Process -Id $PID).Path -NoProfile -Command ". '$(Join-Path $root 'scripts\launch.ps1')'; guyb -List" 2>&1) -join "`n"
+    $ErrorActionPreference = 'Stop'
+    $rows = @($mlist -split "`n" | Where-Object { $_ -match "`t" } | ForEach-Object { , ($_ -split "`t") })
+    ExpectEq ml-rows $rows.Count 4
+    ExpectEq ml-cols $rows[0].Count 7
+    ExpectEq ml-dup-count @($rows | Where-Object { $_[0] -eq 'dup' }).Count 2
+    ExpectEq ml-root-a (@($rows | Where-Object { $_[0] -eq 'a' })[0][6]) $r1
+    ExpectEq ml-root-b (@($rows | Where-Object { $_[0] -eq 'b' })[0][6]) $r2
+    ExpectHas ml-warn $warn 'root not found'
+    ExpectHas ml-warn-entry $warn $gone
+    $out = (guyb 'a' -Here) -join "`n"
+    ExpectHas ml-open-a $out "cd '$(Join-Path $r1 'a')'"
+    ExpectHas ml-open-b ((guyb 'b' -Here) -join "`n") "cd '$(Join-Path $r2 'b')'"
+    $out = ''
+    try { $out = (guyb 'dup' -Here) -join "`n" } catch { $out = "ERR: $($_.Exception.Message)" }
+    ExpectHas ml-ambiguous $out 'Ambiguous project'
+    ExpectHas ml-ambiguous-r1 $out (Join-Path $r1 'dup')
+    ExpectHas ml-ambiguous-r2 $out (Join-Path $r2 'dup')
+    ExpectLacks ml-ambiguous-launch $out 'here:'
+    $out = ''
+    try { $out = (guyb 'nosuch') -join "`n" } catch { $out = "ERR: $($_.Exception.Message)" }
+    ExpectHas ml-nosuch $out 'Project not found: nosuch'
+    ExpectHas ml-nosuch-roots $out 'roots:'
+    $env:GUYB_ROOT = $gone
+    $out = ''
+    try { $out = (guyb -List) -join "`n" } catch { $out = "ERR: $($_.Exception.Message)" }
+    ExpectHas ml-all-missing $out 'Root not found'
+
+    # A folder that is itself a root, or GUYB_HOME, is not listed as a project.
+    $env:GUYB_ROOT = (@($ml, $r1) -join $sep)
+    $names = @((guyb -List) | ForEach-Object { ($_ -split "`t")[1] })
+    ExpectEq ml-root-not-project ($names -contains $r1) $false
+    ExpectEq ml-other-root-listed ($names -contains $r2) $true
+    $env:GUYB_ROOT = $ml; $env:GUYB_HOME = $r2
+    $names = @((guyb -List) | ForEach-Object { ($_ -split "`t")[1] })
+    ExpectEq ml-home-not-project ($names -contains $r2) $false
+    ExpectEq ml-home-sibling-listed ($names -contains $r1) $true
+
+    # GUYB_ROOT unset: the current folder is one root even when its path contains the list separator
+    $sp = Join-Path $tmp "sp${sep}x"
+    New-Item -ItemType Directory -Force -Path (Join-Path $sp 'pj') | Out-Null
+    $env:GUYB_ROOT = $null; $env:GUYB_HOME = $null
+    Push-Location -LiteralPath $sp
+    try { $out = (& { guyb -List 2>&1 }) -join "`n" } finally { Pop-Location }
+    ExpectHas cwd-sep-listed $out "pj`t"
+    ExpectLacks cwd-sep-no-warn $out 'root not found'
 }
 finally {
+    $env:GUYB_HOME = $savedHome
     $env:GUYB_ROOT = $savedRoot; $env:GUYB_DRYRUN = $savedDry; $env:TERM = $savedTerm; $env:GUYB_TAB_ASCII = $savedAscii; $env:GUYB_TAB_NAME = $savedName
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

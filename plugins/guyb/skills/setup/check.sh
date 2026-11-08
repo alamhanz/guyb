@@ -31,6 +31,7 @@ $(cat "$f" 2>/dev/null)"
 done
 # rc file to suggest in fix hints: zsh -> .zshrc; macOS bash reads .bash_profile (login shells); else .bashrc
 un=$(uname -s 2>/dev/null)
+case "$un" in MINGW*|MSYS*|CYGWIN*) onwin=1; psep=';' ;; *) onwin=0; psep=':' ;; esac
 shn=${SHELL:-}; shn=${shn%"${shn##*[!/]}"}; shn=${shn##*/}
 # shellcheck disable=SC2088 # rcfile is display text, the tilde is meant literally
 case "$shn" in
@@ -38,12 +39,14 @@ case "$shn" in
   *) if [ "$un" = Darwin ]; then rcfile="~/.bash_profile"; else rcfile="~/.bashrc"; fi ;;
 esac
 
-# last rc lines that set GUYB_ROOT / source launch.sh (one pass, no forks)
+# last rc lines that set GUYB_ROOT / GUYB_HOME / source launch.sh (one pass, no forks)
 re_root='^[[:space:]]*(export[[:space:]]+)?GUYB_ROOT='
+re_home='^[[:space:]]*(export[[:space:]]+)?GUYB_HOME='
 re_src='^[[:space:]]*(source|\.)[[:space:]]+.*scripts/launch\.sh'
-rc_root=""; rc_src=""
+rc_root=""; rc_home=""; rc_src=""
 while IFS= read -r rcl; do
   [[ $rcl =~ $re_root ]] && rc_root=$rcl
+  [[ $rcl =~ $re_home ]] && rc_home=$rcl
   [[ $rcl =~ $re_src ]] && rc_src=$rcl
 done <<< "$rctext"
 
@@ -58,12 +61,60 @@ exp_home() {
   esac
 }
 
+# exp_list <list>: sets exl with exp_home applied to every entry (separator $psep)
+exp_list() {
+  exl=""; exr=$1
+  while :; do
+    case $exr in
+      *"$psep"*) exe=${exr%%"$psep"*}; exr=${exr#*"$psep"}; exp_home "$exe"; exl="$exl$exv$psep" ;;
+      *) exp_home "$exr"; exl="$exl$exv"; break ;;
+    esac
+  done
+}
+
 # GUYB_ROOT: process env -> rc line
 root=""; rootsrc=""
 if [ -n "${GUYB_ROOT:-}" ]; then root="$GUYB_ROOT"; rootsrc="process env"
 elif [ -n "$rc_root" ]; then
-  root=${rc_root#*GUYB_ROOT=}; root=${root#["$esc_q$esc_aq"]}; root=${root%["$esc_q$esc_aq"]}; exp_home "$root"; root=$exv; rootsrc="rc line"
+  root=${rc_root#*GUYB_ROOT=}; root=${root#["$esc_q$esc_aq"]}; root=${root%["$esc_q$esc_aq"]}; exp_list "$root"; root=$exl; rootsrc="rc line"
 fi
+
+# GUYB_HOME: process env -> rc line (a single path, never split)
+homev=""; homesrc=""
+if [ -n "${GUYB_HOME:-}" ]; then homev="$GUYB_HOME"; homesrc="process env"
+elif [ -n "$rc_home" ]; then
+  homev=${rc_home#*GUYB_HOME=}; homev=${homev#["$esc_q$esc_aq"]}; homev=${homev%["$esc_q$esc_aq"]}; exp_home "$homev"; homev=$exv; homesrc="rc line"
+fi
+
+# roots: newline-joined, one per entry: spaces and one pair of quotes trimmed, empty dropped,
+# trailing / or \ stripped (not on a drive root or /), duplicates dropped (case-insensitive on Windows)
+roots=""; nroots=0; nl=$'\n'
+rl_rest=$root
+if [ $onwin -eq 1 ]; then shopt -s nocasematch; fi
+while [ -n "$rl_rest" ]; do
+  case $rl_rest in
+    *"$psep"*) rl_e=${rl_rest%%"$psep"*}; rl_rest=${rl_rest#*"$psep"} ;;
+    *) rl_e=$rl_rest; rl_rest="" ;;
+  esac
+  rl_e=${rl_e#"${rl_e%%[![:space:]]*}"}; rl_e=${rl_e%"${rl_e##*[![:space:]]}"}
+  if [ ${#rl_e} -ge 2 ]; then
+    case $rl_e in
+      \"*\") rl_e=${rl_e#\"}; rl_e=${rl_e%\"} ;;
+      "'"*"'") rl_e=${rl_e#"'"}; rl_e=${rl_e%"'"} ;;
+    esac
+  fi
+  while :; do
+    case $rl_e in
+      [A-Za-z]:[\\/]|/) break ;;
+      *[\\/]) rl_e=${rl_e%?} ;;
+      *) break ;;
+    esac
+  done
+  [ -n "$rl_e" ] || continue
+  case "$nl$roots$nl" in *"$nl$rl_e$nl"*) continue ;; esac
+  roots="${roots:+$roots$nl}$rl_e"; nroots=$((nroots + 1))
+done
+if [ $onwin -eq 1 ]; then shopt -u nocasematch; fi
 
 # Repo: source line in rc (when its launcher exists), else known_marketplaces.json
 repo=""; reposrc=""
@@ -101,10 +152,27 @@ else
 fi
 
 # --- warnings ---
-if [ -n "$root" ]; then add root ok false "GUYB_ROOT=$root ($rootsrc)"
+roots_json=""
+if [ -n "$root" ]; then
+  rmiss=""
+  while IFS= read -r rl_e; do
+    [ -n "$rl_e" ] || continue
+    [ -d "$rl_e" ] || rmiss="${rmiss:+$rmiss, }$rl_e"
+    esc "$rl_e"; roots_json="${roots_json:+$roots_json, }\"$escv\""
+  done <<< "$roots"
+  if [ -n "$rmiss" ]; then add root warn false "GUYB_ROOT entry not found: $rmiss ($rootsrc)" "/guyb:setup layout" user
+  else add root ok false "GUYB_ROOT=$root ($rootsrc)"; fi
 else
   fb=""; tgt="<projects folder>"; [ -n "$start_dir" ] && fb="; session start folder $start_dir is used" && tgt="$start_dir"
   add root warn false "GUYB_ROOT not set$fb" "echo 'export GUYB_ROOT=\"$tgt\"' >> $rcfile" claude-after-consent
+fi
+
+if [ -n "$homev" ]; then
+  if [ -d "$homev" ]; then add home ok false "GUYB_HOME=$homev ($homesrc)"
+  else add home warn false "GUYB_HOME not found: $homev ($homesrc)" "/guyb:setup layout" user; fi
+else
+  hd="none"; [ -n "$start_dir" ] && hd=$start_dir; [ -n "$roots" ] && hd=${roots%%"$nl"*}
+  add home ok false "GUYB_HOME not set; home = $hd"
 fi
 
 if [[ $rctext == *scripts/launch.sh* ]]; then add launcher-profile ok false "launcher source line present in shell rc"
@@ -134,7 +202,6 @@ else
   add git-cred skip false "gh not installed"
 fi
 
-case "$un" in MINGW*|MSYS*|CYGWIN*) onwin=1 ;; *) onwin=0 ;; esac
 if [ $onwin -eq 1 ]; then
   add terminal ok false "bash launcher runs claude in the current terminal; use the PowerShell launcher (launch.ps1) for new tabs"
 elif [ -n "${TMUX:-}" ]; then add terminal ok false "inside tmux"
@@ -228,10 +295,11 @@ case "$un" in
      fi ;;
 esac
 
-# container-use: project folders one level under the root with container files (cap 200, no recursion)
-cscan="${root:-$start_dir}"; ncont=0; nscan=0
-if [ -n "$cscan" ] && [ -d "$cscan" ]; then
-  for d in "$cscan"/*/; do
+# container-use: project folders one level under each root with container files (cap 200 in total, no recursion)
+cscan="${roots:-$start_dir}"; ncont=0; nscan=0
+while IFS= read -r cr; do
+  [ -n "$cr" ] && [ -d "$cr" ] || continue
+  for d in "$cr"/*/; do
     [ -d "$d" ] || continue
     dbase=${d%/}; case "${dbase##*/}" in node_modules) continue ;; esac
     nscan=$((nscan + 1)); [ $nscan -gt 200 ] && break
@@ -239,7 +307,8 @@ if [ -n "$cscan" ] && [ -d "$cscan" ]; then
       [ -f "${d}$cf" ] && { ncont=$((ncont + 1)); break; }
     done
   done
-fi
+  [ $nscan -gt 200 ] && break
+done <<< "$cscan"
 
 cbin=""
 if has docker; then cbin=docker; elif has podman; then cbin=podman; fi
@@ -283,6 +352,6 @@ if [ -n "$uvv" ]; then add uv ok false "uv $uvv"
 else add uv skip false "uv not installed" "$ufix" user; fi
 
 os=unix; [ $onwin -eq 1 ] && os=windows
-esc "$root"; esc_root=$escv; esc "$repo"
-printf '{\n  "version": 1,\n  "os": "%s",\n  "root": "%s",\n  "repo": "%s",\n  "blockingFailures": %s,\n  "checks": [%s\n  ]\n}\n' \
-  "$os" "$esc_root" "$escv" "$blockfail" "$out"
+esc "$root"; esc_root=$escv; esc "$homev"; esc_home=$escv; esc "$repo"
+printf '{\n  "version": 1,\n  "os": "%s",\n  "root": "%s",\n  "home": "%s",\n  "roots": [%s],\n  "repo": "%s",\n  "blockingFailures": %s,\n  "checks": [%s\n  ]\n}\n' \
+  "$os" "$esc_root" "$esc_home" "$roots_json" "$escv" "$blockfail" "$out"

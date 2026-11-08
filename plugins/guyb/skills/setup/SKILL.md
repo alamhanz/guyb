@@ -1,10 +1,10 @@
 ---
 name: setup
 description: Global guyb setup - list, add, change or remove connections (git host, AWS/GCP/Azure, Cloudflare, MCP servers, DB clients), recorded without secrets in ~/.claude/guyb/profile.md. Use for "add X to my guyb setup" / "connect guyb to X".
-argument-hint: "[connections | add <x> | change <x> | remove <x> | git | cloud | db | other]"
+argument-hint: "[connections | add <x> | change <x> | remove <x> | layout | git | cloud | db | other]"
 ---
 
-Run the guyb global setup. Scope: "$ARGUMENTS" (empty = everything). `connections`, `add`, `change`, `remove`: go to "Connections" below. Otherwise work through the sections in order, keeping a todo list. Do this in the main session, not in a subagent, because it needs the user's answers and logins. If the model invoked this skill from a request, confirm the intent in one line before changing anything.
+Run the guyb global setup. Scope: "$ARGUMENTS" (empty = everything). `connections`, `add`, `change`, `remove`: go to "Connections" below. `layout`: go to "Layout" below. Otherwise work through the sections in order, keeping a todo list. Do this in the main session, not in a subagent, because it needs the user's answers and logins. If the model invoked this skill from a request, confirm the intent in one line before changing anything.
 
 ## Ground rules (say these to the user once, briefly)
 - guyb never stores secret values. Tools keep their own credentials (`gh`, `glab`, `aws`, `gcloud`, `az` each have their own credential store). guyb only records *which* accounts and profiles exist.
@@ -15,8 +15,8 @@ Run the guyb global setup. Scope: "$ARGUMENTS" (empty = everything). `connection
 `check.ps1` (Windows) and `check.sh` (macOS/Linux, Git Bash) in this skill's folder are read-only: they never prompt, never change the cwd or any config, and print one JSON object with no secrets (gh login is reported as yes/no plus the account name only). Run it every session; there is no cache.
 
 - Path: `${CLAUDE_SKILL_DIR}/check.ps1` (PowerShell: `pwsh -NoProfile -File "${CLAUDE_SKILL_DIR}/check.ps1" -StartDir "<session start folder>"`; use `powershell` if `pwsh` is missing) or `bash "${CLAUDE_SKILL_DIR}/check.sh" "<session start folder>"`. `${CLAUDE_SKILL_DIR}` is fine inside this skill; callers outside it (e.g. `/guyb:launch`) use `${CLAUDE_PLUGIN_ROOT}/skills/setup` first. On Windows always use `check.ps1`; `check.sh` is for macOS/Linux. Strip any trailing `\` or `/` from the folder passed as `-StartDir` (a trailing backslash breaks `pwsh -File` quoting). If the variable arrives unexpanded or the file is missing, fall back to `${CLAUDE_PLUGIN_ROOT}/skills/setup/check.ps1`, then to `<repo>/plugins/guyb/skills/setup/` with the repo from `~/.claude/plugins/known_marketplaces.json` (`guyb.source.path`). A freshly added script only exists in the plugin cache after a plugin update.
-- JSON: `{version, os, root, repo, blockingFailures, checks:[{id, status: ok|warn|fail|skip, blocking, detail, fix, fixBy}]}`. `fixBy` is `claude-after-consent` (show the `fix` command, run it only after the user agrees), `user` (the user runs it, with `!` for logins), or `none`.
-- Checks: `claude`, `git`, `git-identity`, `launcher` (blocking: a `fail` here must be fixed or handed to the user before launching); `root` (GUYB_ROOT from process env, user env, then the `$PROFILE`/rc line), `launcher-profile`, `gh-auth`, `git-cred`, `terminal` (wt.exe / tmux), `plugin` (installed vs source version and sha), `profile`, `conn-<type>-<name>` (recorded connection looks broken, local check only; notice, no fix) (warnings: show them in one line each and continue); `connections` and `project-config` (info); `container` (docker/podman and whether the daemon answers within 3 s), `python`, `node`, `uv` (info only, never blocking; a missing runtime is `skip`, because per-project needs are checked by `/guyb:start` and fixed by `/guyb:env`).
+- JSON: `{version, os, root, home, roots, repo, blockingFailures, checks:[{id, status: ok|warn|fail|skip, blocking, detail, fix, fixBy}]}`. `fixBy` is `claude-after-consent` (show the `fix` command, run it only after the user agrees), `user` (the user runs it, with `!` for logins), or `none`.
+- Checks: `claude`, `git`, `git-identity`, `launcher` (blocking: a `fail` here must be fixed or handed to the user before launching); `root` (every GUYB_ROOT entry exists; value from process env, user env, then the `$PROFILE`/rc line), `home` (GUYB_HOME, same lookup; warns when set but missing), `launcher-profile`, `launcher-path` (Windows: user PATH has `<repo>\scripts` and `guyb.cmd` is there; warns only when an entry is stale, i.e. points at a missing folder or `guyb.cmd` is gone; fix: re-run `scripts\install.ps1` or `Add-GuybUserPath`), `launcher-bashrc` (Windows with git: `~/.bashrc` sources `scripts/launch.sh`; warns only when that line points at a missing file, e.g. the repo moved; fix: replace the source line in `~/.bashrc`, since re-running the installer keeps an existing line; both fixBy `user`). A missing shim or rc line is `ok` with detail "not set up (optional)" (the shim is optional for users who only use PowerShell 7); `gh-auth`, `git-cred`, `terminal` (wt.exe / tmux), `plugin` (installed vs source version and sha), `profile`, `conn-<type>-<name>` (recorded connection looks broken, local check only; notice, no fix) (warnings: show them in one line each and continue); `connections` and `project-config` (info); `container` (docker/podman and whether the daemon answers within 3 s), `python`, `node`, `uv` (info only, never blocking; a missing runtime is `skip`, because per-project needs are checked by `/guyb:start` and fixed by `/guyb:env`).
 - For each non-ok check, follow the ground rules above: global changes (`git config --global`, appending to `$PROFILE`, `gh auth setup-git`, plugin update) only after consent; `gh auth login` and other logins are run by the user. Missing git host or cloud logins are handled by the sections below, so offer the full wizard for those.
 - Never print or ask for secret values while fixing a check.
 
@@ -86,6 +86,15 @@ Use for `connections|add|change|remove` or a request like "add Cloudflare to guy
 - **record**: after each add/change/remove, show the diff and update `## Connections` in `profile.md` (grammar in the template below). Never secret values.
 - **migrate**: if `profile.md` has no `## Connections`, draft it from the prose sections plus local detection (git host login, `~/.aws/config` profiles, `claude mcp list` names the user confirms) and write it on consent. Until then the startup notice says `not recorded`. Providers the prose marks as unused stay out.
 
+## Layout
+Use for `layout` or a request like "my projects are in several folders". Separator for `GUYB_ROOT`: `;` on Windows (Git Bash included), `:` on macOS/Linux/WSL. Every write needs consent; show each change first.
+- (a) Run the check script and show `home` and `roots`.
+- (b) Ask the user to describe the layout in plain words. Propose absolute `GUYB_HOME` (single path) and `GUYB_ROOT` (list), and confirm the folders exist.
+- (c) Show every change, then apply after consent. Windows: user env via `[Environment]::SetEnvironmentVariable('GUYB_ROOT', '<value>', 'User')` (same for `GUYB_HOME`), and replace any existing `$env:GUYB_ROOT` / `$env:GUYB_HOME` line in every `$PROFILE` file (a profile line overrides the user env) and any `export GUYB_*` line in `~/.bashrc`. macOS/Linux: replace or append quoted `export GUYB_ROOT="..."` / `export GUYB_HOME="..."` lines in the shell rc file. Quote rc values: an unquoted `;` ends the command.
+- (d) Record `## Layout` in `profile.md`: `- home: <path>`, `- roots: <p1>; <p2>`, `- shared: <files>`.
+- (e) Optional: create a stub `<home>/CLAUDE.md` with `@<relative path>` imports of the user's shared files, only if absent (if present, show the lines to add). Claude Code loads `CLAUDE.md` only from the start folder and its ancestors.
+- (f) Tell the user to open a new terminal and restart `claude`; running sessions keep the old values.
+
 ## 7. Record the profile (no secrets)
 Write `~/.claude/guyb/profile.md`:
 ```md
@@ -108,6 +117,10 @@ Updated: <date>
 - aws <profile>: region=<r> account=<id> login=sso|aws-login|static
 - cloudflare <name>: account=<id> auth=wrangler|env
 - mcp <name>: url=<url> scope=user auth=oauth
+## Layout
+- home: <path>
+- roots: <p1>; <p2>
+- shared: <files>
 ## Orchestrator
 - max_parallel: 5
 ```

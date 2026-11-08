@@ -3,9 +3,10 @@
 # Source from your ~/.bashrc or ~/.zshrc:   source "<repo>/scripts/launch.sh"
 #
 #   guyb            -> pick a project from $GUYB_ROOT (or the current folder)
-#   guyb myapp      -> open <root>/myapp
+#                      GUYB_ROOT may be a path list (';' on Windows/Git Bash, ':' elsewhere); names in several roots show as "name  [root]"
+#   guyb myapp      -> open <root>/myapp (name in several roots: error listing full paths; pass the full path)
 #   guyb /abs/path  -> open an absolute path
-#   guyb --list     -> print the projects (tab-separated, most recent first) and return; never prompts
+#   guyb --list     -> print the projects (tab-separated, most recent first, last column = root) and return; never prompts
 # Inside tmux it opens a new tmux window per project; otherwise it runs in the current terminal.
 # Every launched claude gets CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 so the tab keeps the project title.
 
@@ -56,19 +57,73 @@ _guyb_tmux_opt() {
   else tmux set-window-option -t "$1" "$2" "$3" >/dev/null 2>&1; fi
 }
 
+# Roots: $GUYB_ROOT is a path list (';' on Windows incl. Git Bash, ':' elsewhere), else $PWD as one entry. Entries: trimmed, one pair of quotes
+# removed, empties dropped, duplicates dropped. Missing entries warn ("guyb: root not found: <entry>") and are skipped.
+# Prints the existing roots, one per line, normalized with `cd && pwd`.
+_guyb_roots() {
+  local rest="${GUYB_ROOT:-}" sep=: e n k seen="" nl="
+" more=1
+  case "${OSTYPE:-}" in msys*|cygwin*|win32*) sep=';' ;; esac
+  # no GUYB_ROOT: the current folder is one entry, never split on the separator
+  [ -n "$rest" ] || { sep="$nl"; rest="$PWD"; }
+  while [ -n "$more" ]; do
+    case "$rest" in
+      *"$sep"*) e="${rest%%"$sep"*}"; rest="${rest#*"$sep"}" ;;
+      *) e="$rest"; more="" ;;
+    esac
+    e="${e#"${e%%[![:space:]]*}"}"; e="${e%"${e##*[![:space:]]}"}"
+    case "$e" in \"?*\") e="${e#\"}"; e="${e%\"}" ;; \'?*\') e="${e#\'}"; e="${e%\'}" ;; esac
+    [ -n "$e" ] || continue
+    [ -d "$e" ] || { echo "guyb: root not found: $e" >&2; continue; }
+    n="$(cd "$e" && pwd)"; k="$n"
+    [ "$sep" = ';' ] && k="$(printf %s "$n" | tr 'A-Z' 'a-z')"
+    case "$nl$seen$nl" in *"$nl$k$nl"*) continue ;; esac
+    seen="$seen$nl$k"
+    printf '%s\n' "$n"
+  done
+}
+
+# Project folders of the roots ($1 = newline-separated roots), one line each: index<TAB>root<TAB>abs path.
+# A folder that is itself a root or $GUYB_HOME is not a project.
+_guyb_projects() {
+  [ -n "${ZSH_VERSION:-}" ] && setopt local_options null_glob
+  local skip="$1" r d p h k i=0 tab nl="
+" ci=""
+  tab="$(printf '\t')"
+  case "${OSTYPE:-}" in msys*|cygwin*|win32*) ci=1 ;; esac
+  if [ -n "${GUYB_HOME:-}" ] && [ -d "$GUYB_HOME" ]; then h="$(cd "$GUYB_HOME" && pwd)"; skip="$skip$nl$h"; fi
+  [ -z "$ci" ] || skip="$(printf %s "$skip" | tr 'A-Z' 'a-z')"
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    for d in "$r"/*/; do
+      [ -d "$d" ] || continue
+      p="$(cd "$d" && pwd)"
+      k="$p"; [ -z "$ci" ] || k="$(printf %s "$p" | tr 'A-Z' 'a-z')"
+      case "$nl$skip$nl" in *"$nl$k$nl"*) continue ;; esac
+      printf '%s%s%s%s%s\n' "$i" "$tab" "$r" "$tab" "$p"
+    done
+    i=$((i + 1))
+  done <<EOF3
+$1
+EOF3
+}
+
 guyb() {
   # zsh: an unmatched glob is an error by default; make it expand to nothing instead
   [ -n "${ZSH_VERSION:-}" ] && setopt local_options null_glob
-  local root="${GUYB_ROOT:-$PWD}" target=""
+  local roots target="" tab nl="
+"
+  tab="$(printf '\t')"
+  roots="$(_guyb_roots)"
+  if [ -z "$roots" ] && { [ "${1:-}" = "--list" ] || [ -z "${1:-}" ] || [ ! -d "$1" ]; }; then
+    echo "Root not found: ${GUYB_ROOT:-$PWD}" >&2; return 1
+  fi
 
   if [ "${1:-}" = "--list" ]; then
     # Non-interactive: one tab-separated line per project, most recent activity first:
-    # name, abs path, last activity (ISO 8601 UTC), is git (y/n), dirty count, has .claude/guyb/STATE.md or legacy .claude/STATE.md (y/n)
-    [ -d "$root" ] || { echo "Root not found: $root" >&2; return 1; }
-    local d p ts ct isgit dirty state iso
-    for d in "$root"/*/; do
-      [ -d "$d" ] || continue
-      p="$(cd "$d" && pwd)"
+    # name, abs path, last activity (ISO 8601 UTC), is git (y/n), dirty count, has .claude/guyb/STATE.md or legacy .claude/STATE.md (y/n), root
+    local rt p ts ct isgit dirty state iso
+    _guyb_projects "$roots" | while IFS="$tab" read -r _ rt p; do
       ts="$(stat -c %Y "$p" 2>/dev/null || stat -f %m "$p" 2>/dev/null || echo 0)"
       isgit=n; dirty=0
       if command -v git >/dev/null 2>&1 && [ -e "$p/.git" ]; then
@@ -79,24 +134,61 @@ guyb() {
       fi
       state=n; { [ -f "$p/.claude/guyb/STATE.md" ] || [ -f "$p/.claude/STATE.md" ]; } && state=y
       iso="$(date -u -d "@$ts" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$ts" +%Y-%m-%dT%H:%M:%SZ)"
-      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ts" "${p##*/}" "$p" "$iso" "$isgit" "$dirty" "$state"
-    done | sort -t "$(printf '\t')" -k1,1nr | cut -f2-
+      printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ts" "${p##*/}" "$p" "$iso" "$isgit" "$dirty" "$state" "$rt"
+    done | sort -t "$tab" -k1,1nr | cut -f2-
     return 0
   fi
 
   if [ -z "${1:-}" ]; then
-    local dirs=() d
-    for d in "$root"/*/; do [ -d "$d" ] && dirs+=("${d%/}"); done
-    [ ${#dirs[@]} -eq 0 ] && { echo "No project folders in $root" >&2; return 1; }
+    local plist labels=() n i r p dups line sel
+    # sorted by name, then root order; "name  [root]" when the name occurs in more than one root
+    plist="$(_guyb_projects "$roots" | while IFS="$tab" read -r i r p; do printf '%s\t%s\t%s\n' "${p##*/}" "$i" "$r$tab$p"; done |
+      LC_ALL=C sort -t "$tab" -k1,1 -k2,2n)"
+    [ -n "$plist" ] || { echo "No project folders in ${roots//$nl/; }" >&2; return 1; }
+    dups="$(printf '%s\n' "$plist" | cut -f1 | uniq -d)"
+    local lmap=""
+    while IFS="$tab" read -r n i r p; do
+      case "$nl$dups$nl" in *"$nl$n$nl"*) n="$n  [$r]" ;; esac
+      labels+=("$n")
+      lmap="$lmap$n$tab$p$nl"
+    done <<EOF4
+$plist
+EOF4
     PS3="Project number: "
-    select d in "${dirs[@]##*/}"; do [ -n "$d" ] && target="$root/$d" && break; done
+    select sel in "${labels[@]}"; do
+      [ -n "$sel" ] || continue
+      while IFS="$tab" read -r line p; do
+        [ "$line" = "$sel" ] && { target="$p"; break; }
+      done <<EOF5
+$lmap
+EOF5
+      break
+    done
   elif [ -d "${1:-}" ]; then
     target="$(cd "${1:-}" && pwd)"
-  elif [ -d "$root/${1:-}" ]; then
-    target="$(cd "$root/${1:-}" && pwd)"
   else
-    echo "Project not found: ${1:-} (root: $root)" >&2; return 1
+    local found="" cnt=0 r c p
+    while IFS= read -r r; do
+      [ -d "$r/$1" ] || continue
+      c="$(cd "$r/$1" && pwd)"
+      case "$nl$found$nl" in *"$nl$c$nl"*) continue ;; esac
+      found="${found:+$found$nl}$c"; cnt=$((cnt + 1))
+    done <<EOF6
+$roots
+EOF6
+    if [ "$cnt" -eq 0 ]; then
+      if [ "$(printf '%s\n' "$roots" | wc -l | tr -d ' ')" -eq 1 ]; then echo "Project not found: $1 (root: $roots)" >&2
+      else echo "Project not found: $1 (roots: ${roots//$nl/; })" >&2; fi
+      return 1
+    elif [ "$cnt" -gt 1 ]; then
+      echo "Ambiguous project: $1 is in $cnt roots:" >&2
+      printf '%s\n' "$found" >&2
+      echo "Run: guyb '$(printf %s "${found%%"$nl"*}" | sed "s/'/'\\\\''/g")'" >&2
+      return 1
+    fi
+    target="$found"
   fi
+  [ -n "$target" ] || return 1
 
   local name clean hex title q; name="$(basename "$target")"
   clean="$(_guyb_clean "$name")"; hex="$(_guyb_color "$name")"

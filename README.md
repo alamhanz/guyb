@@ -70,11 +70,33 @@ Tested mainly on Windows (PowerShell 7, Windows PowerShell 5.1, Windows Terminal
 **From the projects root.** Start `claude` in the folder that holds your projects and say "activate guyb" or "let's start myapp". It runs the setup check, shows a picker (skipped if you named a project), and opens the project in a new tab running `/guyb:start`. Or use the shell launcher:
 
 ```
-guyb              # pick from GUYB_ROOT
-guyb myapp        # open GUYB_ROOT/myapp in a new tab
+guyb              # pick from GUYB_ROOT (every entry if it lists several)
+guyb myapp        # open <root>/myapp in a new tab
 ```
 
 Flags and the `-List` / `--list` format are in the headers of `scripts/launch.ps1` and `scripts/launch.sh`.
+
+**Custom layouts.** By default the launcher uses one folder (`GUYB_ROOT`, else the current folder) and each subfolder is a project. Two variables change that:
+
+| Variable | Meaning |
+|---|---|
+| `GUYB_ROOT` | one folder, or a list of folders that hold projects |
+| `GUYB_HOME` | the folder you start `claude` in; it also counts as a launcher session. Defaults to the first root |
+
+The list separator is `;` on Windows (including Git Bash) and `:` on macOS, Linux and WSL. Empty entries and duplicates are dropped; a missing entry gets a warning and is skipped. Quote the value in rc files, since an unquoted `;` ends a bash command.
+
+```
+# Windows: user environment variables (what /guyb:setup layout writes; the guyb.cmd and guyb.ps1 shims run
+# without your profile and only see these)
+[Environment]::SetEnvironmentVariable('GUYB_ROOT', 'D:\projects;E:\work', 'User')
+[Environment]::SetEnvironmentVariable('GUYB_HOME', 'D:\home', 'User')
+
+# ~/.bashrc or ~/.zshrc
+export GUYB_ROOT="$HOME/projects:$HOME/work"
+export GUYB_HOME="$HOME/home"
+```
+
+`guyb -List` / `--list` merges all roots and adds a 7th column, `root`. If a project name exists in several roots, the picker shows `name  [root]`, and `guyb name` stops with an error listing the full paths; open one with `guyb '<full path>'`. Colliding names share the tab title and colour. `/guyb:setup layout` writes these variables after you confirm each change, records a `## Layout` section in `~/.claude/guyb/profile.md`, and can create a stub `CLAUDE.md` in the home folder that imports your shared files (Claude Code loads `CLAUDE.md` only from the start folder and its ancestors). Open a new terminal and restart `claude` afterwards; running sessions keep the old values.
 
 **Tabs.** Each launched tab keeps the project name as its title, with a colour derived from the name. The title is `<icon> <project>`: hourglass while Claude or any subagent works, check mark when all are done, question mark when it waits for you (`GUYB_TAB_ASCII=1` gives `*` `+` `?`). guyb sets `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`, which is not a documented Claude Code setting; if an update drops it, Claude's own title may show again.
 
@@ -84,7 +106,7 @@ Flags and the `-List` / `--list` format are in the headers of `scripts/launch.ps
 |---|---|
 | `/guyb:start [task]` | briefing, bootstrap project config, plan the task |
 | `/guyb:launch [project]` | at the projects root: setup check, picker, open in a new tab |
-| `/guyb:setup [connections\|add\|change\|remove\|area]` | global setup: git host, cloud, Cloudflare, MCP servers, DB clients; list and reconfigure connections |
+| `/guyb:setup [connections\|add\|change\|remove\|layout\|area]` | global setup: git host, cloud, Cloudflare, MCP servers, DB clients; list and reconfigure connections; `layout` sets the home and project roots |
 | `/guyb:build <what>` | architect, implementers, review, PR |
 | `/guyb:ship` | review, commit, push, PR, CI status |
 | `/guyb:status` | status table across all projects |
