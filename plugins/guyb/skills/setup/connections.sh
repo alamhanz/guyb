@@ -3,7 +3,7 @@
 # shellcheck disable=SC2034 # gc_* results are read by the scripts that source this file
 # No CLI is run (command -v only), no network, no prompts. Secrets files are read only for the "expiresAt" value (aws caches);
 # env var VALUES are never read. Usage (sourced): . connections.sh hook   -> prints {"systemMessage":"..."} or nothing, always exits 0.
-# guyb_conn <brief|check|hook> <dir> sets: gc_cfg (seven cfg words for brief.sh), gc_list ("connections: ..." or ""),
+# guyb_conn <brief|check|hook> <dir> sets: gc_cfg (eight cfg words for brief.sh), gc_list ("connections: ..." or ""),
 # gc_gh1 (first github name), gc_wl (lines "type<US>name<US>reason" for broken connections), gc_pcfg ("project config: ..." or "").
 
 # One awk: cfg values (max_parallel and cleanup limits, project file first), the Connections sections of the project
@@ -38,8 +38,9 @@ function cfg(s,   k, d, n, i) {
   s = substr(s, RLENGTH + 1)
   if (s !~ /^[`*]*[ \t]*:[`* \t\r]*[0-9]+[`* \t\r]*$/) return
   d = s; gsub(/[^0-9]/, "", d); sub(/^0+/, "", d)
+  if (d == "" && k == "cleanup_auto_days") d = "0"
   if (d == "" || length(d) > (k == "max_parallel" ? 2 : 9)) return
-  n = d + 0; if (n < 1 || (k == "max_parallel" && n > 20)) return
+  n = d + 0; if ((n < 1 && k != "cleanup_auto_days") || (k == "max_parallel" && n > 20)) return
   i = ix[k]; if (v[i] == "-") { v[i] = n; if (role == 1) pdef[i] = 1; if (i == 1) src = (role == 1) ? "project" : "profile" }
 }
 function hasuser(f, name,   l, s, ok) {
@@ -101,8 +102,8 @@ function expired(   n, i, f, nw, d) {
 BEGIN {
   US = sprintf("%c", 31)
   proj = ENVIRON["GC_PROJ"]
-  split("max_parallel cleanup_claude_md_lines cleanup_state_lines cleanup_rows cleanup_days cleanup_memory_lines", ks, " ")
-  for (i = 1; i <= 6; i++) { ix[ks[i]] = i; v[i] = "-" }
+  split("max_parallel cleanup_claude_md_lines cleanup_state_lines cleanup_rows cleanup_days cleanup_memory_lines cleanup_auto_days", ks, " ")
+  for (i = 1; i <= 7; i++) { ix[ks[i]] = i; v[i] = "-" }
   split("github gitlab bitbucket aws gcp azure cloudflare mcp db service", kt, " ")
   for (i = 1; i <= 10; i++) known[kt[i]] = 1
 }
@@ -127,7 +128,7 @@ FNR == 1 { role = (FILENAME == proj) ? 1 : 2; sec = "" }
   cfg($0)
 }
 END {
-  print "K " v[1], (src == "" ? "-" : src), v[2], v[3], v[4], v[5], v[6]
+  print "K " v[1], (src == "" ? "-" : src), v[2], v[3], v[4], v[5], v[6], v[7]
   hp = (ENVIRON["GC_HASPROF"] == "1")
   for (i = 1; i <= cnt[1]; i++) povr[et[1, i]] = 1
   m = 0
@@ -187,7 +188,7 @@ END {
     if (cloud != "") parts = parts (parts != "" ? "; " : "") "cloud " cloud
     if (hascred) parts = parts (parts != "" ? "; " : "") (ncred ? "credentials " ncred " names" : "credentials none")
     if (src == "project") parts = parts (parts != "" ? "; " : "") "max_parallel " v[1]
-    if (pdef[2] || pdef[3] || pdef[4] || pdef[5] || pdef[6]) parts = parts (parts != "" ? "; " : "") "cleanup limits"
+    if (pdef[2] || pdef[3] || pdef[4] || pdef[5] || pdef[6] || pdef[7]) parts = parts (parts != "" ? "; " : "") "cleanup limits"
     if (ENVIRON["GC_MCPJSON"] == "1") parts = parts (parts != "" ? "; " : "") ".mcp.json"
     print "P project config: " (parts == "" ? "none - follows global (~/.claude/guyb/profile.md)" : parts)
   }
@@ -195,7 +196,7 @@ END {
 
 guyb_conn() { # mode dir
   gc_mode=$1; gc_d=${2%/}; [ -n "$gc_d" ] || gc_d=/
-  gc_cfg="- - - - - - -"; gc_list=""; gc_wl=""; gc_pcfg=""; gc_gh1=""
+  gc_cfg="- - - - - - - -"; gc_list=""; gc_wl=""; gc_pcfg=""; gc_gh1=""
   gc_h=${HOME//\\//}
   gc_pj="$gc_d/.claude/CLAUDE.md"; gc_pm="$gc_h/.claude/guyb/profile.md"
   gc_files=(); gc_isproj=0; gc_hasprof=0; gc_mj=0

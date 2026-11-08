@@ -1,5 +1,6 @@
-# Read-only session briefing for /guyb:start. No prompts, no cd, no secrets. Usage: brief.ps1 [-Dir <project folder>]
-param([string]$Dir = (Get-Location).Path)
+# Read-only session briefing for /guyb:start. No prompts, no cd, no secrets. Usage: brief.ps1 [-Dir <project folder>] [-AutoList]
+# -AutoList prints only the auto-clean candidates ("file <abs>" / "worktree <abs>" per line) and exits.
+param([string]$Dir = (Get-Location).Path, [switch]$AutoList)
 $ErrorActionPreference = 'SilentlyContinue'
 $env:GIT_TERMINAL_PROMPT = '0'
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
@@ -59,7 +60,7 @@ function Get-GhList {
   }
   return $script:ghRes
 }
-if (Test-Path -LiteralPath (Join-Path $Dir '.git')) { Start-GhList }
+if (-not $AutoList -and (Test-Path -LiteralPath (Join-Path $Dir '.git'))) { Start-GhList }
 
 Add-Line "project: $(Split-Path -Leaf $Dir)"
 
@@ -197,7 +198,7 @@ if ($state) {
   }
   # Drift: PRs named in live-state sections of STATE.md (Current Status, Open Issues, Next Up, In progress, Open PRs) that are already merged or closed.
   # States come from the PR list; a PR missing from it gets one `gh pr view` (max 3, within the 5 s budget; none after a timeout; silent on failure).
-  if ($isGit -and (Get-Command gh -ErrorAction SilentlyContinue) -and -not (Get-GhList).TimedOut) {
+  if (-not $AutoList -and $isGit -and (Get-Command gh -ErrorAction SilentlyContinue) -and -not (Get-GhList).TimedOut) {
     $live = $false; $liveText = @(foreach ($ln in $lines) { if ($ln -match '^#') { $live = $ln -match '(?i)^#+\s*(current status|open issues|next up|in progress|open prs)' } elseif ($live) { $ln } })
     $nums = @([regex]::Matches(($liveText -join "`n"), '(?i)(?:^|[^A-Za-z0-9])(?:#|pull/|pr[ \t]+#?)(\d+)') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique | Select-Object -First 3)
     foreach ($num in $nums) {
@@ -237,10 +238,11 @@ if ($qs -and (Test-Path -LiteralPath $qs)) {
 }
 
 # Cleanup hints (read-only, counts only). Limits: project .claude/CLAUDE.md, then ~/.claude/guyb/profile.md, then these defaults; invalid values are ignored.
-function Get-Limit([string]$key, [int]$default) {
+function Get-Limit([string]$key, [int]$default, [switch]$AllowZero) {
+  $min = if ($AllowZero) { 0 } else { 1 }
   foreach ($f in @((Join-Path $Dir '.claude/CLAUDE.md'), (Join-Path $HOME '.claude/guyb/profile.md'))) {
     if (-not (Test-Path -LiteralPath $f)) { continue }
-    $v = @(Get-Content -Encoding UTF8 -LiteralPath $f | ForEach-Object { if ($_ -match ('^\s*(?:[-*]\s+)?[`*]*' + $key + '[`*]*\s*:[`*\s]*(\d{1,9})[`*\s]*$') -and [int]$Matches[1] -ge 1) { [int]$Matches[1] } })
+    $v = @(Get-Content -Encoding UTF8 -LiteralPath $f | ForEach-Object { if ($_ -match ('^\s*(?:[-*]\s+)?[`*]*' + $key + '[`*]*\s*:[`*\s]*(\d{1,9})[`*\s]*$') -and [int]$Matches[1] -ge $min) { [int]$Matches[1] } })
     if ($v.Count -gt 0) { return $v[0] }
   }
   return $default
@@ -250,6 +252,7 @@ $limState = Get-Limit 'cleanup_state_lines' 300
 $limRows = Get-Limit 'cleanup_rows' 200
 $limDays = Get-Limit 'cleanup_days' 14
 $limMemory = Get-Limit 'cleanup_memory_lines' 100
+$limAuto = Get-Limit 'cleanup_auto_days' 21 -AllowZero
 function Read-Table($path) {
   # data rows as arrays of trimmed cells; the first row is the header, separator rows are dropped
   $rows = New-Object System.Collections.ArrayList
@@ -291,8 +294,112 @@ if ($qRows.Count -gt 0) {
     if ((Age-Days $when) -gt $limDays) { $overdue += (Cell $r $iId) }
   }
 }
+# Auto-clean candidates (read-only, same rules as brief.sh). Files: older than limAuto, run id finished (done|failed|stopped) in runs.md or
+# runs-archive.md, no open question for it; unknown ids never qualify. Worktrees: registered, unlocked, clean, HEAD commit and dir older than
+# limAuto, and no work to lose (all commits on a remote-tracking ref, or merged into origin/<default>, or no unique commit per git cherry,
+# or every file the branch changed since the merge-base is identical on origin/<default>). Offline git only; any git error skips the worktree.
+function Test-AutoWt([string]$w, [string]$wdef, [long]$wcut) {
+  if (-not (Test-Path -LiteralPath (Join-Path $w '.git') -PathType Leaf)) { return $false }
+  $st = (@(git -C $w status --porcelain 2>$null) -join '').Trim()
+  if ($LASTEXITCODE -ne 0 -or $st) { return $false }
+  $ct = ([string](git -C $w log -1 --format=%ct 2>$null)).Trim()
+  if ($LASTEXITCODE -ne 0 -or $ct -notmatch '^\d+$' -or [long]$ct -gt $wcut) { return $false }
+  $n = ([string](git -C $w rev-list --count HEAD --not --remotes 2>$null)).Trim()
+  if ($LASTEXITCODE -ne 0) { return $false }
+  if ($n -eq '0') { return $true }
+  if (-not $wdef) { return $false }
+  git -C $w merge-base --is-ancestor HEAD $wdef *> $null
+  if ($LASTEXITCODE -eq 0) { return $true }
+  $ch = (@(git -C $w cherry $wdef HEAD 2>$null) -join "`n")
+  if ($LASTEXITCODE -eq 0 -and $ch -notmatch '\+') { return $true }
+  $mb = ([string](git -C $w merge-base $wdef HEAD 2>$null)).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $mb) { return $false }
+  $files = @((@(git -C $w diff --name-only -z $mb HEAD 2>$null) -join '') -split "`0" | Where-Object { $_ })
+  if ($files.Count -lt 1 -or $files.Count -gt 500) { return $false }
+  git --literal-pathspecs -C $w diff --quiet $wdef HEAD -- $files *> $null
+  return ($LASTEXITCODE -eq 0)
+}
+$autoFiles = New-Object System.Collections.Generic.List[string]; $autoSet = @{}; $autoWts = New-Object System.Collections.Generic.List[string]
+if ($limAuto -gt 0) {
+  if ($pipe) {
+    $fin = @{}; $bad = @{}; $kn = @{}; $opn = @{}
+    foreach ($tab in @($runRows, (Read-Table (Join-Path $pipe 'runs-archive.md')))) {
+      if ($tab.Count -lt 1) { continue }
+      $hd = $tab[0]; $iId = Col-Index $hd @('ID', 'Q'); $iSt = Col-Index $hd 'Status'
+      foreach ($r in $tab | Select-Object -Skip 1) {
+        $rid = Cell $r $iId
+        if (-not $rid) { continue }
+        $kn[$rid] = $true
+        if ((Cell $r $iSt) -match '^(done|failed|stopped)$') { $fin[$rid] = $true } else { $bad[$rid] = $true }
+      }
+    }
+    if ($qRows.Count -gt 0) {
+      $hd = $qRows[0]; $iRun = Col-Index $hd 'Run'; $iSt = Col-Index $hd 'Status'
+      foreach ($r in $qRows | Select-Object -Skip 1) { if ((Cell $r $iSt) -eq 'open' -and $iRun -ge 0) { $opn[(Cell $r $iRun)] = $true } }
+    }
+    $acut = (Get-Date).AddDays(-($limAuto + 1)); $pipeN = $pipe -replace '\\', '/'
+    foreach ($sub in 'progress', 'reports', 'plans', 'brand') {
+      $sd = Join-Path $pipe $sub
+      if (-not (Test-Path -LiteralPath $sd -PathType Container)) { continue }
+      foreach ($f in @(Get-ChildItem -LiteralPath $sd -Recurse -File -Force)) {
+        if ($f.LastWriteTime -ge $acut) { continue }
+        $rel = $f.FullName.Substring($sd.TrimEnd('\', '/').Length).TrimStart('\', '/')
+        if ($sub -eq 'brand') { $fid = ($rel -split '[\\/]')[0]; if ($rel -notmatch '[\\/]') { $fid = [System.IO.Path]::GetFileNameWithoutExtension($fid) } }
+        else { $fid = [System.IO.Path]::GetFileNameWithoutExtension($f.Name) }
+        if (-not $kn.ContainsKey($fid) -and $fid -match '^(.*-[0-9]+)') { $fid = $Matches[1] }
+        if ($fin.ContainsKey($fid) -and -not $bad.ContainsKey($fid) -and -not $opn.ContainsKey($fid)) {
+          $autoFiles.Add("$pipeN/$sub/" + ($rel -replace '\\', '/')); $autoSet[$f.FullName] = $true
+        }
+      }
+    }
+  }
+  $wtRoot = Join-Path $Dir '.claude/worktrees'
+  if ((Test-Path -LiteralPath (Join-Path $Dir '.git')) -and (Test-Path -LiteralPath $wtRoot -PathType Container) -and (Get-Command git -CommandType Application -ErrorAction SilentlyContinue)) {
+    $wcutDate = (Get-Date).AddDays(-($limAuto + 1))
+    $wold = @(Get-ChildItem -LiteralPath $wtRoot -Directory -Force | Where-Object { $_.LastWriteTime -lt $wcutDate -and -not ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) })
+    if ($wold.Count -gt 0) {
+      $wreg = @{}; $cur = ''; $lk = $false
+      $wl = @(git -C $Dir worktree list --porcelain 2>$null)
+      if ($LASTEXITCODE -eq 0) {
+        foreach ($l in $wl) {
+          if (([string]$l) -match '^worktree (.*)$') {
+            if ($cur -and -not $lk) { $wreg[$cur] = $true }
+            $p = $Matches[1].Trim() -replace '\\', '/'
+            $cur = ''; $lk = $false
+            if ($p -match '/\.claude/worktrees/([^/]+)$') { $cur = $Matches[1] }
+          } elseif (([string]$l) -match '^(locked|prunable)') { $lk = $true }
+        }
+        if ($cur -and -not $lk) { $wreg[$cur] = $true }
+      }
+      if ($wreg.Count -gt 0) {
+        $wdef = ([string](git -C $Dir symbolic-ref -q --short refs/remotes/origin/HEAD 2>$null)).Trim()
+        if ($wdef) { git -C $Dir rev-parse --verify -q "refs/remotes/$wdef" *> $null; if ($LASTEXITCODE -ne 0) { $wdef = '' } }
+        if (-not $wdef) {
+          foreach ($c in 'origin/main', 'origin/master') {
+            git -C $Dir rev-parse --verify -q "refs/remotes/$c" *> $null
+            if ($LASTEXITCODE -eq 0) { $wdef = $c; break }
+          }
+        }
+        $wcut = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - ([long]$limAuto + 1) * 86400
+        $dirN = $Dir -replace '\\', '/'
+        foreach ($d in $wold) {
+          if (-not $wreg.ContainsKey($d.Name)) { continue }
+          if (Test-AutoWt $d.FullName $wdef $wcut) { $autoWts.Add("$dirN/.claude/worktrees/$($d.Name)") }
+        }
+      }
+    }
+  }
+}
+if ($AutoList) {
+  $al = @($autoFiles.ToArray()); [Array]::Sort($al, [StringComparer]::Ordinal)
+  $aw = @($autoWts.ToArray()); [Array]::Sort($aw, [StringComparer]::Ordinal)
+  foreach ($x in $al) { Write-Output "file $x" }
+  foreach ($x in $aw) { Write-Output "worktree $x" }
+  exit 0
+}
+if ($autoFiles.Count + $autoWts.Count -gt 0) { Add-Line "auto-clean: $($autoFiles.Count) files, $($autoWts.Count) worktrees (older than $limAuto days)" }
 if ($overdue.Count -gt 0) {
-  $ov = 'overdue: ' + (($overdue | Select-Object -First 5) -join ', ')
+  $ov ='overdue: ' + (($overdue | Select-Object -First 5) -join ', ')
   if ($overdue.Count -gt 5) { $ov += ", +$($overdue.Count - 5) more" }
   Add-Line $ov
 }
@@ -311,7 +418,7 @@ if ($pipe) {
     $sd = Join-Path $pipe $sub
     if (-not (Test-Path -LiteralPath $sd -PathType Container)) { continue }
     foreach ($f in @(Get-ChildItem -LiteralPath $sd -Recurse -File -Force)) {
-      if ($f.LastWriteTime -ge $cut) { continue }
+      if ($f.LastWriteTime -ge $cut -or $autoSet.ContainsKey($f.FullName)) { continue }
       if ($sub -eq 'brand') { $rel = $f.FullName.Substring($sd.TrimEnd('\', '/').Length).TrimStart('\', '/'); $fid = ($rel -split '[\\/]')[0]; if ($rel -notmatch '[\\/]') { $fid = [System.IO.Path]::GetFileNameWithoutExtension($fid) } }
       else { $fid = [System.IO.Path]::GetFileNameWithoutExtension($f.Name) }
       if (-not $allIds.ContainsKey($fid) -and $fid -match '^(.*-[0-9]+)') { $fid = $Matches[1] }
