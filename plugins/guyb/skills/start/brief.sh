@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Read-only session briefing for /guyb:start. No prompts, no cd, no secrets. Usage: brief.sh [project folder]
+# Read-only session briefing for /guyb:start. No prompts, no cd, no secrets. Usage: brief.sh [project folder] [--auto-list]
+# --auto-list prints only the auto-clean candidates ("file <abs>" / "worktree <abs>" per line) and exits.
 dir="${1:-$PWD}"
+autolist=0; [ "${2:-}" = --auto-list ] && autolist=1
 dir="${dir%/}"
 [ -n "$dir" ] || dir=/
 base="${dir%/}" # no trailing slash: "/" gives /x, never //x (a UNC path on msys)
@@ -44,30 +46,31 @@ gh_collect() {
 gh_clean() { [ -n "$ghp" ] && kill "$ghp" 2>/dev/null; [ -n "$ghf" ] && rm -f "$ghf"; return 0; }
 trap gh_clean EXIT
 trap 'exit 1' HUP INT TERM
-[ -e "$base/.git" ] && gh_start
+if [ "$autolist" = 1 ]; then exec 3>&1 1>/dev/null; elif [ -e "$base/.git" ]; then gh_start; fi
 
 pn=${dir##*/}; [ -n "$pn" ] || pn=/
 echo "project: $pn"
 
 # max_parallel, the five cleanup limits and the connections lines come from one awk in setup/connections.sh:
-# first file (project, then profile) with a valid value wins per key. gc_cfg = "<max_parallel> <src> <claude_md_lines> <state_lines> <rows> <days> <memory_lines>"; "-" when unset.
-gc_cfg="- - - - - - -"; gc_lines=""; gc_wl=""; gc_gh1=""
+# first file (project, then profile) with a valid value wins per key. gc_cfg = "<max_parallel> <src> <claude_md_lines> <state_lines> <rows> <days> <memory_lines> <auto_days>"; "-" when unset.
+gc_cfg="- - - - - - - -"; gc_lines=""; gc_wl=""; gc_gh1=""
 gc_src="${BASH_SOURCE[0]%/*}/../setup/connections.sh"
 if [ -f "$gc_src" ]; then
   # shellcheck disable=SC1090 # sourced next to this script
   . "$gc_src" lib
   guyb_conn brief "$base"; guyb_conn_lines
 fi
-# shellcheck disable=SC2086 # seven words, splitting is intended
+# shellcheck disable=SC2086 # eight words, splitting is intended
 set -- $gc_cfg
 max_parallel=5; max_src=default
 [ "$1" != "-" ] && { max_parallel=$1; max_src=$2; }
-lim_claude=200; lim_state=300; lim_rows=200; lim_days=14; lim_memory=100
+lim_claude=200; lim_state=300; lim_rows=200; lim_days=14; lim_memory=100; lim_auto=21
 [ "$3" != "-" ] && lim_claude=$3
 [ "$4" != "-" ] && lim_state=$4
 [ "$5" != "-" ] && lim_rows=$5
 [ "$6" != "-" ] && lim_days=$6
 [ "$7" != "-" ] && lim_memory=$7
+[ "$8" != "-" ] && lim_auto=$8
 echo "max parallel: $max_parallel ($max_src)"
 [ -n "$gc_lines" ] && printf '%s\n' "$gc_lines"
 
@@ -334,6 +337,7 @@ fi
 # One awk pass counts lines and table rows (rows = table lines minus separator rows minus 1 header) of the four files and lists the run ids
 # by registry columns (ID, Status): "all|<ids>|" then "act|<running/queued/blocked ids>|".
 cl=""
+auto_files=""; auto_n=0; auto_wts=""; auto_wn=0
 rf=/dev/null; qf=/dev/null; active="|"; allids="|"
 mf=/dev/null
 cntf=()
@@ -370,10 +374,52 @@ if [ -n "$pipe" ]; then
     [ -d "$pipe/$sub" ] && fdirs[${#fdirs[@]}]="$pipe/$sub"
   done
   stale=0
+  # Auto-clean files: older than lim_auto, run id finished (done|failed|stopped) in runs.md or runs-archive.md, no open question for it.
+  # Unknown ids never qualify; the legacy .claude/pipeline/ is never auto-cleaned (git-ops may only delete under .claude/guyb/pipeline/). They are left out of the stale count below (they are deleted without asking).
+  if [ "$lim_auto" -gt 0 ] && [ "$pipe" = "$pipe_new" ] && [ ${#fdirs[@]} -gt 0 ]; then
+    afound=$(find "${fdirs[@]}" -type f -mtime +"$lim_auto" 2>/dev/null)
+    if [ -n "$afound" ]; then
+      auto_files=$(AU_RF="$rf" AU_AF="$pipe/runs-archive.md" AU_QF="$qf" awk -v pipe="$pipe/" '
+        function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
+        function load(f, kind,   l, c, n, h, i, t, ic, sc, rc, id, st) {
+          h = 0
+          while ((getline l < f) > 0) {
+            sub(/\r$/, "", l)
+            if (l !~ /^\|/ || l ~ /^\|[ \t|:-]+$/) continue
+            n = split(l, c, "|")
+            if (!h) {
+              ic = sc = rc = 0
+              for (i = 2; i < n; i++) { t = trim(c[i]); if (t == "ID" || t == "Q") ic = i; else if (t == "Status") sc = i; else if (t == "Run") rc = i }
+              h = 1; continue
+            }
+            if (!ic || !sc) continue
+            id = trim(c[ic]); st = trim(c[sc])
+            if (kind == "run") { if (id == "") continue; kn[id] = 1; if (st ~ /^(done|failed|stopped)$/) fin[id] = 1; else bad[id] = 1 }
+            else if (st == "open" && rc) opn[trim(c[rc])] = 1
+          }
+          close(f)
+        }
+        BEGIN {
+          split("progress reports plans brand", subs, " ")
+          load(ENVIRON["AU_RF"], "run"); load(ENVIRON["AU_AF"], "run"); load(ENVIRON["AU_QF"], "q")
+        }
+        { br = ""
+          for (i = 1; i <= 4; i++) if (index($0, pipe subs[i] "/") == 1) { br = subs[i]; break }
+          if (br == "") next
+          f = substr($0, length(pipe br) + 2)
+          if (br == "brand" && index(f, "/")) sub(/\/.*/, "", f); else { sub(/^.*\//, "", f); sub(/\.[^.]*$/, "", f) }
+          id = ""
+          if (f in kn) id = f; else if (match(f, /^.*-[0-9]+/)) id = substr(f, 1, RLENGTH)
+          if (id != "" && (id in fin) && !(id in bad) && !(id in opn)) print $0 }' <<< "$afound")
+      if [ -n "$auto_files" ]; then auto_t=${auto_files//[!$'\n']/}; auto_n=$((${#auto_t} + 1)); fi
+    fi
+  fi
   if [ ${#fdirs[@]} -gt 0 ]; then
-    stale=$(find "${fdirs[@]}" -type f -mtime +"$lim_days" 2>/dev/null | awk -v pipe="$pipe/" -v act="$active" -v all="$allids" '
-      BEGIN { split("progress reports plans brand", subs, " ") }
-      { br = ""
+    stale=$(find "${fdirs[@]}" -type f -mtime +"$lim_days" 2>/dev/null | AEL="$auto_files" awk -v pipe="$pipe/" -v act="$active" -v all="$allids" '
+      BEGIN { split("progress reports plans brand", subs, " ")
+        ne = split(ENVIRON["AEL"], ea, "\n"); for (i = 1; i <= ne; i++) ex[ea[i]] = 1 }
+      { if ($0 in ex) next
+        br = ""
         for (i = 1; i <= 4; i++) if (index($0, pipe subs[i] "/") == 1) { br = subs[i]; break }
         if (br == "") next
         f = substr($0, length(pipe br) + 2)
@@ -386,6 +432,85 @@ if [ -n "$pipe" ]; then
   fi
   [ "$stale" -gt 0 ] && cl="${cl:+$cl; }$stale pipeline files older than $lim_days days"
 fi
+# Auto-clean worktrees (only when .claude/worktrees has dirs older than lim_auto). Offline git only: a worktree qualifies when it is
+# registered, unlocked, clean (untracked counts), HEAD commit and dir older than lim_auto, and nothing is lost: every commit is on a
+# remote-tracking ref, or HEAD is merged into origin/<default>, or `git cherry` shows no unique commit, or every file the branch changed
+# since the merge-base is identical on origin/<default> (squash merge). Any git error skips the worktree.
+auto_wt_ok() { # absolute worktree path, $wdef, $wcut
+  local w=$1 st ct n ch mb fn farr
+  [ -f "$w/.git" ] || return 1
+  st=$(git -C "$w" status --porcelain --untracked-files=all --ignore-submodules=none 2>/dev/null) || return 1
+  [ -z "$st" ] || return 1
+  ct=$(git -C "$w" log -1 --format=%ct 2>/dev/null) || return 1
+  case "$ct" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$ct" -le "$wcut" ] || return 1
+  n=$(git -C "$w" rev-list --count HEAD --not --remotes 2>/dev/null) || return 1
+  [ "$n" = 0 ] && return 0
+  [ -n "$wdef" ] || return 1
+  git -C "$w" merge-base --is-ancestor HEAD "$wdef" 2>/dev/null && return 0
+  if ch=$(git -C "$w" cherry "$wdef" HEAD 2>/dev/null); then
+    case "$ch" in *+*) ;; *) return 0 ;; esac
+  fi
+  mb=$(git -C "$w" merge-base "$wdef" HEAD 2>/dev/null) || return 1
+  farr=()
+  while IFS= read -r -d '' fn; do farr[${#farr[@]}]=$fn; done < <(git -C "$w" diff --no-renames --name-only -z "$mb" HEAD 2>/dev/null)
+  [ ${#farr[@]} -gt 0 ] && [ ${#farr[@]} -le 500 ] || return 1
+  git --literal-pathspecs -C "$w" diff --no-ext-diff --quiet "$wdef" HEAD -- "${farr[@]}" 2>/dev/null
+}
+norm_path() { # physical path; on Windows (cygpath) mixed C:/ form, lower case; no trailing slash
+  local p=$1 q
+  q=$(cd "$p" 2>/dev/null && pwd -P) && p=$q
+  if command -v cygpath >/dev/null 2>&1; then
+    p=$(cygpath -m "$p" 2>/dev/null | tr 'A-Z' 'a-z') || p=$1
+  fi
+  printf '%s' "${p%/}"
+}
+auto_worktrees() { # prints the eligible worktree paths
+  local wl l cur lk wreg wdef c w nm wcut here1 here2
+  wl=$(git -C "$base" worktree list --porcelain 2>/dev/null) || return 0
+  wreg="|"; cur=""; lk=0
+  while IFS= read -r l || [ -n "$l" ]; do
+    l=${l%$'\r'}
+    case "$l" in
+      "worktree "*)
+        [ -n "$cur" ] && [ "$lk" = 0 ] && wreg="$wreg$(norm_path "$cur")|"
+        cur=${l#worktree }; lk=0 ;;
+      locked*|prunable*) lk=1 ;;
+    esac
+  done <<< "$wl"
+  [ -n "$cur" ] && [ "$lk" = 0 ] && wreg="$wreg$(norm_path "$cur")|"
+  [ "$wreg" = "|" ] && return 0
+  # never the worktree this session runs in (toplevel of the dir passed or of the current dir)
+  here1=$(git -C "$base" rev-parse --show-toplevel 2>/dev/null) && here1=$(norm_path "$here1") || here1=""
+  here2=$(git rev-parse --show-toplevel 2>/dev/null) && here2=$(norm_path "$here2") || here2=""
+  wdef=$(git -C "$base" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)
+  if [ -z "$wdef" ] || ! git -C "$base" rev-parse --verify -q "refs/remotes/$wdef" >/dev/null 2>&1; then
+    wdef=""
+    for c in origin/main origin/master; do
+      git -C "$base" rev-parse --verify -q "refs/remotes/$c" >/dev/null 2>&1 && { wdef=$c; break; }
+    done
+  fi
+  wcut=$(( $(date +%s) - (lim_auto + 1) * 86400 ))
+  while IFS= read -r w; do
+    nm=$(norm_path "$w")
+    case "$wreg" in *"|$nm|"*) ;; *) continue ;; esac
+    [ "$nm" = "$here1" ] || [ "$nm" = "$here2" ] && continue
+    auto_wt_ok "$w" && printf '%s\n' "$w"
+  done <<< "$wold"
+}
+if [ "$lim_auto" -gt 0 ] && [ -e "$base/.git" ] && [ -d "$base/.claude/worktrees" ] && command -v git >/dev/null 2>&1; then
+  wold=$(find "$base/.claude/worktrees" -mindepth 1 -maxdepth 1 -type d -mtime +"$lim_auto" 2>/dev/null)
+  if [ -n "$wold" ]; then
+    auto_wts=$(auto_worktrees)
+    if [ -n "$auto_wts" ]; then auto_t=${auto_wts//[!$'\n']/}; auto_wn=$((${#auto_t} + 1)); fi
+  fi
+fi
+if [ "$autolist" = 1 ]; then
+  [ -n "$auto_files" ] && printf '%s\n' "$auto_files" | LC_ALL=C sort | sed 's/^/file /' >&3
+  [ -n "$auto_wts" ] && printf '%s\n' "$auto_wts" | LC_ALL=C sort | sed 's/^/worktree /' >&3
+  exit 0
+fi
+[ $((auto_n + auto_wn)) -gt 0 ] && echo "auto-clean: $auto_n files, $auto_wn worktrees (older than $lim_auto days)"
 # overdue: unfinished runs and open questions (via their run) started more than lim_days ago; date part of Started only
 od=""
 [ "$rf" != /dev/null ] && od=$(awk -F'|' -v rf="$rf" -v today="$(date +%Y-%m-%d)" -v lim="$lim_days" '

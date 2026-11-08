@@ -144,7 +144,7 @@ Change defaults via `model:` in `plugins/guyb/agents/*.md`. Every agent starts w
 | `.env` (secrets; guyb makes sure it is gitignored) / `.env.example` | never / yes |
 | `.claude/guyb/pipeline/` (plans, run registry, progress, questions) | no, auto-gitignored |
 
-Upgrading from 0.6: files used to live in `.claude/STATE.md` and `.claude/pipeline/`. `/guyb:start` offers to move them; nothing moves without your OK. Cleanup suggestions never archive or delete without consent; limits are `cleanup_claude_md_lines: 200`, `cleanup_state_lines: 300`, `cleanup_rows: 200`, `cleanup_days: 14`, overridable in `.claude/CLAUDE.md` or `~/.claude/guyb/profile.md`.
+Upgrading from 0.6: files used to live in `.claude/STATE.md` and `.claude/pipeline/`. `/guyb:start` offers to move them; nothing moves without your OK. Cleanup suggestions never archive or delete without consent, except auto-clean: finished-run scratch files and clean, pushed agent worktrees older than `cleanup_auto_days: 21` (`0` = off) are removed by `/guyb:start` with a one-line notice. Removing a worktree also removes the ignored files in it (for example `.env` copies or build output). Legacy `.claude/pipeline/` files are never auto-cleaned. Dirty, locked or unpushed worktrees, unfinished runs, open questions, branches and the shared guyb files (runs, questions, memory, STATE.md) are never auto-deleted. Limits are `cleanup_claude_md_lines: 200`, `cleanup_state_lines: 300`, `cleanup_rows: 200`, `cleanup_days: 14`, `cleanup_auto_days: 21`, overridable in `.claude/CLAUDE.md` or `~/.claude/guyb/profile.md`.
 
 ## Security
 
