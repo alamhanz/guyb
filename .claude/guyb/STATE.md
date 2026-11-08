@@ -9,8 +9,8 @@
 - **Owner**: @alamhanz
 
 ## Current Status
-- **Branch**: main (clean, ed11d43); only main exists local and remote. Installed plugin updated 0.12.0 -> 0.14.0 on 2026-11-08 (applies in a fresh session). `claude plugin list` reads the source dir version; installed_plugins.json is the truth. PR #28 (STATE.md) merged a3bb260
-- **Version**: 0.14.0 (PR #30); see Versions
+- **Branch**: main (clean, ed11d43); only main exists local and remote. Installed plugin updated 0.12.0 -> 0.14.0 on 2026-11-08 (applies in a fresh session). `claude plugin list` reads the source dir version; installed_plugins.json is the truth. Work branch chore/arena-path-move (path updates, uncommitted STATE.md edit)
+- **Version**: 0.14.0; see Versions
 
 ## Versions
 - **0.14.0** (PR #30, ed11d43, plan guyb-186, fixes #25): `cleanup_auto_days` (default 21, 0 = off); brief prints an auto-clean line and `--auto-list` / `-AutoList`; /guyb:start hands the list to a haiku git-ops agent. Eligibility: finished-run scratch files older than the limit, clean worktrees whose branch is merged or pushed; squash-safe file check (Q121); untracked files counted regardless of config; renames handled; full-path match; macOS /var symlink fix (guyb-195). Tests: smoke.sh 568, smoke.ps1 534 (pwsh 7 + PS 5.1), CI 9/9
@@ -31,7 +31,9 @@
 - **0.3.0** (PR #1): run IDs, waves, progress files
 
 ## Recent Changes
-- 2026-11-08 - Released 0.13.0 (PR #29, fa1b278) and 0.14.0 (PR #30, ed11d43); runs guyb-179..197. 0.13.0: guyb-179 re-review, guyb-181 suite + PR, guyb-182 doc fix, guyb-183 CI fix. 0.14.0: plan guyb-186, impl guyb-187..189, review guyb-190 (critical fixed in guyb-191), re-review guyb-193, PR guyb-194, macOS fix guyb-195. PR #28 (STATE.md) merged a3bb260. Cleanup (guyb-184, 192, 196): only main left local and remote. guyb-197 (D:\ -> D:\arena migration script) still running
+- 2026-11-08 - Session start cleanup: stale handoff.md (2026-11-07, all items done) and 14 pipeline scratch files from 2026-10-24 deleted
+- 2026-11-08 - D:\ -> D:\arena migration done: repo now at D:\arena\projects\guyb; branch chore/arena-path-move (b76012d) updates path references, PR to be opened
+- 2026-11-08 - Released 0.13.0 (PR #29, fa1b278) and 0.14.0 (PR #30, ed11d43); runs guyb-179..197. 0.13.0: guyb-179 re-review, guyb-181 suite + PR, guyb-182 doc fix, guyb-183 CI fix. 0.14.0: plan guyb-186, impl guyb-187..189, review guyb-190 (critical fixed in guyb-191), re-review guyb-193, PR guyb-194, macOS fix guyb-195. STATE.md PRs #28, #31 merged. Cleanup (guyb-184, 192, 196): only main left local and remote. guyb-197..200: D:\migrate-arena.ps1 migration script
 - 2026-11-07 - 0.13.0 work: plan guyb-169, runs guyb-170..177 (review guyb-174 found 1 critical, fixed). Removed aws hanz48/datakoen connections
 - 2026-10-24 - Housekeeping: STATE.md PR #23 merged (c45cf3b); all merged/superseded branches deleted local and remote (only main left); 105 stale scratch files deleted earlier; runs guyb-164..166 done (branch delete, STATE update, docs PR)
 - 2026-10-24 - 0.12.0 merged (PR #22, c180a73): runs guyb-159 (docs/skills), guyb-160 (scripts/tests; cut off by API 429, resumed), guyb-161 review approved with 1 should-fix, guyb-162 fixes + bump, guyb-163 PR. Full suite green (bash smoke 540/0, pwsh smoke 506/0, secrets 206/109, tabs 99/39, permissions 84, winlauncher 22), CI green on all 9 checks. Merge needed ruleset bypass (main `update` rule restricts updates to bypass actors)
@@ -77,7 +79,6 @@
 - Sed -i on .ps1 files strips CR (CRLF required); edit them with Edit
 
 ## Next Up
-- D:\ -> D:\arena migration: script D:\migrate-arena.ps1 being prepared by guyb-197; the user runs it from a fresh terminal with all sessions closed
 - Live-check 0.13.0 and 0.14.0 in a fresh session: setup layout check (home/roots, launcher root column), brief auto-clean line, /guyb:start auto-clean via haiku git-ops
 - herdr spike guyb-176 (stopped; herdr as UI layer, guyb logic unchanged): still wanted?
 - Live-check 0.12.0 in a fresh session: small edit goes to a haiku agent, parallel launch for disjoint tasks, memory.md flow (orchestrator writes from `## Memory` bullets) and the cleanup_memory_lines line in brief
