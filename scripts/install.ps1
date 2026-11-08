@@ -3,7 +3,7 @@
 .SYNOPSIS
   Installs the guyb plugin, merges recommended permissions, and adds the `guyb` launcher (PowerShell profile, user PATH shim for cmd/PowerShell, Git Bash ~/.bashrc).
 .EXAMPLE
-  ./scripts/install.ps1 -ProjectsRoot D:\projects
+  ./scripts/install.ps1 -ProjectsRoot D:\arena\projects
 .EXAMPLE
   ./scripts/install.ps1 -SkipPermissions
 #>

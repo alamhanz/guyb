@@ -68,10 +68,10 @@ try {
   Expect-Eq 'bashrc unchanged by second call' ([IO.File]::ReadAllText($rc)) $text
 
   $rc2 = Join-Path $tmp 'bashrc2'
-  Expect-Eq 'new bashrc: added' (Add-GuybBashrc -Path $rc2 -Repo $repoDir -Root 'D:\projects') 'added'
+  Expect-Eq 'new bashrc: added' (Add-GuybBashrc -Path $rc2 -Repo $repoDir -Root 'D:\arena\projects') 'added'
   $bytes = [IO.File]::ReadAllBytes($rc2)
   Expect-Eq 'new bashrc has no BOM' (($bytes[0] -ne 0xEF)) $true
-  Expect-Eq 'new bashrc content' ([IO.File]::ReadAllText($rc2)) "`n# guyb`nsource `"D:/some dir/guyb/scripts/launch.sh`"`nexport GUYB_ROOT=`"D:/projects`"`n"
+  Expect-Eq 'new bashrc content' ([IO.File]::ReadAllText($rc2)) "`n# guyb`nsource `"D:/some dir/guyb/scripts/launch.sh`"`nexport GUYB_ROOT=`"D:/arena/projects`"`n"
 
   # --- shim, dry run ---
   $proj = Join-Path $tmp 'projects'
